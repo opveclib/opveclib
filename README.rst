@@ -26,9 +26,9 @@ environment to use OVL.
 
 Install TensorFlow
 ~~~~~~~~~~~~~~~~~~
-OVL depends on TensorFlow 0.8.0 and works with both the CPU and GPU versions. Installation instructions
+OVL depends on TensorFlow 0.9.0 and works with both the CPU and GPU versions. Installation instructions
 are available
-`here <https://www.tensorflow.org/versions/r0.8/get_started/os_setup.html#download-and-setup>`_.
+`here <https://www.tensorflow.org/versions/r0.9/get_started/os_setup.html#download-and-setup>`_.
 
 Note that the GPU version of TensorFlow requires the CUDA SDK 7.5 and cuDNN 4 to be installed on your system.
 Depending on how these dependencies are installed you may need to explicitly set the CUDA_HOME environment variable,

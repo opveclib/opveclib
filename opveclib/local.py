@@ -14,7 +14,7 @@ import errno
 import tensorflow as tf
 
 #: Version string for current version
-version = '0.3.4'
+version = '0.3.5-dev'
 
 # set directories for cuda and operator cache
 cuda_directory = os.getenv('CUDA_HOME', '/usr/local/cuda')
