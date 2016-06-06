@@ -1,0 +1,397 @@
+// Copyright 2016 Hewlett Packard Enterprise Development LP
+//
+// Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with
+// the License. You may obtain a copy of the License at
+//
+// http://www.apache.org/licenses/LICENSE-2.0
+// Unless required by applicable law or agreed to in writing, software distributed under the License is distributed
+// on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for
+// the specific language governing permissions and limitations under the License.
+
+
+syntax="proto2";
+package opveclib;
+
+//Data types supported by the language
+enum DType {
+    UNDEFINED_TYPE = 0;
+    // Float types
+    FLOAT16 = 1;
+    FLOAT32 = 2;
+    FLOAT64 = 3;
+
+    // Int types
+    INT8 = 4;
+    INT16 = 5;
+    INT32 = 6;
+    INT64 = 7;
+
+    // Uint types
+    UINT8 = 8;
+    UINT16 = 9;
+    UINT32 = 10;
+    UINT64 = 11;
+
+    // Literals
+    LITERAL = 12;
+}
+
+message TensorType {
+    required DType dtype = 1;
+    repeated uint32 shape = 2;
+}
+
+// Define the expression codes for the language
+//    comments define the associated data and operands required to full specify each expression
+enum ExpressionCode {
+    UNDEFINED_CODE = 0;
+
+    // A read-only input tensor
+    //  data:
+    //      TensorType tensor_type: data type and shape of input
+    //      uint32 io_index: index of input in order of input arguments
+    //  operands:
+    //      none
+    INPUT = 1;
+
+    // A write-only output tensor
+    //  data:
+    //      TensorType tensor_type: data type and shape of output
+    //      uint32 io_index: index of output in order of output arguments
+    //  operands:
+    //      none
+    OUTPUT = 2;
+
+    // A constant scalar
+    //  data:
+    //      DType dtype: data type of the literal
+    //      a single element of the corresponding type:
+    //          repeated float float_data
+    //          repeated double double_data
+    //          repeated sint32 sint32_data
+    //          repeated sint64 sint64_data
+    //          repeated uint32 uint32_data
+    //          repeated uint64 uint64_data
+    //  operands:
+    //      none
+    //  requirements:
+    //      only one *_data container can contain data
+    //      the *_data container that does contain data must have exactly 1 element
+    //      dtype must be consistent with the type of the data container
+    CONST_SCALAR = 3;
+
+    // A constant tensor
+    //  data:
+    //      TensorType tensor_type: data type and shape of constant
+    //      one data array of the corresponding type in flattened, row-major format
+    //          repeated float float_data
+    //          repeated double double_data
+    //          repeated sint32 sint32_data
+    //          repeated sint64 sint64_data
+    //          repeated uint32 uint32_data
+    //          repeated uint64 uint64_data
+    //  operands:
+    //      none
+    //  requirements:
+    //      the maximum number of elements is 2**64, as it must be indexed by a uint64.
+    //  notes:
+    //      all lower-precision types are stored as the next biggest supported protobuf type (e.g. uint->uint32)
+    CONST_TENSOR = 4;
+
+    // a special read-only tensor which references the current worker's position in the kernel shape
+    //  data:
+    //      repeated uint32 uint32_data
+    //  operands:
+    //      none
+    //  requirements:
+    //      uint32_data contains the shape of the workgroup
+    POSITION = 5;
+
+    // mutable, worker-local scalar declaration
+    //  data:
+    //      DType dtype: scalar type
+    //  operands:
+    //      [0] CONST_SCALAR: the initial value
+    //  requirements:
+    //      operand [0] must have same dtype
+    VARIABLE = 6;
+
+    // cast a value as another type
+    //  data:
+    //      DType dtype: type to cast as
+    //  operands:
+    //      [0] ANY: the value to cast
+    //  requirements:
+    //      operand [0] must have a dtype
+    CAST = 7;
+
+    // mutable, worker-local tensor declaration
+    //  data:
+    //      TensorType tensor_type: data type and shape of tensor
+    //  operands:
+    //      [0] CONST_TENSOR: the initial value
+    //  requirements:
+    //      operand [0] must have same tensor_type
+    //      the maximum number of elements is 2**64, as it must be indexed by a uint64.
+    TENSOR = 8;
+
+    // assignment to a mutable, worker-local scalar
+    //  data:
+    //      none
+    //  operands:
+    //      [0] VARIABLE: the target mutable scalar which is being assigned to
+    //      [1] ANY: the value to assign to the target
+    //  requirements:
+    //      operands [0] and [1] must have the same dtype
+    ASSIGN_VARIABLE = 9;
+
+    // assignment to a single position in a mutable tensor or output
+    //  data:
+    //      none
+    //  operands:
+    //      [0] TENSOR, OUTPUT: the target tensor which is being assigned to
+    //      [1] ANY: the index of the flattened data array that backs the target tensor
+    //      [2] ANY: the value to assign at that position
+    //  requirements:
+    //      operand [1] must be have a dtype of a uintX array where X is sufficiently large to index operand [0]
+    //      if operand [1] is CONST_SCALAR, it must index within the bounds of the shape of operand [0]
+    ASSIGN_TENSOR = 10;
+
+    // obtain the value at a position in a constant tensor, mutable tensor, or input
+    //  data:
+    //      DType dtype: data type of indexed tensor
+    //  operands:
+    //      [0] CONST_TENSOR, POSITION, TENSOR, INPUT: the target tensor which is being indexed
+    //      [1] ANY: the index of the flattened data array that backs the target tensor
+    //  requirements:
+    //      operand [1] must be a 1-dimensional uintX array where X is sufficiently large to index operand [0]
+    //      the dimensionality of operand [0] must be equal to the length of operand [1]
+    //      if operand [1] is CONST_TENSOR or POSITION, it must index within the bounds of the shape of operand [0]
+    READ_TENSOR = 11;
+
+    // begin iterating over a range
+    //  data:
+    //      none
+    //  operands:
+    //      [0] VARIABLE: variable used to store iterator value
+    //      [1] VARIABLE, CONST_VARIABLE: start value
+    //      [2] VARIABLE, CONST_VARIABLE: non-inclusive stop value
+    //      [3] VARIABLE, CONST_VARIABLE: step value
+    //  requirements:
+    //      all operands must be the same type to avoid type promotion/resolution
+    //      if operands [1], [2], [3] are all const, there must be a positive number of steps = floor((stop-start)/step)
+    RANGE = 12;
+
+    // end of range block
+    //  data:
+    //      none
+    //  operands:
+    //      [0] RANGE: the opening range expression for this block
+    //  requirements:
+    //      no control flow blocks can be initiated after operand [0] without being closed before this indicator
+    //      no ENDRANGE expressions referencing operand [0] can exist before this indicator
+    ENDRANGE = 13;
+
+    // begin a conditional block
+    //  data:
+    //      none
+    //  operands:
+    //      [0] VARIABLE: condition which enables this block
+    IF = 14;
+
+    // continue conditional block
+    //  data:
+    //      none
+    //  operands:
+    //      [0] VARIABLE: condition which enables this block
+    ELSEIF = 15;
+
+    // continue conditional block
+    //  data:
+    //      none
+    //  operands:
+    //      none
+    ELSE = 16;
+
+    // end conditional block
+    //  data:
+    //      none
+    //  operands:
+    //      none
+    ENDIF = 17;
+
+    // all unary trigonometric expressions
+    //  data:
+    //      DType dtype: result type
+    //  operands:
+    //      [0] ANY: the operand
+    //  requirements:
+    //      operand must have a dtype of float or double
+    ACOS = 100;
+    ASIN = 101;
+    ATAN = 102;
+    COS = 104;
+    COSH = 105;
+    SIN = 106;
+    SINH = 107;
+    TAN = 108;
+    TANH = 109;
+
+    // all unary exponential expressions
+    //  data:
+    //      DType dtype: result type equal to input type
+    //  operands:
+    //      [0] ANY: the operand
+    //  requirements:
+    //      operand must have a dtype of float or double
+    EXP = 150;
+    LOG = 151;
+    LOG10 = 152;
+    SQRT = 154;
+
+    // Other unary expressions
+
+    // CEIL and FLOOR unary expressions
+    //  data:
+    //      DType dtype: result type equal to input type
+    //  operands:
+    //      [0] ANY: the operand
+    //  requirements:
+    //      operand must have a dtype of FLOAT32 or FLOAT64
+    CEIL = 201;
+    FLOOR = 202;
+
+    // absolute value unary expression
+    //  data:
+    //      DType dtype: result type equal to input type
+    //  operands:
+    //      [0] ANY: the operand
+    //  requirements:
+    //      operand must have a dtype of FLOAT32, FLOAT64, INT8, INT16, INT32, INT64
+    ABS = 203;
+
+    // negate unary expression
+    // data:
+    //      DType dtype: result type equal to input type
+    //  operands:
+    //      [0]: ANY: the operand
+    //  requirements:
+    //      operand must have a dtype of FLOAT32, FLOAT64, INT8, INT16, INT32, INT64
+    NEGATE = 204;
+
+    // not unary expression
+    // data:
+    //      DType dtype: result type equal to input type
+    //  operands:
+    //      [0]: ANY: the operand
+    //  requirements:
+    //      operand must have a dtype
+    NOT = 205;
+
+    // Binary infix expressions
+    //  data:
+    //      DType dtype: result type, equal to input type
+    //  operands:
+    //      [0] ANY: first operand
+    //      [1] ANY: second operand
+    //  requirements:
+    //      operands must have equal dtypes
+    ADD = 250;
+    SUBTRACT = 251;
+    MULTIPLY = 252;
+    DIVIDE = 253;
+    MODULO = 254;
+
+    AND = 255;
+    OR = 256;
+    EQUAL = 257;
+    NOTEQUAL = 258;
+    LESS = 259;
+    LESS_EQ = 260;
+    GREATER = 261;
+    GREATER_EQ = 262;
+
+    //Other binary functions
+    // min/max functions
+    //  data:
+    //      DType dtype: result type equal to input types
+    //  operands:
+    //      [0] ANY: arg1
+    //      [1] ANY: arg2
+    //  requirements:
+    //      operands must have a dtype of FLOAT32, FLOAT64, INT8, INT16, INT32, INT64
+    //      operands must have same type
+    MIN = 300;
+    MAX = 301;
+
+    // power function
+    //  data:
+    //      DType dtype: result type equal to input types
+    //  operands:
+    //      [0] ANY: the base
+    //      [1] ANY: the exponent
+    //  requirements:
+    //      operand must have a dtype of FLOAT32, FLOAT64
+    //      operands must have same type
+    POW = 302;
+
+    // atan2 function - principal of arctan(y/x)
+    //  data:
+    //      DType dtype: result type equal to input types
+    //  operands:
+    //      [0] ANY: y
+    //      [1] ANY: x
+    //  requirements:
+    //      operands must have a dtype of FLOAT32, FLOAT64
+    //      operands must have same type
+    ATAN2 = 303;
+}
+
+
+message Expression {
+    required ExpressionCode code = 1;
+
+    // tensor type for inputs, outputs, and local arrays
+    optional TensorType tensor_type = 2;
+
+    // data type for scalar expressions
+    optional DType dtype = 3;
+
+    // identifier for determining which input or output
+    optional uint32 io_index = 4;
+
+    repeated float float_data = 5;
+    repeated double double_data = 6;
+    repeated sint32 sint32_data = 7;
+    repeated sint64 sint64_data = 8;
+    repeated uint32 uint32_data = 9;
+    repeated uint64 uint64_data = 10;
+}
+
+message ExpressionDAG {
+    repeated Expression expressions = 1;
+
+    message OperandList {
+        repeated uint32 operand_indices = 1;
+    }
+    repeated OperandList references = 2;
+
+    repeated uint32 workgroup_shape = 3;
+}
+
+//message Operation {
+//    required ExpressionDAG dag = 1;
+//
+//    required int32 c_threads = 3;
+//   required int32 cuda_block_threads = 4;
+//}
+
+//message OperationDAG {
+//    repeated Operation operations = 1;
+//    message OperationReference {
+//        repeated int32 input_indices = 1;
+//        repeated int32 output_indices = 2;
+//    }
+//
+//    repeated OperationReference references = 2;
+//}

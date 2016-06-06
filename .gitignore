@@ -1,0 +1,26 @@
+#PyCharm IDE files
+.idea
+
+build/
+dist/
+*.egg-info/
+*.egg
+*.py[cod]
+__pycache__/
+*.so
+*~
+*.o
+*.csv
+#build test
+tftests/addcputest
+tftests/addgputest
+RemoteSystemsTempFiles/
+#eclipse cruft
+.metadata
+tftests/.cproject
+tftests/.project
+tftests/.settings/
+
+#generated doc files files
+documentation/_build
+documentation/api.rst
