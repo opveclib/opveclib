@@ -83,7 +83,7 @@ may need to explicitly pass an ``LD_LIBRARY_PATH`` to sudo to install the packag
 
 .. code-block:: console
 
-    sudo LD_LIBRARY_PATH=/usr/local/cuda/lib64 pip install git+https://github.com/hpe-cct/opveclib
+    sudo LD_LIBRARY_PATH=/usr/local/cuda/lib64 pip install git+https://github.com/hewlettpackardlabs/opveclib
 
 
 Test your installation
