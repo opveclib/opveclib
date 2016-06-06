@@ -197,7 +197,7 @@ html_theme = 'alabaster'
 # Theme options are theme-specific and customize the look and feel of a theme
 # further.  For a list of options available for each theme, see the
 # documentation.
-html_theme_options = {'github_user': 'hpe-cct',
+html_theme_options = {'github_user': 'hewlettpackardlabs',
                       'github_repo': 'opveclib',
                       'github_banner': 'true',
                       'fixed_sidebar': 'true'}
@@ -206,8 +206,7 @@ html_theme_options = {'github_user': 'hpe-cct',
 #html_theme_path = []
 
 # The name for this set of Sphinx documents.
-# "<project> v<release> documentation" by default.
-#html_title = u'opveclib v0.3'
+html_title = u'opveclib'
 
 # A shorter title for the navigation bar.  Default is the same as html_title.
 #html_short_title = None

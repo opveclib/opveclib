@@ -1,6 +1,8 @@
 Accumulate
 ==========
 
+.. automodule:: examples.accumulate
+
 .. autoclass:: examples.Accumulate
     :members: op
 

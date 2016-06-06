@@ -8,6 +8,11 @@
 # on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for
 # the specific language governing permissions and limitations under the License.
 
+"""
+This example implements and tests a generic accumulation operator which applies and accumulates a lambda function
+across a specified axis of the input tensor. This generic accumulation operator is used to define the `cumsum` and
+`cumprod` functions, which are equivalent to those defined for numpy.
+"""
 
 import unittest
 import numpy as np
@@ -17,7 +22,7 @@ import opveclib as ops
 class Accumulate(ops.Operator):
     def op(self, x, inner_fcn, axis):
         """
-        Define the operator function
+        Define the operator function.
 
         :param x: The input tensor
         :param inner_fcn: a lambda function to be applied for accumulation
@@ -25,7 +30,7 @@ class Accumulate(ops.Operator):
         :return: The accumulated result
         """
 
-        # ensure that the axis parameter makes sense
+        # assert that the axis parameter makes sense
         assert isinstance(axis, int)
         assert axis >= 0
         assert axis < x.rank
@@ -57,7 +62,7 @@ class Accumulate(ops.Operator):
                     cur_pos.append(pos[cur_dim-offset])
             return cur_pos
 
-        # initialize accumulator to be the first position along the accumulation axis
+        # initialize accumulator to be the first element along the accumulation axis
         initial_value = x[resolve_position(0)]
         accum = ops.variable(initial_value, x.dtype)
         out[resolve_position(0)] = accum
