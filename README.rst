@@ -75,7 +75,7 @@ Install the latest release of OVL:
 
 .. code-block:: console
 
-    sudo pip install git+https://github.com/hpe-cct/opveclib
+    sudo pip install git+https://github.com/hewlettpackardlabs/opveclib
 
 If you see an error message during the install like
 ``libnvrtc.so.7.5: cannot open shared object file: No such file or directory`` you
