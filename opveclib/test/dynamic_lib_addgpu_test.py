@@ -61,7 +61,11 @@ class DynamicLibAddGPUTest(unittest.TestCase):
             devices = ['/cpu:0']
         for dev_string in devices:
             tf.logging.log(tf.logging.INFO, '*** device: {dev}'.format(dev= dev_string))
-            with tf.Session(config=tf.ConfigProto(allow_soft_placement=False,log_device_placement=True)):
+            test_config=tf.ConfigProto(allow_soft_placement=False,log_device_placement=True)
+            # Don't perform optimizations for tests so we don't inadvertently run
+            # gpu ops on cpu
+            test_config.graph_options.optimizer_options.opt_level = -1
+            with tf.Session(test_config):
                 tf.logging.log(tf.logging.INFO, '*** add2float')
                 with tf.device(dev_string):
                     in0 = np.random.rand(3,5).astype(np.float32)
