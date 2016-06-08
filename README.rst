@@ -70,6 +70,8 @@ Install dependencies: nose2, protobuf compiler/libraries and g++:
 .. code-block:: console
 
     sudo apt-get install python-nose2 protobuf-compiler libprotobuf-dev g++
+    
+Note, this will install version 2.5 of libprotoc, which is only compatible with python 2. If you wish to use python 3, you will need version 3.0.0-beta-2 of protobuf-cpp for C++. It can be found and installed from here: https://github.com/google/protobuf/releases/
 
 Install the latest release of OVL:
 
