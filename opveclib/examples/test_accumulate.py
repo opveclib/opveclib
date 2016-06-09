@@ -8,23 +8,31 @@
 # on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for
 # the specific language governing permissions and limitations under the License.
 
+"""
+This example implements and tests a generic accumulation operator which applies and accumulates a lambda function
+across a specified axis of the input tensor. This generic accumulation operator is used to define the `cumsum` and
+`cumprod` functions, which are equivalent to those defined for numpy.
+"""
 
 import unittest
 import numpy as np
+from .add_rel_path import add_rel_path
+add_rel_path()
 import opveclib as ops
-from sys import _getframe
+
 
 class Accumulate(ops.Operator):
     def op(self, x, inner_fcn, axis):
         """
-        Define the operator function
+        Define the operator function.
+
         :param x: The input tensor
         :param inner_fcn: a lambda function to be applied for accumulation
         :param axis: The axis across which accumulation will be applied
-        :return:
+        :return: The accumulated result
         """
 
-        # ensure that the axis parameter makes sense
+        # assert that the axis parameter makes sense
         assert isinstance(axis, int)
         assert axis >= 0
         assert axis < x.rank
@@ -56,7 +64,7 @@ class Accumulate(ops.Operator):
                     cur_pos.append(pos[cur_dim-offset])
             return cur_pos
 
-        # initialize accumulator to be the first position along the accumulation axis
+        # initialize accumulator to be the first element along the accumulation axis
         initial_value = x[resolve_position(0)]
         accum = ops.variable(initial_value, x.dtype)
         out[resolve_position(0)] = accum
@@ -72,6 +80,13 @@ class Accumulate(ops.Operator):
 def cumsum(x, axis=0):
     """
     Define the cumsum operator by defining the inner_fcn to be addition
+
+    .. math::
+       y_{n_0,n_1,n_2,n_3} = \sum_{n_2=0}^{n_2} x_{n_0,n_1,n_2,n_3}
+
+    where :math:`n_2` is the index over which to perform the addition.
+
+
     :param x: the input tensor
     :param axis: the accumulation axis
     :return: the cumulative sum across the accumulation axis
@@ -84,6 +99,12 @@ def cumsum(x, axis=0):
 def cumprod(x, axis=0):
     """
     Define the cumprod operator by defining the inner_fcn to be multiplication
+
+    .. math::
+        y_{n_0,n_1,n_2,n_3} = \prod_{n_2=0}^{n_2} x_{n_0,n_1,n_2,n_3}
+
+    where :math:`n_2` is the index over which to perform the multipilication.
+
     :param x: the input tensor
     :param axis: the accumulation axis
     :return: the cumulative product across the accumulation axis
@@ -98,7 +119,7 @@ class TestAccumulate(unittest.TestCase):
         """
         Test the outputs of the operators to make sure they are consistent with the numpy implementation
         """
-        print('*** Running Test: ' + self.__class__.__name__ + ' function: ' + _getframe().f_code.co_name)
+
         a = np.random.random((5, 5, 5))
         assert np.allclose(np.cumsum(a, axis=0), cumsum(a, axis=0).evaluate_c())
         assert np.allclose(np.cumsum(a, axis=1), cumsum(a, axis=1).evaluate_c())

@@ -1,1 +1,1 @@
-from accumulate import Accumulate, cumsum, cumprod
+from .test_accumulate import Accumulate, cumprod, cumsum
