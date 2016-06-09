@@ -17,7 +17,10 @@ setup(
     packages=['opveclib', 'opveclib.test', 'opveclib.test_tensorflow', 'opveclib.examples'],
     install_requires=['numpy >= 1.11.0', 'protobuf >= 3.0.0a3', 'tensorflow==0.9.0rc0', 'six >= 1.10.0'],
     package_data={
-        'opveclib': ['dynamiclibop.h', 'dynamiclibop.cc', 'testcop.cc', 'testcudaop.cc']
+        'opveclib': ['dynamiclibop.h', 'dynamiclibop.cc',
+                     'testcop.cc', 'testcudaop.cc',
+                     'language.proto',
+                     'test_tensorflow/addcpu.cpp', 'test_tensorflow/addgpu.cu']
     },
     test_suite='nose2.collector.collector',
     license='Apache 2.0'

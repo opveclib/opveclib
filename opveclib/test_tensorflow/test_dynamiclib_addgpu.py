@@ -13,8 +13,8 @@ import numpy as np
 import os
 import unittest
 import subprocess
-from ..operator import Operator
-from ..local import cuda_enabled, cuda_directory, cache_directory
+from opveclib.operator import Operator
+from opveclib.local import cuda_enabled, cuda_directory, cache_directory
 
 
 # Test to ensure valid calculation on both CPU and GPU.
@@ -61,7 +61,11 @@ class DynamicLibAddGPUTest(unittest.TestCase):
             devices = ['/cpu:0']
         for dev_string in devices:
             tf.logging.log(tf.logging.INFO, '*** device: {dev}'.format(dev= dev_string))
-            with tf.Session(config=tf.ConfigProto(allow_soft_placement=False,log_device_placement=True)):
+            test_config=tf.ConfigProto(allow_soft_placement=False)
+            # Don't perform optimizations for tests so we don't inadvertently run
+            # gpu ops on cpu
+            test_config.graph_options.optimizer_options.opt_level = -1
+            with tf.Session(config=test_config):
                 tf.logging.log(tf.logging.INFO, '*** add2float')
                 with tf.device(dev_string):
                     in0 = np.random.rand(3,5).astype(np.float32)
