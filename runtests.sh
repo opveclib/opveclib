@@ -17,7 +17,7 @@ if [ ! $? -eq 0 ]; then
   echo "tensorflow integration tests failed"
   exit 1
 fi
-nose2-2.7 -F opveclib.examples.tensorflow_clustering opveclib.examples
+nose2-2.7 -F opveclib.examples
 if [ ! $? -eq 0 ]; then
   echo "example tests failed"
   exit 1

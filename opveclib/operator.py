@@ -692,7 +692,8 @@ class Operator(object):
                                      stderr=subprocess.STDOUT,
                                      universal_newlines=True)
                     subprocess.check_output(['g++', '-shared',
-                                     '-o', testlib_path, o_path, linko_path],
+                                     '-o', testlib_path, o_path, linko_path,
+                                     '-lcuda'],
                                      stderr=subprocess.STDOUT,
                                      universal_newlines=True)
                 except subprocess.CalledProcessError as exception:
