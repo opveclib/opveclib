@@ -15,6 +15,9 @@ import hashlib
 import os
 import inspect
 import subprocess
+import sys
+import string
+import re
 
 import tensorflow as tf
 import numpy as np
@@ -22,7 +25,7 @@ from numpy.ctypeslib import ndpointer
 
 from .expression import TensorType, ExpressionDAG, input, float32, float64, OutputTensor
 from .local import version, cache_directory, cuda_enabled, cuda_directory
-
+from .language_pb2 import _DTYPE
 
 class _TensorParam(ctypes.Structure):
     _fields_ = [("data", ctypes.c_void_p),
@@ -526,18 +529,44 @@ class Operator(object):
         # will be incompatible with the protoc system header files.
         proto_header = os.path.join(cache_directory, 'language.pb.h')
         if not os.path.exists(proto_header):
-            this_file_path = os.path.abspath(__file__)
-            this_directory = os.path.split(this_file_path)[0]
-            proto_path = os.path.join(this_directory, 'language.proto')
+            # this_file_path = os.path.abspath(__file__)
+            # this_directory = os.path.split(this_file_path)[0]
+            # proto_path = os.path.join(this_directory, 'language.proto')
+            #
+            # try:
+            #     subprocess.check_output(['protoc', proto_path, '--proto_path='+this_directory,
+            #                  '--cpp_out='+cache_directory],
+            #                  stderr=subprocess.STDOUT,
+            #                  universal_newlines=True)
+            # except subprocess.CalledProcessError as exception:
+            #     tf.logging.log(tf.logging.ERROR, 'protoc error: ' + exception.output)
+            #     raise
+            #
 
-            try:
-                subprocess.check_output(['protoc', proto_path, '--proto_path='+this_directory,
-                             '--cpp_out='+cache_directory],
-                             stderr=subprocess.STDOUT,
-                             universal_newlines=True)
-            except subprocess.CalledProcessError as exception:
-                tf.logging.log(tf.logging.ERROR, 'protoc error: ' + exception.output)
-                raise
+            # just create the single enum we need ourselves instead of requiring the full protoc C++ development environment
+            enum_src = ''
+            enum_val = 0
+            for enum_name in _DTYPE.values:
+                enum_src += '    ' + enum_name.name + ' = ' + str(enum_val) + ',\n'
+                enum_val += 1
+
+            # generate header enum
+            h_src = """
+            |//Generated Code - do not edit
+            |#ifndef LANGUAGE_PB2_H
+            |#define LANGUAGE_PB2_H
+            |namespace opveclib {
+            |enum DType {
+            |${enum_src}
+            |};
+            |}
+            |#endif  // LANGUAGE_PB2_H
+            """
+            h_src = string.Template(h_src).substitute(locals())
+            h_src = re.sub('\n[ \t]*\|', '\n', h_src)
+            with open(proto_header, 'w') as f:
+                f.write(h_src)
+
 
     def evaluate_c(self, profiling_iterations=None):
         """

@@ -15,6 +15,7 @@
 #include <string>
 #include <memory>
 #include <chrono>
+#include <vector>
 #include "dynamiclibop.h"
 #include "language.pb.h"
 

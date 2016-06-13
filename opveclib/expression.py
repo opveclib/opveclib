@@ -8,8 +8,6 @@
 # on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for
 # the specific language governing permissions and limitations under the License.
 
-
-from __future__ import absolute_import
 import ctypes
 import string
 import re
@@ -20,27 +18,28 @@ import six
 
 import numpy as np
 from tensorflow import logging
+from . import language_pb2 as lang
 
 # lazily compile the language proto to python library
-from .local import cache_directory
-sys.path.append(cache_directory)
-try:
-    import language_pb2 as lang
-except ImportError:
-    this_file_path = os.path.abspath(__file__)
-    this_directory = os.path.split(this_file_path)[0]
-    proto_path = os.path.join(this_directory, 'language.proto')
-    try:
-        subprocess.check_output(['protoc', proto_path,
-                                 '--proto_path='+this_directory,
-                                 '--python_out='+cache_directory],
-                                stderr=subprocess.STDOUT,
-                                universal_newlines=True)
-    except subprocess.CalledProcessError as exception:
-        logging.log(logging.ERROR, 'protoc error: ' + exception.output)
-        raise
-
-    import language_pb2 as lang
+# from .local import cache_directory
+# sys.path.append(cache_directory)
+# try:
+#     import language_pb2 as lang
+# except ImportError:
+#     this_file_path = os.path.abspath(__file__)
+#     this_directory = os.path.split(this_file_path)[0]
+#     proto_path = os.path.join(this_directory, 'language.proto')
+#     try:
+#         subprocess.check_output(['protoc', proto_path,
+#                                  '--proto_path='+this_directory,
+#                                  '--python_out='+cache_directory],
+#                                 stderr=subprocess.STDOUT,
+#                                 universal_newlines=True)
+#     except subprocess.CalledProcessError as exception:
+#         logging.log(logging.ERROR, 'protoc error: ' + exception.output)
+#         raise
+#
+#     import language_pb2 as lang
 
 
 class DType(object):
