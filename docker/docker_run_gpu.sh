@@ -36,6 +36,6 @@ if [[ "${DEVICES}" = "" ]]; then
 fi
 
 # CHANGED FROM tensorflow version: when running via jenkins we can't use a terminal (-t)
-docker run -i $CUDA_SO $DEVICES "$1" "$2" "$3" "$4" "$5"
+docker run -i $CUDA_SO $DEVICES "$1" "$2" "$3" "$4" "$5" "$6" "$7" "$8"
 #docker run -it $CUDA_SO $DEVICES "$@"
 

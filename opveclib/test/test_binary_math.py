@@ -52,6 +52,7 @@ class TestBinary(unittest.TestCase):
         self.binary_math(np.uint16)
         self.binary_math(np.uint32)
         self.binary_math(np.uint64)
+    test_binary.regression = 1
 
     def binary_math(self, dtype):
         length = 10
