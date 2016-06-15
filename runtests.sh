@@ -9,9 +9,7 @@
 # on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for
 # the specific language governing permissions and limitations under the License.
 
-# run opveclib python 2 unit tests. stop after first failure
-# have to run the ones using tensorflow in a separate process as
-# TF can't handle a cuda runtime api call that it did not make in its process
+# run opveclib python 2 and 3 unit tests. stop after first failure
 nose2-2.7 -F opveclib.test_tensorflow
 if [ ! $? -eq 0 ]; then
   echo "tensorflow integration tests failed"
@@ -19,10 +17,22 @@ if [ ! $? -eq 0 ]; then
 fi
 nose2-2.7 -F opveclib.examples
 if [ ! $? -eq 0 ]; then
-  echo "example tests failed"
+  echo "example tests failed on Python 2"
   exit 1
 fi
 nose2-2.7 -F opveclib.test
-
+if [ ! $? -eq 0 ]; then
+  echo "unit tests failed on Python 2"
+  exit 1
+fi
 # now run in python 3
 nose2-3.4 -F opveclib.test
+if [ ! $? -eq 0 ]; then
+  echo "unit tests failed on Python 3"
+  exit 1
+fi
+nose2-3.4 -F opveclib.examples
+if [ ! $? -eq 0 ]; then
+  echo "example tests failed on Python 3"
+  exit 1
+fi
