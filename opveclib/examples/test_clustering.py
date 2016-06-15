@@ -8,6 +8,8 @@
 # on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for
 # the specific language governing permissions and limitations under the License.
 
+import unittest
+from sys import _getframe
 import numpy as np
 import opveclib as ops
 import sys
@@ -270,3 +272,30 @@ def compareClusterCenters(clusterCenterGt, clusterCenterEst, rtol=1.e-5, atol=1.
             anyClose |= all(e < atol for e in absErr) and all(e < rtol for e in relErr)
         allClose &= anyClose # All estimates need to be close to at least one ground-truth.
     return allClose
+
+
+class TestKMeans(unittest.TestCase):
+    """
+    Test cases for kMeans clustering.
+    """
+    def test(self):
+        """
+        This test case generates random data with eight cluster centers and 100 data points per cluster center. Each
+        datum has three components.
+        """
+        print('*** Running Test: ' + self.__class__.__name__ + ' function: ' + _getframe().f_code.co_name)
+        np.random.seed(3)
+
+        data, clusterCenterGt = createClusterData()
+        clusterCenter = initialClusterCenters()
+
+        # CUDA is not required to run these test cases.
+        # TF will automatically run on the CPU version if that is all that is available
+        clusterCenterOVL    = kMeansGPU(data, clusterCenter, nMaxIter=500, th=1e-4)
+        clusterCenterTF     = kMeansTF(data, clusterCenter, nMaxIter=500, th=1e-4)
+
+        assert compareClusterCenters(clusterCenterGt, clusterCenterOVL, rtol=0.1, atol=0.1)
+        assert compareClusterCenters(clusterCenterGt, clusterCenterTF, rtol=0.1, atol=0.1)
+
+if __name__ == '__main__':
+    unittest.main()

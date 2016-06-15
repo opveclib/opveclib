@@ -12,7 +12,7 @@
 from __future__ import absolute_import
 from mpl_toolkits.mplot3d import Axes3D
 import matplotlib.pyplot as plt
-from clustering import createClusterData, initialClusterCenters, kMeansGPU
+from test_clustering import createClusterData, initialClusterCenters, kMeansGPU
 
 if __name__ == '__main__':
     """Demo program for kMeans clustering.

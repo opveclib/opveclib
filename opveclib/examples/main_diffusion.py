@@ -12,7 +12,7 @@ import urllib.request
 import os.path
 import matplotlib.image as mpimg
 import matplotlib.pyplot as plt
-from diffusion import TensorToFloat64, diffusion2DGPU
+from test_diffusion import TensorToFloat64, diffusion2DGPU
 
 
 def downloadImage(fileURL, fileName, fileTmp):

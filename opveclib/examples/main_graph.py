@@ -10,7 +10,7 @@
 
 from __future__ import absolute_import
 import os.path
-from graph import loadGraphFromTextFile, countTrianglesCPU, countTrianglesGPU, countTrianglesNp
+from test_graph import loadGraphFromTextFile, countTrianglesCPU, countTrianglesGPU, countTrianglesNp
 import opveclib as ops
 import urllib.request
 import gzip
