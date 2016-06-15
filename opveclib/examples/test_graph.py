@@ -9,10 +9,10 @@
 # the specific language governing permissions and limitations under the License.
 
 
-import os.path
 import unittest
 from sys import _getframe
-from .graph import loadGraphFromTextFile, countTrianglesCPU, countTrianglesGPU, countTrianglesNp, downloadAndUnzipGraph
+from .graph import writeExampleGraphToTextFile, loadGraphFromTextFile, countTrianglesCPU, \
+    countTrianglesGPU, countTrianglesNp
 import opveclib as ops
 
 class TestGraphTriangleCountOp(unittest.TestCase):
@@ -26,29 +26,26 @@ class TestGraphTriangleCountOp(unittest.TestCase):
         """
         print('*** Running Test: ' + self.__class__.__name__ + ' function: ' + _getframe().f_code.co_name)
 
-        # Specify the data source from the web.
-        urlName     = "https://snap.stanford.edu/data/ca-HepTh.txt.gz"
-        tmpName     = "/tmp/ca-HepPh.txt"
-        nTriangle   = 28339
+        # Specify the graph data.
+        tmpName     = "/tmp/v7e20.txt"
+        nTriangle   = 3
 
-        # Cache the downloaded file in the /tmp directory and only download it again if not present.
-        downloadAndUnzipGraph(urlName, tmpName)
+        writeExampleGraphToTextFile(tmpName)
 
-        if os.path.isfile(tmpName):
-            print('Testing graph %s.' % tmpName)
+        print('Testing graph %s.' % tmpName)
 
-            startEdge, fromVertex, toVertex = loadGraphFromTextFile(tmpName)
+        startEdge, fromVertex, toVertex = loadGraphFromTextFile(tmpName)
 
-            nTriangleNPY = countTrianglesNp(startEdge, fromVertex, toVertex)
-            nTriangleCPU = countTrianglesCPU(startEdge, fromVertex, toVertex)
+        nTriangleNPY = countTrianglesNp(startEdge, fromVertex, toVertex)
+        nTriangleCPU = countTrianglesCPU(startEdge, fromVertex, toVertex)
 
-            assert nTriangleNPY==nTriangle
-            assert nTriangleCPU==nTriangle
+        assert nTriangleNPY==nTriangle
+        assert nTriangleCPU==nTriangle
 
-            if ops.local.cuda_enabled:
-                nTriangleGPU = countTrianglesGPU(startEdge, fromVertex, toVertex)
-                assert nTriangleGPU==nTriangle
+        if ops.local.cuda_enabled:
+            nTriangleGPU = countTrianglesGPU(startEdge, fromVertex, toVertex)
+            assert nTriangleGPU==nTriangle
 
 
-if __name__ == '__main__':
-    unittest.main()
+#if __name__ == '__main__':
+#    unittest.main()

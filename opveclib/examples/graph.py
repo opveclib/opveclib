@@ -10,9 +10,6 @@
 
 import numpy as np
 import opveclib as ops
-import urllib.request
-import gzip
-import os.path
 
 class GraphTriangleCountOp(ops.Operator):
     """Counts the triangles in an undirected graph.
@@ -172,6 +169,41 @@ def countTrianglesNp(startEdge, fromVertex, toVertex):
                 iiToVertex      = int(toVertex[iToEdge])
 
     return nTriangle
+
+def writeExampleGraphToTextFile(fileName):
+    """"Writes an example graph to file.
+
+    :param fileName: The path + name of the ascii text file to hold the edge list of the graph.
+    """
+
+    # The edge list of the graph with 7 vertices and 20 edges.
+    edgeList = [[0,1],
+                [1,2],
+                [2,3],
+                [3,4],
+                [4,5],
+                [5,6],
+                [0,6],
+                [1,3],
+                [3,5],
+                [1,6],
+                [1,0],
+                [2,1],
+                [3,2],
+                [4,3],
+                [5,4],
+                [6,5],
+                [6,0],
+                [3,1],
+                [5,3],
+                [6,1]]
+    # Write the graph to a text file.
+    with open(fileName, "w") as file:
+        nEdge = len(edgeList)
+        for iEdge in range(nEdge):
+            file.write("%d\t%d\n" % (edgeList[iEdge][0], edgeList[iEdge][1]))
+
+
 
 def loadGraphFromTextFile(fileName):
     """Load a graph from a text file where each line has a pair of numbers representing (from,to) of an edge.
@@ -337,16 +369,3 @@ def loadGraphFromTextFile(fileName):
 
     return startEdge, fromVertex, toVertex
 
-
-def downloadAndUnzipGraph(urlName, tmpName):
-    # Cache the downloaded file in the /tmp directory and only download it again if not present.
-    if not os.path.isfile(tmpName):
-        print("Downloading data file %s." % (urlName))
-
-    with urllib.request.urlopen(urlName) as f:
-        tmpNameGz = tmpName + ".gz"
-        with open(tmpNameGz, 'wb') as fCompressed:
-            fCompressed.write(f.read())
-            decompressedFile = gzip.GzipFile(tmpNameGz, mode='rb')
-            with open(tmpName, 'w') as fDecompressed:
-                fDecompressed.write(decompressedFile.read().decode("utf-8"))

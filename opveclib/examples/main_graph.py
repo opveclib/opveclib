@@ -10,8 +10,32 @@
 
 from __future__ import absolute_import
 import os.path
-from graph import loadGraphFromTextFile, countTrianglesCPU, countTrianglesGPU, countTrianglesNp, downloadAndUnzipGraph
+from graph import loadGraphFromTextFile, countTrianglesCPU, countTrianglesGPU, countTrianglesNp
 import opveclib as ops
+import urllib.request
+import gzip
+import os.path
+
+def downloadAndUnzipGraph(urlName, tmpName):
+    """Download, unzip, and write a graph to a file.
+
+    :param urlName: URL of the data to download.
+    :type urlName: String.
+    :param tmpName: Name of graph in temporary folder.
+    :type tmpName: String.
+    """
+
+    # Cache the downloaded file in the /tmp directory and only download it again if not present.
+    if not os.path.isfile(tmpName):
+        print("Downloading data file %s." % (urlName))
+
+    with urllib.request.urlopen(urlName) as f:
+        tmpNameGz = tmpName + ".gz"
+        with open(tmpNameGz, 'wb') as fCompressed:
+            fCompressed.write(f.read())
+            decompressedFile = gzip.GzipFile(tmpNameGz, mode='rb')
+            with open(tmpName, 'w') as fDecompressed:
+                fDecompressed.write(decompressedFile.read().decode("utf-8"))
 
 if __name__ == '__main__':
     """Demo program for the counting of triangles in an undirected graph.
