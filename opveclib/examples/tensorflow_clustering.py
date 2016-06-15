@@ -12,7 +12,6 @@ import unittest
 from clustering import createClusterData, initialClusterCenters, kMeansTF, kMeansGPU, compareClusterCenters
 from sys import _getframe
 import numpy as np
-import opveclib as ops
 
 class TestKMeans(unittest.TestCase):
     """

@@ -1,3 +1,4 @@
+from __future__ import print_function
 # Copyright 2016 Hewlett Packard Enterprise Development LP
 #
 # Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with
@@ -117,6 +118,3 @@ class TestAccumulate(unittest.TestCase):
             assert np.allclose(np.cumprod(a, axis=1), cumprod(a, axis=1).evaluate_cuda())
             assert np.allclose(np.cumprod(a, axis=2), cumprod(a, axis=2).evaluate_cuda())
 
-
-if __name__ == '__main__':
-    unittest.main()

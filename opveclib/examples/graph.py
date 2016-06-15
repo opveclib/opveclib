@@ -10,8 +10,7 @@
 
 import numpy as np
 import opveclib as ops
-from urllib2 import Request, urlopen, URLError
-import StringIO
+import urllib.request
 import gzip
 import os.path
 
@@ -219,7 +218,7 @@ def loadGraphFromTextFile(fileName):
     with open(fileName, "rb") as fHandle:
         block = fHandle.read(blockSize)
         while block:
-            nEdge += block.count("\n")
+            nEdge += block.count(b'\n')
             block = fHandle.read(blockSize)
 
     # ******************************************************************************************************************
@@ -251,13 +250,13 @@ def loadGraphFromTextFile(fileName):
     for iEdge in range(nEdge):
         iFrom = edges[iEdge,0]
         iTo = edges[iEdge,1]
-        if idToIndex.has_key(iFrom):
+        if iFrom in idToIndex:
             iFrom = idToIndex[iFrom]
         else:
             idToIndex[iFrom] = iVertex
             iFrom = iVertex
             iVertex += 1
-        if idToIndex.has_key(iTo):
+        if iTo in idToIndex:
             iTo = idToIndex[iTo]
         else:
             idToIndex[iTo] = iVertex
@@ -342,20 +341,12 @@ def loadGraphFromTextFile(fileName):
 def downloadAndUnzipGraph(urlName, tmpName):
     # Cache the downloaded file in the /tmp directory and only download it again if not present.
     if not os.path.isfile(tmpName):
-        print "Downloading data file %s." % (urlName)
-        req = Request(urlName)
-        try:
-            response = urlopen(req)
-        except URLError as e:
-            if hasattr(e, 'reason'):
-                print 'Could not reach ', urlName, ' because of ', e.reason
-            elif hasattr(e, 'code'):
-                print 'Server ', urlName, ' returned error code ', e.code
-        else:
-            print "Downloaded file %s." % (urlName)
-            compressedFile = StringIO.StringIO()
-            compressedFile.write(response.read())
-            compressedFile.seek(0)
-            decompressedFile = gzip.GzipFile(fileobj=compressedFile, mode='rb')
-            with open(tmpName, 'w') as fHandle:
-                fHandle.write(decompressedFile.read())
+        print("Downloading data file %s." % (urlName))
+
+    with urllib.request.urlopen(urlName) as f:
+        tmpNameGz = tmpName + ".gz"
+        with open(tmpNameGz, 'wb') as fCompressed:
+            fCompressed.write(f.read())
+            decompressedFile = gzip.GzipFile(tmpNameGz, mode='rb')
+            with open(tmpName, 'w') as fDecompressed:
+                fDecompressed.write(decompressedFile.read().decode("utf-8"))

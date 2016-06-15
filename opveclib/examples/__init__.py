@@ -1,1 +1,1 @@
-from accumulate import Accumulate, cumsum, cumprod
+from .accumulate import Accumulate, cumsum, cumprod

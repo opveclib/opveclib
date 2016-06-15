@@ -536,8 +536,8 @@ def filter2DNp(dataIn, kernelIn):
     nXIn    = dataIn.shape[1]
     nYKl    = kernelIn.shape[0]
     nXKl    = kernelIn.shape[1]
-    nYH     = int((nYKl-1)/2 - nYKl*nYIn) # Add offset for proper wrapping if nYH > nYIn.
-    nXH     = int((nXKl-1)/2 - nXKl*nXIn)
+    nYH     = int((nYKl-1.0)/2.0) - nYKl*nYIn # Add offset for proper wrapping if nYH > nYIn.
+    nXH     = int((nXKl-1.0)/2.0) - nXKl*nXIn
     dataOut = np.zeros((nYIn,nXIn))
     for iYIn in range(0,nYIn):
         for iXIn in range(0,nXIn):

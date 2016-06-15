@@ -12,7 +12,7 @@
 import os.path
 import unittest
 from sys import _getframe
-from graph import loadGraphFromTextFile, countTrianglesCPU, countTrianglesGPU, countTrianglesNp, downloadAndUnzipGraph
+from .graph import loadGraphFromTextFile, countTrianglesCPU, countTrianglesGPU, countTrianglesNp, downloadAndUnzipGraph
 import opveclib as ops
 
 class TestGraphTriangleCountOp(unittest.TestCase):
@@ -35,7 +35,7 @@ class TestGraphTriangleCountOp(unittest.TestCase):
         downloadAndUnzipGraph(urlName, tmpName)
 
         if os.path.isfile(tmpName):
-            print 'Testing graph %s.' % tmpName
+            print('Testing graph %s.' % tmpName)
 
             startEdge, fromVertex, toVertex = loadGraphFromTextFile(tmpName)
 

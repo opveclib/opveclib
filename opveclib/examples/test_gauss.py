@@ -1,5 +1,5 @@
 import unittest
-from diffusion import Gauss2DOp, gauss2DNp
+from .diffusion import Gauss2DOp, gauss2DNp
 import numpy as np
 import opveclib as ops
 from sys import _getframe
@@ -19,7 +19,7 @@ class TestGauss2DOp(unittest.TestCase):
         #     for mX in [1, 2, 3, 9]:
         for mY in [1, 2, 3, 9]:
             for mX in [1, 2, 3, 8]:
-                print "Test case mX = %d and mY = %d." % (mX, mY) # Print parameters of the test case.
+                print("Test case mX = %d and mY = %d." % (mX, mY)) # Print parameters of the test case.
                 op = Gauss2DOp(dimOut=[mY,mX], clear_cache=True)
 
                 dataCPU = op.evaluate_c()

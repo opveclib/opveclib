@@ -8,36 +8,19 @@
 # on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for
 # the specific language governing permissions and limitations under the License.
 
+import urllib.request
 import os.path
-from urllib2 import Request, urlopen, URLError
 import matplotlib.image as mpimg
 import matplotlib.pyplot as plt
 from diffusion import TensorToFloat64, diffusion2DGPU
 
+
 def downloadImage(fileURL, fileName, fileTmp):
     # Cache the downloaded file in the /tmp directory and only download it again if not present.
-    rValue = 0
-    if not os.path.isfile(fileTmp):
-        print "Downloading data file %s." % (fileURL + fileName)
-        req = Request(fileURL + fileName)
-        try:
-            response = urlopen(req)
-        except URLError as e:
-            if hasattr(e, 'reason'):
-                print 'Could not reach ', fileURL, ' because of ', e.reason
-            elif hasattr(e, 'code'):
-                print 'Server ', fileURL, ' returned error code ', e.code
-        else:
-            print "Downloaded file %s." % (fileURL + fileName)
-            with open(fileTmp, 'w') as fHandle:
-                fHandle.write(response.read())
-                rValue = 1
-    else:
-        rValue = 1
-
-    return rValue
-
-
+    with urllib.request.urlopen(fileURL + fileName) as f:
+        with open(fileTmp, 'wb') as fHandle:
+            fHandle.write(f.read())
+    return 1
 
 if __name__ == '__main__':
     """Demo program for the anisotropic image diffusion.
@@ -50,22 +33,24 @@ if __name__ == '__main__':
     fileName    = "Head_MRI%2C_enlarged_inferior_sagittal_sinus.png"
     fileTmp     = "/tmp/MRI.png"
 
-    if downloadImage(fileURL, fileName, fileTmp):
-        # Load the image and convert it into float64.
-        imageIn     = TensorToFloat64(mpimg.imread(fileTmp)).evaluate_c()
+    if not os.path.isfile(fileTmp):
+        downloadImage(fileURL, fileName, fileTmp)
 
-        # Apply the image diffusion with the step width dt = 5, lambda parameter 3.5/255, sigma parameter = 3 pixel,
-        # and 3 iterations.
-        imageOut    = diffusion2DGPU(imageIn, dt=5, l=3.5/255, s=3, nIter=3)
+    # Load the image and convert it into float64.
+    imageIn     = TensorToFloat64(mpimg.imread(fileTmp)).evaluate_c()
 
-        # Display the original image and diffusion result.
-        plt.figure(1)
-        plt.subplot(121)
-        plt.imshow(imageIn)
-        plt.title('Input')
-        plt.set_cmap('gray')
-        plt.subplot(122)
-        plt.imshow(imageOut)
-        plt.title('Diffused')
-        plt.set_cmap('gray')
-        plt.show()
+    # Apply the image diffusion with the step width dt = 5, lambda parameter 3.5/255, sigma parameter = 3 pixel,
+    # and 3 iterations.
+    imageOut    = diffusion2DGPU(imageIn, dt=5, l=3.5/255, s=3, nIter=3)
+
+    # Display the original image and diffusion result.
+    plt.figure(1)
+    plt.subplot(121)
+    plt.imshow(imageIn)
+    plt.title('Input')
+    plt.set_cmap('gray')
+    plt.subplot(122)
+    plt.imshow(imageOut)
+    plt.title('Diffused')
+    plt.set_cmap('gray')
+    plt.show()

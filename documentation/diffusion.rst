@@ -14,11 +14,37 @@ and especially for a parallel implementation in
 
 Setup
 -----
-If you want to run the main method for the diffusion example you have to install the following dependency
+If you want to run the main method for clustering you have to install the following dependency, which will install
+matplotlib for python 2.7.
 
 .. code-block:: console
 
    sudo apt-get install python-matplotlib
+
+If you want to install matplotlib for python 3.4 execute the following:
+
+.. code-block:: console
+
+   pip3 install matplotlib
+
+If not done so, you have to install the development tools to compile matplotlib. This is done through the command:
+
+.. code-block:: console
+
+   sudo apt-get install python3-dev
+
+For correct display of figures under python 3 you need to install the cairocffi package. Before compiling the package
+you need to install the dependency on libffi-dev.
+
+.. code-block:: console
+
+   sudo apt-get install libffi-dev
+
+The install cairocffi through the pip install for python 3.
+
+.. code-block:: console
+
+   pip3 install cairocffi
 
 
 

@@ -12,10 +12,9 @@
 import numpy as np
 import unittest
 from sys import _getframe
-from diffusion import AddBoundaryOp, addBoundaryNp, DelBoundaryOp, delBoundaryNp, CopyBoundaryOp, copyBoundaryNp
-from diffusion import Filter2DOp, filter2DNp
-from diffusion import DiffusionGradient2DOp, diffusionGradient2DNp
-from diffusion import SolveDiagCol2DOp, SolveDiagRow2DOp, solveDiagCol2DNp, solveDiagRow2DNp
+from .diffusion import AddBoundaryOp, addBoundaryNp, DelBoundaryOp, delBoundaryNp, CopyBoundaryOp, copyBoundaryNp
+from .diffusion import DiffusionGradient2DOp, diffusionGradient2DNp
+from .diffusion import SolveDiagCol2DOp, SolveDiagRow2DOp, solveDiagCol2DNp, solveDiagRow2DNp
 import opveclib as ops
 
 
@@ -30,7 +29,7 @@ class TestAddBoundary(unittest.TestCase):
         print('*** Running Test: ' + self.__class__.__name__ + ' function: ' + _getframe().f_code.co_name)
         for nX in [2, 3, 10]:
             for nY in [2, 3, 5]:
-                print "Test case nX = %d and nY = %d." % (nX, nY) # Print parameters of the test case.
+                print("Test case nX = %d and nY = %d." % (nX, nY)) # Print parameters of the test case.
                 rng     = np.random.RandomState(1)
                 dataIn  = rng.uniform(0, 255, [nY, nX])
                 op      = AddBoundaryOp(dataIn, clear_cache=True)
@@ -57,7 +56,7 @@ class TestDelBoundary(unittest.TestCase):
         print('*** Running Test: ' + self.__class__.__name__ + ' function: ' + _getframe().f_code.co_name)
         for nX in [3, 4, 10]:
             for nY in [3, 4, 5]:
-                print "Test case nX = %d and nY = %d." % (nX, nY) # Print parameters of the test case.
+                print("Test case nX = %d and nY = %d." % (nX, nY)) # Print parameters of the test case.
 
                 rng     = np.random.RandomState(1)
                 dataIn  = rng.uniform(0, 255, [nY, nX])
@@ -83,7 +82,7 @@ class TestCopyBoundary(unittest.TestCase):
         print('*** Running Test: ' + self.__class__.__name__ + ' function: ' + _getframe().f_code.co_name)
         for nX in [2, 3, 10]:
             for nY in [2, 3, 5]:
-                print "Test case nX = %d and nY = %d." % (nX, nY) # Print parameters of the test case.
+                print("Test case nX = %d and nY = %d." % (nX, nY)) # Print parameters of the test case.
 
                 rng     = np.random.RandomState(1)
                 dataIn  = rng.uniform(0, 255, [nY, nX])
@@ -95,38 +94,6 @@ class TestCopyBoundary(unittest.TestCase):
                 if ops.local.cuda_enabled:
                     dataGPU = op.evaluate_cuda()
                     assert np.allclose(dataGPU, dataNPY)
-
-
-
-class TestFilter2D(unittest.TestCase):
-    """
-    Test cases for filtering operator.
-    """
-    def test(self):
-        """
-        Compare the numpy implementation with the opveclib implementation for varying image size and varying kernel
-        size.
-        """
-        print('*** Running Test: ' + self.__class__.__name__ + ' function: ' + _getframe().f_code.co_name)
-        for nY in [5, 8, 15]:
-            for nX in [5, 9, 16]:
-                print "Image size nX = %d and nY = %d." % (nX, nY) # Print parameters of the test case.
-
-                for mY in [2, 3]:
-                    for mX in [2, 3]:
-                        print "  Kernel size mX = %d and mY = %d." % (mX, mY) # Print parameters of the test case.
-
-                        rng         = np.random.RandomState(1)
-                        dataIn      = rng.uniform(0, 255, [nY, nX])
-                        kernelIn    = rng.uniform(0, 255, [mY, mX])
-                        op          = Filter2DOp(dataIn, kernelIn, clear_cache=True)
-                        dataCPU     = op.evaluate_c()
-                        dataNPY     = filter2DNp(dataIn, kernelIn)
-                        assert np.allclose(dataCPU, dataNPY)
-
-                        if ops.local.cuda_enabled:
-                            dataGPU = op.evaluate_cuda()
-                            assert np.allclose(dataGPU, dataNPY)
 
 
 class TestDiffusionGradient(unittest.TestCase):
@@ -173,7 +140,7 @@ class TestSolveDiag2DOp(unittest.TestCase):
         print('*** Running Test: ' + self.__class__.__name__ + ' function: ' + _getframe().f_code.co_name)
         for nY in [1, 2, 3, 7]:
             for nX in [1, 2, 3, 4]:
-                print "Test case nX = %d and nY = %d." % (nX, nY)
+                print("Test case nX = %d and nY = %d." % (nX, nY))
                 rng = np.random.RandomState(1)
 
                 alpha   = rng.uniform(0, 1, [nY, nX])
