@@ -23,7 +23,7 @@ def diffusion2DGPU(image, dt, l, s, nIter):
 
     Assume the image function is f(x), then the image diffusion process is defined by:
 
-        dt u = div( g( |grad u_s|^2 ) grad u
+        dt u = div( g( |grad u_s|^2 )) grad u
 
         for u_s = gauss(s) * u  and  grad = (dx,dy)
 
@@ -41,13 +41,31 @@ def diffusion2DGPU(image, dt, l, s, nIter):
     :type s: float.
     :param nIter: Number of iterations for the diffusion.
     :type nIter: int.
-    :return An image that is the diffused.
+    :return: An image that is the diffused.
 
-    Further details:
+
+    :Description:
     Weickert, Haar Romeny, Viergever (1993). Efficient and reliable schemes for nonlinear diffusion filtering. In IEEE
         Transactions on Image Processing 7(3):398--410.
     Weickert, Zuiderveld, Haar Romeny, Nissen (1997). Parallel implementations of AOS schemes: a fast way of nonlinear
         diffusion filtering. In Proc. of Int. Conf. on Image Processing 3:396--399.
+
+    :Examples:
+
+    .. doctest::
+
+        >>> from opveclib.examples.test_diffusion import TensorToFloat64, diffusion2DGPU
+        >>> import urllib.request
+        >>> import matplotlib.image as mpimg
+        >>> fileURL     = "https://upload.wikimedia.org/wikipedia/commons/6/68/"
+        >>> fileName    = "Head_MRI%2C_enlarged_inferior_sagittal_sinus.png"
+        >>> fileTmp     = "/tmp/MRI.png"
+        >>> with urllib.request.urlopen(fileURL + fileName) as f:
+        >>>     with open(fileTmp, 'wb') as fHandle:
+        >>>         fHandle.write(f.read())
+        >>> imageIn = TensorToFloat64(mpimg.imread(fileTmp)).evaluate_c()
+        >>> imageOut = diffusion2DGPU(imageIn, dt=5, l=3.5/255, s=3, nIter=3)
+
     """
     assert len(image.shape)==2 , "Only gray-value images are supported but found %d channels." % (len(image.shape))
     nGauss  = 2 * int(mt.ceil(s*2)) + 1 # Number of pixels.
@@ -102,9 +120,9 @@ def diffusion2DNp(image, dt, l, s, nIter):
     :type s: float.
     :param nIter: Number of iterations for the diffusion.
     :type nIter: int.
-    :return An image that is the diffused.
+    :return: An image that is the diffused.
 
-    Further details:
+    :Description:
     Weickert, Haar Romeny, Viergever (1993). Efficient and reliable schemes for nonlinear diffusion filtering. In IEEE
         Transactions on Image Processing 7(3):398--410.
     Weickert, Zuiderveld, Haar Romeny, Nissen (1997). Parallel implementations of AOS schemes: a fast way of nonlinear
@@ -172,7 +190,7 @@ class AddBoundaryOp(ops.Operator):
 
         :param dataIn: 2D data input.
         :type dataIn: numpy array.
-        :return 2D data output with added boundary.
+        :return: a 2D data output with added boundary.
         """
         assert len(dataIn.shape)==2 , "Only 2D data is supported but found %d dimensions." \
                                       % (len(dataIn.shape))
@@ -217,7 +235,7 @@ def addBoundaryNp(dataIn):
 
        :param dataIn: 2D data input.
        :type dataIn: numpy array.
-       :return 2D data output with added boundary.
+       :return: a 2D data output with added boundary.
 
     """
     nYIn    = dataIn.shape[0]
@@ -293,7 +311,7 @@ def delBoundaryNp(dataIn):
 
     :param dataIn: 2D data input.
     :type dataIn: numpy array.
-    :return 2D data output with deleted boundary.
+    :return: a 2D data output with deleted boundary.
     """
     nYIn    = dataIn.shape[0]
     nXIn    = dataIn.shape[1]
@@ -374,7 +392,7 @@ def copyBoundaryNp(dataIn):
 
     :param dataIn: 2D data input.
     :type dataIn: numpy array.
-    :return 2D data output with copied boundary.
+    :return: a 2D data output with copied boundary.
     """
     nY = dataIn.shape[0]
     nX = dataIn.shape[1]
@@ -450,7 +468,7 @@ def gauss2DNp(dimOut):
 
     :param dimOut: Output dimensions [nY, nX].
     :type dimOut: list.
-    :return 2D Gaussian kernel.
+    :return: a 2D Gaussian kernel.
     """
     n0      = dimOut[0]
     n1      = dimOut[1]
@@ -488,7 +506,7 @@ class Filter2DOp(ops.Operator):
         :type dataIn: numpy array.
         :param kernelIn: 2D filtering kernel.
         :type kernelIn: numpy array.
-        :return Filtered 2D data.
+        :return: a filtered 2D data.
         """
         assert(len(dataIn.shape) == 2)
         assert(dataIn.shape[0] >= kernelIn.shape[0]) # data input must be larger than kernel
@@ -532,7 +550,7 @@ def filter2DNp(dataIn, kernelIn):
     :type dataIn: numpy array.
     :param kernelIn: 2D filtering kernel.
     :type kernelIn: numpy array.
-    :return Filtered 2D data.
+    :return: a filtered 2D data.
     """
     nYIn    = dataIn.shape[0]
     nXIn    = dataIn.shape[1]
@@ -694,7 +712,7 @@ def solveDiagRow2DNp(alpha, beta, gamma, y):
     :type gamma: numpy array.
     :param y: Input values.
     :type y: numpy array.
-    :return Solution x of gamma(i-1) x(i-1) + alpha(i) x(i) + beta(i+1) x(i+1) = Y(i).
+    :return: a solution x of gamma(i-1) x(i-1) + alpha(i) x(i) + beta(i+1) x(i+1) = Y(i).
     """
     assert len(y.shape)==2 , "Only 2D data is supported but found %d dimensions." % (len(y.shape))
     nY  = y.shape[0]
@@ -750,7 +768,7 @@ class SolveDiagCol2DOp(ops.Operator):
         :type gamma: numpy array.
         :param y: Input values.
         :type y: numpy array.
-        :return Solution x of gamma(i-1) x(i-1) + alpha(i) x(i) + beta(i+1) x(i+1) = Y(i).
+        :return: a solution x of gamma(i-1) x(i-1) + alpha(i) x(i) + beta(i+1) x(i+1) = Y(i).
         """
         assert len(y.shape)==2 , "Only 2D data is supported but found %d dimensions." % (len(y.shape))
         nY  = y.shape[0]
@@ -798,7 +816,7 @@ def solveDiagCol2DNp(alpha, beta, gamma, y):
     :type gamma: numpy array.
     :param y: Input values.
     :type y: numpy array.
-    :return Solution x of gamma(i-1) x(i-1) + alpha(i) x(i) + beta(i+1) x(i+1) = Y(i).
+    :return: a solution x of gamma(i-1) x(i-1) + alpha(i) x(i) + beta(i+1) x(i+1) = Y(i).
     """
     assert len(y.shape)==2 , "Only 2D data is supported but found %d dimensions." % (len(y.shape))
     nY  = y.shape[0]

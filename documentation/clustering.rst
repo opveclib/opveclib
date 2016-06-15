@@ -50,6 +50,13 @@ The install cairocffi through the pip install for python 3.
    pip3 install cairocffi
 
 
+Source Code
+-----------
+.. autofunction:: examples.test_clustering.kMeansGPU
+
+.. autofunction:: examples.test_clustering.kMeansTF
+
+
 Testing
 -------
 Our test case generates data and initial cluster centers. We have two implementations of the k-means algorithm. One uses

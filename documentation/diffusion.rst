@@ -47,6 +47,12 @@ The install cairocffi through the pip install for python 3.
    pip3 install cairocffi
 
 
+Source Code
+-----------
+
+.. autofunction:: examples.test_diffusion.diffusion2DGPU
+
+
 
 Testing
 -------

@@ -46,7 +46,7 @@ class GraphTriangleCountOp(ops.Operator):
         :type fromVertex: list.
         :param toVertex: The to-vertex of each edge.
         :type toVertex: list.
-        :return Counts of triangles per edge.
+        :return: Counts of triangles per edge.
         """
         iEdge           = ops.position_in(toVertex.shape)[0]
         count           = ops.output(toVertex.shape, ops.uint64)
@@ -104,7 +104,19 @@ def countTrianglesCPU(startEdge, fromVertex, toVertex):
     :type fromVertex: list.
     :param toVertex: The to-vertex of each edge.
     :type toVertex: list.
-    :return Triangle count of graph.
+    :return: Triangle count of graph.
+
+    :Examples:
+
+    .. doctest::
+
+        >>> from opveclib.examples.test_graph import loadGraphFromTextFile, writeExampleGraphToTextFile, countTrianglesCPU
+        >>> tmpName = "/tmp/v7e20.txt"
+        >>> writeExampleGraphToTextFile(tmpName)
+        >>> startEdge, fromVertex, toVertex = loadGraphFromTextFile(tmpName)
+        >>> nTriangle = countTrianglesCPU(startEdge, fromVertex, toVertex)
+        >>> print(nTriangle)
+        3
     """
     count = GraphTriangleCountOp(startEdge, fromVertex, toVertex).evaluate_c()
     return np.sum(count, axis=0, dtype=np.uint64)
@@ -120,7 +132,19 @@ def countTrianglesGPU(startEdge, fromVertex, toVertex):
     :type fromVertex: list.
     :param toVertex: The to-vertex of each edge.
     :type toVertex: list.
-    :return Triangle count of graph.
+    :return: Triangle count of graph.
+
+    :Examples:
+
+    .. doctest::
+
+        >>> from opveclib.examples.test_graph import loadGraphFromTextFile, writeExampleGraphToTextFile, countTrianglesGPU
+        >>> tmpName = "/tmp/v7e20.txt"
+        >>> writeExampleGraphToTextFile(tmpName)
+        >>> startEdge, fromVertex, toVertex = loadGraphFromTextFile(tmpName)
+        >>> nTriangle = countTrianglesGPU(startEdge, fromVertex, toVertex)
+        >>> print(nTriangle)
+        3
     """
     count = GraphTriangleCountOp(startEdge, fromVertex, toVertex).evaluate_cuda()
     return np.sum(count, axis=0, dtype=np.uint64)
@@ -138,7 +162,7 @@ def countTrianglesNp(startEdge, fromVertex, toVertex):
     :type fromVertex: list.
     :param toVertex: The to-vertex of each edge.
     :type toVertex: list.
-    :return Triangle count of graph.
+    :return: Triangle count of graph.
     """
 
     assert len(fromVertex)==len(toVertex), "From vertex has %d entries that must match %d entries in to vertex!" \
@@ -177,6 +201,7 @@ def writeExampleGraphToTextFile(fileName):
     """"Writes an example graph to file.
 
     :param fileName: The path + name of the ascii text file to hold the edge list of the graph.
+    :type fileName: String.
     """
 
     # The edge list of the graph with 7 vertices and 20 edges.
@@ -213,7 +238,7 @@ def loadGraphFromTextFile(fileName):
 
     :param fileName: The path + name of the ascii text file to read.
     :type fileName: str.
-    :return The three lists: startEdge, fromVertex, toVertex -- where startEdge contains the start/end indices of single
+    :return: Three lists startEdge, fromVertex, toVertex -- where startEdge contains the start/end indices of single
             lists within fromVertex and toVertex. The list fromVertex contains the from vertices and the list toVertex
             contains the list toVertex.
 

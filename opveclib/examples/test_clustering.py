@@ -29,7 +29,7 @@ class KMeansMinDistOp(ops.Operator):
         :type data; numpy array.
         :param center: 2D matrix of initial cluster centers with dimensions: nDim x nCenter.
         :type center: numpy array.
-        :return minIndex: 1D matrix of assignemnts of data points to cluster centers: nData x 1.
+        :return: a 1D matrix of assignemnts of data points to cluster centers: nData x 1.
         """
         nDimData    = data.shape[0]
         nDimCenter  = center.shape[0]
@@ -69,7 +69,7 @@ class KMeansNewCenOp(ops.Operator):
         :type data: numpy array.
         :param minIndex: 1D matrix of assignemnts of data points to cluster centers: nData x 1.
         :type minIndex: numpy array.
-        :return 2D matrix with computed cluster centers with dimensions> nDim x nCenter.
+        :return: a 2D matrix with computed cluster centers with dimensions> nDim x nCenter.
         """
         nDim    = data.shape[0]
         nData   = data.shape[1]
@@ -109,9 +109,9 @@ def kMeansGPU(data, center, nMaxIter, th):
     :type nMaxIter: int.
     :param th: Threshold applied to RMS error between prior and current cluster centers.
     :type th: float.
-    :return 2D matrix with computed cluster centers with dimensions> nDim x nCenter.
+    :return: a 2D matrix with computed cluster centers with dimensions> nDim x nCenter.
 
-    Description:
+    :Description:
         We assume that the initial cluster centers or centroids are given by the user.
 
         The kmeans algorithm iterates over the two steps until convergence or a maximum number of steps is reached:
@@ -120,6 +120,14 @@ def kMeansGPU(data, center, nMaxIter, th):
 
         2. Use the assignment index and recompute the cluster centers as the centroid of the assigned data.
 
+    :Examples:
+
+    .. doctest::
+
+        >>> from opveclib.examples.test_clustering import createClusterData, initialClusterCenters, kMeansGPU
+        >>> data, clusterGt = createClusterData()
+        >>> cluster = initialClusterCenters()
+        >>> clusterGPU  = kMeansGPU(data, cluster, nMaxIter=10, th=1e-4)
     """
     # Initialize the variables as tensorflow variables.
     iter        = tf.constant(0)
@@ -146,7 +154,16 @@ def kMeansTF(data, center, nMaxIter, th): # data: nDim x nData, center: nDim x  
     :type nMaxIter: int.
     :param th: Threshold applied to RMS error between prior and current cluster centers.
     :type th: float.
-    :return 2D matrix with computed cluster centers with dimensions> nDim x nCenter.
+    :return: a 2D matrix with computed cluster centers with dimensions> nDim x nCenter.
+
+    :Examples:
+
+    .. doctest::
+
+        >>> from opveclib.examples.test_clustering import createClusterData, initialClusterCenters, kMeansTF
+        >>> data, clusterGt = createClusterData()
+        >>> cluster = initialClusterCenters()
+        >>> clusterGPU  = kMeansTF(data, cluster, nMaxIter=10, th=1e-4)
     """
     nData   = data.shape[1]
     nCenter = center.shape[1]
@@ -194,7 +211,7 @@ def createClusterData(nDataPerCluster = 100):
 
     :param nDataPerCluster: Number of data samples per cluster.
     :type nDataPerCluster: int.
-    :return data with dimensions 3 x (8xnDataPerCluster) and clusterCenter with dimensions 3 x 8.
+    :return: data with dimensions 3 x (8xnDataPerCluster) and clusterCenter with dimensions 3 x 8.
     """
     clusterCenter = np.zeros((3, 8), dtype=np.float64)
     clusterCenter[:,0] = [-3, +5, -2]
@@ -229,7 +246,7 @@ def createClusterData(nDataPerCluster = 100):
 def initialClusterCenters():
     """Define the initial cluster centers.
 
-    :return 2D array with cluster center with dimension: nDim x nCluster (here 3 x 8).
+    :return: a 2D array with cluster center with dimension: nDim x nCluster (here 3 x 8).
     """
     clusterCenter = np.zeros((3, 8), dtype=np.float64)
     clusterCenter[:,0] = [-5, -5, -5]
@@ -253,7 +270,7 @@ def compareClusterCenters(clusterCenterGt, clusterCenterEst, rtol=1.e-5, atol=1.
     :type rtol: float.
     :param atol: Maximum threshold for absolute error.
     :type atol: float.
-    :return true (or 1) if each estimated cluster center can be matched with at least one ground-truth cluster center.
+    :return: true (or 1) if each estimated cluster center can be matched with at least one ground-truth cluster center.
     Otherwise this method returns false (or 0).
     """
     assert clusterCenterGt.shape[0]==clusterCenterEst.shape[0], "Dimensionality of cluster centers must match."
