@@ -45,3 +45,6 @@ class TestFilter2D(unittest.TestCase):
                         if ops.local.cuda_enabled:
                             dataGPU = op.evaluate_cuda()
                             assert np.allclose(dataGPU, dataNPY)
+
+if __name__ == '__main__':
+    unittest.main()

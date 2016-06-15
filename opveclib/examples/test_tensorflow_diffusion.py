@@ -12,7 +12,7 @@
 import numpy as np
 import unittest
 from sys import _getframe
-from opveclib.examples.diffusion import diffusion2DGPU, diffusion2DNp
+from .diffusion import diffusion2DGPU, diffusion2DNp
 import opveclib as ops
 
 class TestDiffusion2D(unittest.TestCase):
@@ -31,7 +31,7 @@ class TestDiffusion2D(unittest.TestCase):
         if ops.local.cuda_enabled:
             for nX in [15, 20]:
                 for nY in [15, 50]:
-                    print "Test case nX = %d and nY = %d." % (nX, nY) # Print parameters of the test case.
+                    print("Test case nX = %d and nY = %d." % (nX, nY)) # Print parameters of the test case.
                     rng     = np.random.RandomState(1)
                     imageIn = rng.uniform(0, 1, [nY, nX])
 
@@ -39,3 +39,6 @@ class TestDiffusion2D(unittest.TestCase):
                     imageNPY    = diffusion2DNp(imageIn, dt=5, l=3.5/255, s=3, nIter=3)
 
                     assert np.allclose(imageGPU, imageNPY)
+
+if __name__ == '__main__':
+    unittest.main()

@@ -41,15 +41,16 @@ def gen(input, ops_func, np_func, cuda_tolerance=None):
             assert np.allclose(op_cuda, np_func(input),
                                atol=cuda_tolerance['atol'], rtol=cuda_tolerance['rtol'])
 
-
 class TestUnaryMath(unittest.TestCase):
     def test_unary_float(self):
         print('*** Running Test: ' + self.__class__.__name__ + ' function: ' + _getframe().f_code.co_name)
         self.unary(np.float32)
+    test_unary_float.regression = 1
 
     def test_unary_double(self):
         print('*** Running Test: ' + self.__class__.__name__ + ' function: ' + _getframe().f_code.co_name)
         self.unary(np.float64)
+    test_unary_double.regression = 1
 
     def test_abs(self):
         print('*** Running Test: ' + self.__class__.__name__ + ' function: ' + _getframe().f_code.co_name)
@@ -68,6 +69,7 @@ class TestUnaryMath(unittest.TestCase):
         gen(rand, lambda x: absolute(x), lambda x: np.absolute(x))
         rand = rng.randint(-2**63, 2**63-1, length).astype(np.int64)
         gen(rand, lambda x: absolute(x), lambda x: np.absolute(x))
+    test_abs.regression = 1
 
     def test_negate(self):
         print('*** Running Test: ' + self.__class__.__name__ + ' function: ' + _getframe().f_code.co_name)
@@ -80,6 +82,7 @@ class TestUnaryMath(unittest.TestCase):
         types = [np.float32, np.float64, np.int8, np.int16, np.int32, np.int64]
         for t in types:
             gen(rand.astype(t), neg, neg)
+    test_negate.regression = 1
 
     def test_not(self):
         print('*** Running Test: ' + self.__class__.__name__ + ' function: ' + _getframe().f_code.co_name)
@@ -93,6 +96,7 @@ class TestUnaryMath(unittest.TestCase):
                  np.uint8, np.uint16, np.uint32, np.uint64]
         for t in types:
             gen(rand.astype(t), not_ops, not_np)
+    test_not.regression = 1
 
     def unary(self, input_type):
         length = 100

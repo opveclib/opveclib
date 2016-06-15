@@ -48,3 +48,7 @@ class TestGraphTriangleCountOp(unittest.TestCase):
             if ops.local.cuda_enabled:
                 nTriangleGPU = countTrianglesGPU(startEdge, fromVertex, toVertex)
                 assert nTriangleGPU==nTriangle
+
+
+if __name__ == '__main__':
+    unittest.main()

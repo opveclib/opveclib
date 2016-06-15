@@ -91,13 +91,29 @@ may need to explicitly pass an ``LD_LIBRARY_PATH`` to sudo to install the packag
 Test your installation
 ~~~~~~~~~~~~~~~~~~~~~~
 
-To run the tests, simply run:
+To test your installation, simply run:
 
 .. code-block:: console
 
-    nose2 -F opveclib.examples.tensorflow_clustering opveclib.examples
+    nose2 opveclib.test.test_tensorflow_integration
 
-This should take about 5 minutes on a CPU-only installation or 15 minutes on a GPU-enabled installation.
+This should take less than 30 seconds.
+
+To run the full unit test regression suite, run:
+
+.. code-block:: console
+
+    nose2 -F opveclib.test
+
+This will take 15-20 minutes on a GPU-enabled installation. 
+
+To run all the example code tests, run:
+
+.. code-block:: console
+
+    nose2 -F opveclib.examples
+
+This will take 10-15 minutes on a GPU-enabled installation. 
 
 
 Documentation

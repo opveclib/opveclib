@@ -36,7 +36,12 @@ class TestIntegration(unittest.TestCase):
         in1 = np.random.random(5).astype(np.float32)
         reference = 4*(in0 + in1)*(in0 + in1)
 
-        with tf.Session() as sess:
+        test_config=tf.ConfigProto(allow_soft_placement=False)
+        # Don't perform optimizations for tests so we don't inadvertently run
+        # gpu ops on cpu
+        test_config.graph_options.optimizer_options.opt_level = -1
+        with tf.Session(config=test_config) as sess:
+        #with tf.Session() as sess:
             with tf.device('/cpu:0'):
                 a = in0*2
                 b = in1*2
@@ -88,7 +93,12 @@ class TestIntegration(unittest.TestCase):
         np2 = np1*in2
         np3 = np1 + in2
 
-        with tf.Session() as sess:
+        test_config=tf.ConfigProto(allow_soft_placement=False)
+        # Don't perform optimizations for tests so we don't inadvertently run
+        # gpu ops on cpu
+        test_config.graph_options.optimizer_options.opt_level = -1
+        with tf.Session(config=test_config) as sess:
+        #with tf.Session() as sess:
             sq0 = tf.square(in0)
             sq1 = tf.square(in1)
 

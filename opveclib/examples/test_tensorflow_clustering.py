@@ -9,7 +9,7 @@
 # the specific language governing permissions and limitations under the License.
 
 import unittest
-from clustering import createClusterData, initialClusterCenters, kMeansTF, kMeansGPU, compareClusterCenters
+from .clustering import createClusterData, initialClusterCenters, kMeansTF, kMeansGPU, compareClusterCenters
 from sys import _getframe
 import numpy as np
 
@@ -35,3 +35,6 @@ class TestKMeans(unittest.TestCase):
 
         assert compareClusterCenters(clusterCenterGt, clusterCenterOVL, rtol=0.1, atol=0.1)
         assert compareClusterCenters(clusterCenterGt, clusterCenterTF, rtol=0.1, atol=0.1)
+
+if __name__ == '__main__':
+    unittest.main()

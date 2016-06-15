@@ -164,3 +164,7 @@ class TestSolveDiag2DOp(unittest.TestCase):
                     xColGPU = opCol.evaluate_cuda()
                     assert np.allclose(xColGPU, xColNPY)
                     assert np.allclose(xRowGPU, xRowNPY)
+
+
+if __name__ == '__main__':
+    unittest.main()
