@@ -70,6 +70,7 @@ ENV LD_LIBRARY_PATH="$LD_LIBRARY_PATH:/usr/local/cuda/lib64"
 COPY opveclib /usr/opveclib/opveclib
 COPY setup.py /usr/opveclib/
 COPY runBAT.sh /usr/opveclib/
+COPY runALL.sh /usr/opveclib/
 COPY nose2.cfg /usr/opveclib/
 
 CMD /bin/bash
