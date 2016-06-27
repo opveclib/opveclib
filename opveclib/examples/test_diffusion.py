@@ -71,7 +71,11 @@ def diffusion2DGPU(image, dt, l, s, nIter):
     nGauss  = 2 * int(mt.ceil(s*2)) + 1 # Number of pixels.
     nDim    = 2
     l2      = l*l
-    with tf.Session() as sess: # Uses the default GPU
+    # Don't perform optimizations for tests so we don't inadvertently run
+    # gpu ops on cpu
+    test_config=tf.ConfigProto(allow_soft_placement=False)
+    test_config.graph_options.optimizer_options.opt_level = -1
+    with tf.Session(config=test_config) as sess:
         I = AddBoundaryOp(image).as_tensorflow()
         Gauss = Gauss2DOp(dimOut=[nGauss, nGauss]).as_tensorflow()
 
@@ -869,6 +873,7 @@ class TestDiffusion2D(unittest.TestCase):
                     imageNPY    = diffusion2DNp(imageIn, dt=5, l=3.5/255, s=3, nIter=3)
 
                     assert np.allclose(imageGPU, imageNPY)
+    test.regression = 0
 
 class TestAddBoundary(unittest.TestCase):
     """
@@ -894,7 +899,7 @@ class TestAddBoundary(unittest.TestCase):
                 if ops.local.cuda_enabled:
                     dataGPU = op.evaluate_cuda()
                     assert np.allclose(dataGPU, dataNPY)
-
+    test.regression = 0
 
 
 class TestDelBoundary(unittest.TestCase):
@@ -920,7 +925,7 @@ class TestDelBoundary(unittest.TestCase):
                 if ops.local.cuda_enabled:
                     dataGPU = op.evaluate_cuda()
                     assert np.allclose(dataGPU, dataNPY)
-
+    test.regression = 1
 
 class TestCopyBoundary(unittest.TestCase):
     """
@@ -945,7 +950,7 @@ class TestCopyBoundary(unittest.TestCase):
                 if ops.local.cuda_enabled:
                     dataGPU = op.evaluate_cuda()
                     assert np.allclose(dataGPU, dataNPY)
-
+    test.regression = 1
 
 class TestGauss2DOp(unittest.TestCase):
     """
@@ -972,7 +977,7 @@ class TestGauss2DOp(unittest.TestCase):
                 if ops.local.cuda_enabled:
                     dataGPU = op.evaluate_cuda()
                     assert np.allclose(dataGPU, dataNPY)
-
+    test.regression = 1
 
 class TestFilter2D(unittest.TestCase):
     """
@@ -1004,6 +1009,7 @@ class TestFilter2D(unittest.TestCase):
                         if ops.local.cuda_enabled:
                             dataGPU = op.evaluate_cuda()
                             assert np.allclose(dataGPU, dataNPY)
+    test.regression = 1
 
 class TestDiffusionGradient(unittest.TestCase):
     """
@@ -1035,7 +1041,7 @@ class TestDiffusionGradient(unittest.TestCase):
                     assert np.allclose(gradRowMinusGPU, gradRowMinusNPY)
                     assert np.allclose(gradColPlusGPU, gradColPlusNPY)
                     assert np.allclose(gradColMinusGPU, gradColMinusNPY)
-
+    test.regression = 0
 
 class TestSolveDiag2DOp(unittest.TestCase):
     """
@@ -1073,7 +1079,7 @@ class TestSolveDiag2DOp(unittest.TestCase):
                     xColGPU = opCol.evaluate_cuda()
                     assert np.allclose(xColGPU, xColNPY)
                     assert np.allclose(xRowGPU, xRowNPY)
-
+    test.regression = 1
 
 
 
