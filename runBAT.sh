@@ -15,7 +15,7 @@ if [ ! $? -eq 0 ]; then
   echo "tensorflow integration tests failed"
   exit 1
 fi
-nose2-2.7 -F opveclib.examples
+nose2-2.7 -F opveclib.examples -A '!regression'
 if [ ! $? -eq 0 ]; then
   echo "example tests failed on Python 2"
   exit 1
@@ -31,7 +31,7 @@ if [ ! $? -eq 0 ]; then
   echo "unit tests failed on Python 3"
   exit 1
 fi
-nose2-3.4 -F opveclib.examples
+nose2-3.4 -F opveclib.examples -A '!regression'
 if [ ! $? -eq 0 ]; then
   echo "example tests failed on Python 3"
   exit 1
