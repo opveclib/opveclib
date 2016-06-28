@@ -19,8 +19,8 @@ _sym_db = _symbol_database.Default()
 DESCRIPTOR = _descriptor.FileDescriptor(
   name='language.proto',
   package='opveclib',
-  syntax='proto2',
-  serialized_pb=_b('\n\x0elanguage.proto\x12\x08opveclib\";\n\nTensorType\x12\x1e\n\x05\x64type\x18\x01 \x02(\x0e\x32\x0f.opveclib.DType\x12\r\n\x05shape\x18\x02 \x03(\r\"\x8e\x02\n\nExpression\x12&\n\x04\x63ode\x18\x01 \x02(\x0e\x32\x18.opveclib.ExpressionCode\x12)\n\x0btensor_type\x18\x02 \x01(\x0b\x32\x14.opveclib.TensorType\x12\x1e\n\x05\x64type\x18\x03 \x01(\x0e\x32\x0f.opveclib.DType\x12\x10\n\x08io_index\x18\x04 \x01(\r\x12\x12\n\nfloat_data\x18\x05 \x03(\x02\x12\x13\n\x0b\x64ouble_data\x18\x06 \x03(\x01\x12\x13\n\x0bsint32_data\x18\x07 \x03(\x11\x12\x13\n\x0bsint64_data\x18\x08 \x03(\x12\x12\x13\n\x0buint32_data\x18\t \x03(\r\x12\x13\n\x0buint64_data\x18\n \x03(\x04\"\xb4\x01\n\rExpressionDAG\x12)\n\x0b\x65xpressions\x18\x01 \x03(\x0b\x32\x14.opveclib.Expression\x12\x37\n\nreferences\x18\x02 \x03(\x0b\x32#.opveclib.ExpressionDAG.OperandList\x12\x17\n\x0fworkgroup_shape\x18\x03 \x03(\r\x1a&\n\x0bOperandList\x12\x17\n\x0foperand_indices\x18\x01 \x03(\r*\xa9\x01\n\x05\x44Type\x12\x12\n\x0eUNDEFINED_TYPE\x10\x00\x12\x0b\n\x07\x46LOAT16\x10\x01\x12\x0b\n\x07\x46LOAT32\x10\x02\x12\x0b\n\x07\x46LOAT64\x10\x03\x12\x08\n\x04INT8\x10\x04\x12\t\n\x05INT16\x10\x05\x12\t\n\x05INT32\x10\x06\x12\t\n\x05INT64\x10\x07\x12\t\n\x05UINT8\x10\x08\x12\n\n\x06UINT16\x10\t\x12\n\n\x06UINT32\x10\n\x12\n\n\x06UINT64\x10\x0b\x12\x0b\n\x07LITERAL\x10\x0c*\x98\x05\n\x0e\x45xpressionCode\x12\x12\n\x0eUNDEFINED_CODE\x10\x00\x12\t\n\x05INPUT\x10\x01\x12\n\n\x06OUTPUT\x10\x02\x12\x10\n\x0c\x43ONST_SCALAR\x10\x03\x12\x10\n\x0c\x43ONST_TENSOR\x10\x04\x12\x0c\n\x08POSITION\x10\x05\x12\x0c\n\x08VARIABLE\x10\x06\x12\x08\n\x04\x43\x41ST\x10\x07\x12\n\n\x06TENSOR\x10\x08\x12\x13\n\x0f\x41SSIGN_VARIABLE\x10\t\x12\x11\n\rASSIGN_TENSOR\x10\n\x12\x0f\n\x0bREAD_TENSOR\x10\x0b\x12\t\n\x05RANGE\x10\x0c\x12\x0c\n\x08\x45NDRANGE\x10\r\x12\x06\n\x02IF\x10\x0e\x12\n\n\x06\x45LSEIF\x10\x0f\x12\x08\n\x04\x45LSE\x10\x10\x12\t\n\x05\x45NDIF\x10\x11\x12\x08\n\x04\x41\x43OS\x10\x64\x12\x08\n\x04\x41SIN\x10\x65\x12\x08\n\x04\x41TAN\x10\x66\x12\x07\n\x03\x43OS\x10h\x12\x08\n\x04\x43OSH\x10i\x12\x07\n\x03SIN\x10j\x12\x08\n\x04SINH\x10k\x12\x07\n\x03TAN\x10l\x12\x08\n\x04TANH\x10m\x12\x08\n\x03\x45XP\x10\x96\x01\x12\x08\n\x03LOG\x10\x97\x01\x12\n\n\x05LOG10\x10\x98\x01\x12\t\n\x04SQRT\x10\x9a\x01\x12\t\n\x04\x43\x45IL\x10\xc9\x01\x12\n\n\x05\x46LOOR\x10\xca\x01\x12\x08\n\x03\x41\x42S\x10\xcb\x01\x12\x0b\n\x06NEGATE\x10\xcc\x01\x12\x08\n\x03NOT\x10\xcd\x01\x12\x08\n\x03\x41\x44\x44\x10\xfa\x01\x12\r\n\x08SUBTRACT\x10\xfb\x01\x12\r\n\x08MULTIPLY\x10\xfc\x01\x12\x0b\n\x06\x44IVIDE\x10\xfd\x01\x12\x0b\n\x06MODULO\x10\xfe\x01\x12\x08\n\x03\x41ND\x10\xff\x01\x12\x07\n\x02OR\x10\x80\x02\x12\n\n\x05\x45QUAL\x10\x81\x02\x12\r\n\x08NOTEQUAL\x10\x82\x02\x12\t\n\x04LESS\x10\x83\x02\x12\x0c\n\x07LESS_EQ\x10\x84\x02\x12\x0c\n\x07GREATER\x10\x85\x02\x12\x0f\n\nGREATER_EQ\x10\x86\x02\x12\x08\n\x03MIN\x10\xac\x02\x12\x08\n\x03MAX\x10\xad\x02\x12\x08\n\x03POW\x10\xae\x02\x12\n\n\x05\x41TAN2\x10\xaf\x02')
+  syntax='proto3',
+  serialized_pb=_b('\n\x0elanguage.proto\x12\x08opveclib\";\n\nTensorType\x12\x1e\n\x05\x64type\x18\x01 \x01(\x0e\x32\x0f.opveclib.DType\x12\r\n\x05shape\x18\x02 \x03(\r\"\x8e\x02\n\nExpression\x12&\n\x04\x63ode\x18\x01 \x01(\x0e\x32\x18.opveclib.ExpressionCode\x12)\n\x0btensor_type\x18\x02 \x01(\x0b\x32\x14.opveclib.TensorType\x12\x1e\n\x05\x64type\x18\x03 \x01(\x0e\x32\x0f.opveclib.DType\x12\x10\n\x08io_index\x18\x04 \x01(\r\x12\x12\n\nfloat_data\x18\x05 \x03(\x02\x12\x13\n\x0b\x64ouble_data\x18\x06 \x03(\x01\x12\x13\n\x0bsint32_data\x18\x07 \x03(\x11\x12\x13\n\x0bsint64_data\x18\x08 \x03(\x12\x12\x13\n\x0buint32_data\x18\t \x03(\r\x12\x13\n\x0buint64_data\x18\n \x03(\x04\"\xb4\x01\n\rExpressionDAG\x12)\n\x0b\x65xpressions\x18\x01 \x03(\x0b\x32\x14.opveclib.Expression\x12\x37\n\nreferences\x18\x02 \x03(\x0b\x32#.opveclib.ExpressionDAG.OperandList\x12\x17\n\x0fworkgroup_shape\x18\x03 \x03(\r\x1a&\n\x0bOperandList\x12\x17\n\x0foperand_indices\x18\x01 \x03(\r\"\xf7\x03\n\x0bOperatorDAG\x12*\n\toperators\x18\x01 \x03(\x0b\x32\x17.opveclib.ExpressionDAG\x12-\n\x0f\x64\x61g_input_types\x18\x02 \x03(\x0b\x32\x14.opveclib.TensorType\x12\x41\n\nreferences\x18\x03 \x03(\x0b\x32-.opveclib.OperatorDAG.OperatorInputReferences\x12=\n\x0b\x64\x61g_outputs\x18\x04 \x03(\x0b\x32(.opveclib.OperatorDAG.DAGOutputReference\x1am\n\x16OperatorInputReference\x12\x0f\n\x07is_leaf\x18\x01 \x01(\x08\x12\x10\n\x08op_index\x18\x02 \x01(\r\x12\x17\n\x0fop_output_index\x18\x03 \x01(\r\x12\x17\n\x0f\x64\x61g_input_index\x18\x04 \x01(\r\x1a[\n\x17OperatorInputReferences\x12@\n\ninput_refs\x18\x01 \x03(\x0b\x32,.opveclib.OperatorDAG.OperatorInputReference\x1a?\n\x12\x44\x41GOutputReference\x12\x10\n\x08op_index\x18\x01 \x01(\r\x12\x17\n\x0fop_output_index\x18\x02 \x01(\r*\xa9\x01\n\x05\x44Type\x12\x12\n\x0eUNDEFINED_TYPE\x10\x00\x12\x0b\n\x07\x46LOAT16\x10\x01\x12\x0b\n\x07\x46LOAT32\x10\x02\x12\x0b\n\x07\x46LOAT64\x10\x03\x12\x08\n\x04INT8\x10\x04\x12\t\n\x05INT16\x10\x05\x12\t\n\x05INT32\x10\x06\x12\t\n\x05INT64\x10\x07\x12\t\n\x05UINT8\x10\x08\x12\n\n\x06UINT16\x10\t\x12\n\n\x06UINT32\x10\n\x12\n\n\x06UINT64\x10\x0b\x12\x0b\n\x07LITERAL\x10\x0c*\x98\x05\n\x0e\x45xpressionCode\x12\x12\n\x0eUNDEFINED_CODE\x10\x00\x12\t\n\x05INPUT\x10\x01\x12\n\n\x06OUTPUT\x10\x02\x12\x10\n\x0c\x43ONST_SCALAR\x10\x03\x12\x10\n\x0c\x43ONST_TENSOR\x10\x04\x12\x0c\n\x08POSITION\x10\x05\x12\x0c\n\x08VARIABLE\x10\x06\x12\x08\n\x04\x43\x41ST\x10\x07\x12\n\n\x06TENSOR\x10\x08\x12\x13\n\x0f\x41SSIGN_VARIABLE\x10\t\x12\x11\n\rASSIGN_TENSOR\x10\n\x12\x0f\n\x0bREAD_TENSOR\x10\x0b\x12\t\n\x05RANGE\x10\x0c\x12\x0c\n\x08\x45NDRANGE\x10\r\x12\x06\n\x02IF\x10\x0e\x12\n\n\x06\x45LSEIF\x10\x0f\x12\x08\n\x04\x45LSE\x10\x10\x12\t\n\x05\x45NDIF\x10\x11\x12\x08\n\x04\x41\x43OS\x10\x64\x12\x08\n\x04\x41SIN\x10\x65\x12\x08\n\x04\x41TAN\x10\x66\x12\x07\n\x03\x43OS\x10h\x12\x08\n\x04\x43OSH\x10i\x12\x07\n\x03SIN\x10j\x12\x08\n\x04SINH\x10k\x12\x07\n\x03TAN\x10l\x12\x08\n\x04TANH\x10m\x12\x08\n\x03\x45XP\x10\x96\x01\x12\x08\n\x03LOG\x10\x97\x01\x12\n\n\x05LOG10\x10\x98\x01\x12\t\n\x04SQRT\x10\x9a\x01\x12\t\n\x04\x43\x45IL\x10\xc9\x01\x12\n\n\x05\x46LOOR\x10\xca\x01\x12\x08\n\x03\x41\x42S\x10\xcb\x01\x12\x0b\n\x06NEGATE\x10\xcc\x01\x12\x08\n\x03NOT\x10\xcd\x01\x12\x08\n\x03\x41\x44\x44\x10\xfa\x01\x12\r\n\x08SUBTRACT\x10\xfb\x01\x12\r\n\x08MULTIPLY\x10\xfc\x01\x12\x0b\n\x06\x44IVIDE\x10\xfd\x01\x12\x0b\n\x06MODULO\x10\xfe\x01\x12\x08\n\x03\x41ND\x10\xff\x01\x12\x07\n\x02OR\x10\x80\x02\x12\n\n\x05\x45QUAL\x10\x81\x02\x12\r\n\x08NOTEQUAL\x10\x82\x02\x12\t\n\x04LESS\x10\x83\x02\x12\x0c\n\x07LESS_EQ\x10\x84\x02\x12\x0c\n\x07GREATER\x10\x85\x02\x12\x0f\n\nGREATER_EQ\x10\x86\x02\x12\x08\n\x03MIN\x10\xac\x02\x12\x08\n\x03MAX\x10\xad\x02\x12\x08\n\x03POW\x10\xae\x02\x12\n\n\x05\x41TAN2\x10\xaf\x02\x62\x06proto3')
 )
 _sym_db.RegisterFileDescriptor(DESCRIPTOR)
 
@@ -85,8 +85,8 @@ _DTYPE = _descriptor.EnumDescriptor(
   ],
   containing_type=None,
   options=None,
-  serialized_start=546,
-  serialized_end=715,
+  serialized_start=1052,
+  serialized_end=1221,
 )
 _sym_db.RegisterEnumDescriptor(_DTYPE)
 
@@ -312,8 +312,8 @@ _EXPRESSIONCODE = _descriptor.EnumDescriptor(
   ],
   containing_type=None,
   options=None,
-  serialized_start=718,
-  serialized_end=1382,
+  serialized_start=1224,
+  serialized_end=1888,
 )
 _sym_db.RegisterEnumDescriptor(_EXPRESSIONCODE)
 
@@ -396,7 +396,7 @@ _TENSORTYPE = _descriptor.Descriptor(
   fields=[
     _descriptor.FieldDescriptor(
       name='dtype', full_name='opveclib.TensorType.dtype', index=0,
-      number=1, type=14, cpp_type=8, label=2,
+      number=1, type=14, cpp_type=8, label=1,
       has_default_value=False, default_value=0,
       message_type=None, enum_type=None, containing_type=None,
       is_extension=False, extension_scope=None,
@@ -416,7 +416,7 @@ _TENSORTYPE = _descriptor.Descriptor(
   ],
   options=None,
   is_extendable=False,
-  syntax='proto2',
+  syntax='proto3',
   extension_ranges=[],
   oneofs=[
   ],
@@ -434,7 +434,7 @@ _EXPRESSION = _descriptor.Descriptor(
   fields=[
     _descriptor.FieldDescriptor(
       name='code', full_name='opveclib.Expression.code', index=0,
-      number=1, type=14, cpp_type=8, label=2,
+      number=1, type=14, cpp_type=8, label=1,
       has_default_value=False, default_value=0,
       message_type=None, enum_type=None, containing_type=None,
       is_extension=False, extension_scope=None,
@@ -510,7 +510,7 @@ _EXPRESSION = _descriptor.Descriptor(
   ],
   options=None,
   is_extendable=False,
-  syntax='proto2',
+  syntax='proto3',
   extension_ranges=[],
   oneofs=[
   ],
@@ -541,7 +541,7 @@ _EXPRESSIONDAG_OPERANDLIST = _descriptor.Descriptor(
   ],
   options=None,
   is_extendable=False,
-  syntax='proto2',
+  syntax='proto3',
   extension_ranges=[],
   oneofs=[
   ],
@@ -585,12 +585,182 @@ _EXPRESSIONDAG = _descriptor.Descriptor(
   ],
   options=None,
   is_extendable=False,
-  syntax='proto2',
+  syntax='proto3',
   extension_ranges=[],
   oneofs=[
   ],
   serialized_start=363,
   serialized_end=543,
+)
+
+
+_OPERATORDAG_OPERATORINPUTREFERENCE = _descriptor.Descriptor(
+  name='OperatorInputReference',
+  full_name='opveclib.OperatorDAG.OperatorInputReference',
+  filename=None,
+  file=DESCRIPTOR,
+  containing_type=None,
+  fields=[
+    _descriptor.FieldDescriptor(
+      name='is_leaf', full_name='opveclib.OperatorDAG.OperatorInputReference.is_leaf', index=0,
+      number=1, type=8, cpp_type=7, label=1,
+      has_default_value=False, default_value=False,
+      message_type=None, enum_type=None, containing_type=None,
+      is_extension=False, extension_scope=None,
+      options=None),
+    _descriptor.FieldDescriptor(
+      name='op_index', full_name='opveclib.OperatorDAG.OperatorInputReference.op_index', index=1,
+      number=2, type=13, cpp_type=3, label=1,
+      has_default_value=False, default_value=0,
+      message_type=None, enum_type=None, containing_type=None,
+      is_extension=False, extension_scope=None,
+      options=None),
+    _descriptor.FieldDescriptor(
+      name='op_output_index', full_name='opveclib.OperatorDAG.OperatorInputReference.op_output_index', index=2,
+      number=3, type=13, cpp_type=3, label=1,
+      has_default_value=False, default_value=0,
+      message_type=None, enum_type=None, containing_type=None,
+      is_extension=False, extension_scope=None,
+      options=None),
+    _descriptor.FieldDescriptor(
+      name='dag_input_index', full_name='opveclib.OperatorDAG.OperatorInputReference.dag_input_index', index=3,
+      number=4, type=13, cpp_type=3, label=1,
+      has_default_value=False, default_value=0,
+      message_type=None, enum_type=None, containing_type=None,
+      is_extension=False, extension_scope=None,
+      options=None),
+  ],
+  extensions=[
+  ],
+  nested_types=[],
+  enum_types=[
+  ],
+  options=None,
+  is_extendable=False,
+  syntax='proto3',
+  extension_ranges=[],
+  oneofs=[
+  ],
+  serialized_start=782,
+  serialized_end=891,
+)
+
+_OPERATORDAG_OPERATORINPUTREFERENCES = _descriptor.Descriptor(
+  name='OperatorInputReferences',
+  full_name='opveclib.OperatorDAG.OperatorInputReferences',
+  filename=None,
+  file=DESCRIPTOR,
+  containing_type=None,
+  fields=[
+    _descriptor.FieldDescriptor(
+      name='input_refs', full_name='opveclib.OperatorDAG.OperatorInputReferences.input_refs', index=0,
+      number=1, type=11, cpp_type=10, label=3,
+      has_default_value=False, default_value=[],
+      message_type=None, enum_type=None, containing_type=None,
+      is_extension=False, extension_scope=None,
+      options=None),
+  ],
+  extensions=[
+  ],
+  nested_types=[],
+  enum_types=[
+  ],
+  options=None,
+  is_extendable=False,
+  syntax='proto3',
+  extension_ranges=[],
+  oneofs=[
+  ],
+  serialized_start=893,
+  serialized_end=984,
+)
+
+_OPERATORDAG_DAGOUTPUTREFERENCE = _descriptor.Descriptor(
+  name='DAGOutputReference',
+  full_name='opveclib.OperatorDAG.DAGOutputReference',
+  filename=None,
+  file=DESCRIPTOR,
+  containing_type=None,
+  fields=[
+    _descriptor.FieldDescriptor(
+      name='op_index', full_name='opveclib.OperatorDAG.DAGOutputReference.op_index', index=0,
+      number=1, type=13, cpp_type=3, label=1,
+      has_default_value=False, default_value=0,
+      message_type=None, enum_type=None, containing_type=None,
+      is_extension=False, extension_scope=None,
+      options=None),
+    _descriptor.FieldDescriptor(
+      name='op_output_index', full_name='opveclib.OperatorDAG.DAGOutputReference.op_output_index', index=1,
+      number=2, type=13, cpp_type=3, label=1,
+      has_default_value=False, default_value=0,
+      message_type=None, enum_type=None, containing_type=None,
+      is_extension=False, extension_scope=None,
+      options=None),
+  ],
+  extensions=[
+  ],
+  nested_types=[],
+  enum_types=[
+  ],
+  options=None,
+  is_extendable=False,
+  syntax='proto3',
+  extension_ranges=[],
+  oneofs=[
+  ],
+  serialized_start=986,
+  serialized_end=1049,
+)
+
+_OPERATORDAG = _descriptor.Descriptor(
+  name='OperatorDAG',
+  full_name='opveclib.OperatorDAG',
+  filename=None,
+  file=DESCRIPTOR,
+  containing_type=None,
+  fields=[
+    _descriptor.FieldDescriptor(
+      name='operators', full_name='opveclib.OperatorDAG.operators', index=0,
+      number=1, type=11, cpp_type=10, label=3,
+      has_default_value=False, default_value=[],
+      message_type=None, enum_type=None, containing_type=None,
+      is_extension=False, extension_scope=None,
+      options=None),
+    _descriptor.FieldDescriptor(
+      name='dag_input_types', full_name='opveclib.OperatorDAG.dag_input_types', index=1,
+      number=2, type=11, cpp_type=10, label=3,
+      has_default_value=False, default_value=[],
+      message_type=None, enum_type=None, containing_type=None,
+      is_extension=False, extension_scope=None,
+      options=None),
+    _descriptor.FieldDescriptor(
+      name='references', full_name='opveclib.OperatorDAG.references', index=2,
+      number=3, type=11, cpp_type=10, label=3,
+      has_default_value=False, default_value=[],
+      message_type=None, enum_type=None, containing_type=None,
+      is_extension=False, extension_scope=None,
+      options=None),
+    _descriptor.FieldDescriptor(
+      name='dag_outputs', full_name='opveclib.OperatorDAG.dag_outputs', index=3,
+      number=4, type=11, cpp_type=10, label=3,
+      has_default_value=False, default_value=[],
+      message_type=None, enum_type=None, containing_type=None,
+      is_extension=False, extension_scope=None,
+      options=None),
+  ],
+  extensions=[
+  ],
+  nested_types=[_OPERATORDAG_OPERATORINPUTREFERENCE, _OPERATORDAG_OPERATORINPUTREFERENCES, _OPERATORDAG_DAGOUTPUTREFERENCE, ],
+  enum_types=[
+  ],
+  options=None,
+  is_extendable=False,
+  syntax='proto3',
+  extension_ranges=[],
+  oneofs=[
+  ],
+  serialized_start=546,
+  serialized_end=1049,
 )
 
 _TENSORTYPE.fields_by_name['dtype'].enum_type = _DTYPE
@@ -600,9 +770,18 @@ _EXPRESSION.fields_by_name['dtype'].enum_type = _DTYPE
 _EXPRESSIONDAG_OPERANDLIST.containing_type = _EXPRESSIONDAG
 _EXPRESSIONDAG.fields_by_name['expressions'].message_type = _EXPRESSION
 _EXPRESSIONDAG.fields_by_name['references'].message_type = _EXPRESSIONDAG_OPERANDLIST
+_OPERATORDAG_OPERATORINPUTREFERENCE.containing_type = _OPERATORDAG
+_OPERATORDAG_OPERATORINPUTREFERENCES.fields_by_name['input_refs'].message_type = _OPERATORDAG_OPERATORINPUTREFERENCE
+_OPERATORDAG_OPERATORINPUTREFERENCES.containing_type = _OPERATORDAG
+_OPERATORDAG_DAGOUTPUTREFERENCE.containing_type = _OPERATORDAG
+_OPERATORDAG.fields_by_name['operators'].message_type = _EXPRESSIONDAG
+_OPERATORDAG.fields_by_name['dag_input_types'].message_type = _TENSORTYPE
+_OPERATORDAG.fields_by_name['references'].message_type = _OPERATORDAG_OPERATORINPUTREFERENCES
+_OPERATORDAG.fields_by_name['dag_outputs'].message_type = _OPERATORDAG_DAGOUTPUTREFERENCE
 DESCRIPTOR.message_types_by_name['TensorType'] = _TENSORTYPE
 DESCRIPTOR.message_types_by_name['Expression'] = _EXPRESSION
 DESCRIPTOR.message_types_by_name['ExpressionDAG'] = _EXPRESSIONDAG
+DESCRIPTOR.message_types_by_name['OperatorDAG'] = _OPERATORDAG
 DESCRIPTOR.enum_types_by_name['DType'] = _DTYPE
 DESCRIPTOR.enum_types_by_name['ExpressionCode'] = _EXPRESSIONCODE
 
@@ -634,6 +813,37 @@ ExpressionDAG = _reflection.GeneratedProtocolMessageType('ExpressionDAG', (_mess
   ))
 _sym_db.RegisterMessage(ExpressionDAG)
 _sym_db.RegisterMessage(ExpressionDAG.OperandList)
+
+OperatorDAG = _reflection.GeneratedProtocolMessageType('OperatorDAG', (_message.Message,), dict(
+
+  OperatorInputReference = _reflection.GeneratedProtocolMessageType('OperatorInputReference', (_message.Message,), dict(
+    DESCRIPTOR = _OPERATORDAG_OPERATORINPUTREFERENCE,
+    __module__ = 'language_pb2'
+    # @@protoc_insertion_point(class_scope:opveclib.OperatorDAG.OperatorInputReference)
+    ))
+  ,
+
+  OperatorInputReferences = _reflection.GeneratedProtocolMessageType('OperatorInputReferences', (_message.Message,), dict(
+    DESCRIPTOR = _OPERATORDAG_OPERATORINPUTREFERENCES,
+    __module__ = 'language_pb2'
+    # @@protoc_insertion_point(class_scope:opveclib.OperatorDAG.OperatorInputReferences)
+    ))
+  ,
+
+  DAGOutputReference = _reflection.GeneratedProtocolMessageType('DAGOutputReference', (_message.Message,), dict(
+    DESCRIPTOR = _OPERATORDAG_DAGOUTPUTREFERENCE,
+    __module__ = 'language_pb2'
+    # @@protoc_insertion_point(class_scope:opveclib.OperatorDAG.DAGOutputReference)
+    ))
+  ,
+  DESCRIPTOR = _OPERATORDAG,
+  __module__ = 'language_pb2'
+  # @@protoc_insertion_point(class_scope:opveclib.OperatorDAG)
+  ))
+_sym_db.RegisterMessage(OperatorDAG)
+_sym_db.RegisterMessage(OperatorDAG.OperatorInputReference)
+_sym_db.RegisterMessage(OperatorDAG.OperatorInputReferences)
+_sym_db.RegisterMessage(OperatorDAG.DAGOutputReference)
 
 
 # @@protoc_insertion_point(module_scope)

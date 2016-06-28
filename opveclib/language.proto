@@ -9,7 +9,7 @@
 // the specific language governing permissions and limitations under the License.
 
 
-syntax="proto2";
+syntax = "proto3";
 package opveclib;
 
 //Data types supported by the language
@@ -37,7 +37,7 @@ enum DType {
 }
 
 message TensorType {
-    required DType dtype = 1;
+    DType dtype = 1;
     repeated uint32 shape = 2;
 }
 
@@ -349,16 +349,16 @@ enum ExpressionCode {
 
 
 message Expression {
-    required ExpressionCode code = 1;
+    ExpressionCode code = 1;
 
     // tensor type for inputs, outputs, and local arrays
-    optional TensorType tensor_type = 2;
+    TensorType tensor_type = 2;
 
     // data type for scalar expressions
-    optional DType dtype = 3;
+    DType dtype = 3;
 
     // identifier for determining which input or output
-    optional uint32 io_index = 4;
+    uint32 io_index = 4;
 
     repeated float float_data = 5;
     repeated double double_data = 6;
@@ -379,19 +379,27 @@ message ExpressionDAG {
     repeated uint32 workgroup_shape = 3;
 }
 
-//message Operation {
-//    required ExpressionDAG dag = 1;
-//
-//    required int32 c_threads = 3;
-//   required int32 cuda_block_threads = 4;
-//}
+message OperatorDAG {
+    repeated ExpressionDAG operators = 1;
+    repeated TensorType dag_input_types = 2;
 
-//message OperationDAG {
-//    repeated Operation operations = 1;
-//    message OperationReference {
-//        repeated int32 input_indices = 1;
-//        repeated int32 output_indices = 2;
-//    }
-//
-//    repeated OperationReference references = 2;
-//}
+    message OperatorInputReference {
+        bool is_leaf = 1;
+        uint32 op_index = 2;
+        uint32 op_output_index = 3;
+        uint32 dag_input_index = 4;
+    }
+
+    message OperatorInputReferences {
+        repeated OperatorInputReference input_refs = 1;
+    }
+
+    repeated OperatorInputReferences references = 3;
+
+    message DAGOutputReference{
+        uint32 op_index = 1;
+        uint32 op_output_index = 2;
+    }
+
+    repeated DAGOutputReference dag_outputs = 4;
+}

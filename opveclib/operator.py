@@ -15,7 +15,6 @@ import hashlib
 import os
 import inspect
 import subprocess
-import sys
 import string
 import re
 
@@ -25,7 +24,7 @@ from numpy.ctypeslib import ndpointer
 
 from .expression import TensorType, ExpressionDAG, input, float32, float64, OutputTensor
 from .local import version, cache_directory, cuda_enabled, cuda_directory
-from .language_pb2 import _DTYPE
+from . import language_pb2 as lang
 
 
 class _TensorParam(ctypes.Structure):
@@ -603,7 +602,7 @@ class Operator(object):
             # just create the single enum we need ourselves instead of requiring the full protoc C++ development environment
             enum_src = ''
             enum_val = 0
-            for enum_name in _DTYPE.values:
+            for enum_name in lang._DTYPE.values:
                 enum_src += '    ' + enum_name.name + ' = ' + str(enum_val) + ',\n'
                 enum_val += 1
 
@@ -937,7 +936,7 @@ class Operator(object):
 
 def _build_op_dag(*outputs):
     """
-    Perform BFS on the outputs to find all op nodes and the connecting edges
+    Perform BFS on the op nodes
     :param outputs:
     :return:
     """
@@ -945,45 +944,94 @@ def _build_op_dag(*outputs):
     ops = []
     op_ids = []
     input_indices = []
+    dag_inputs = []
+    dag_input_ids = []
 
-    def bfs(cur_output):
-        try:
-            resolved = _resolve_output(cur_output)
-            op = resolved.parent
-            is_leaf = False
-            output_index = resolved.index
-        except TypeError:
-            op = cur_output
-            is_leaf = True
-            output_index = None
+    def bfs(cur_node):
+        if not isinstance(cur_node, Operator):
+            raise TypeError()
 
-        op_id = id(op)
+        cur_id = id(cur_node)
 
-        if op_id not in op_ids:
-            ops.append(op)
-            op_ids.append(op_id)
-            input_indices.append([])
+        # add unvisited ops (nodes) to the op list
+        if cur_id not in op_ids:
+            op_ids.append(cur_id)
+            ops.append(cur_node)
+            input_indices.append(None)
+            cur_index = len(op_ids) - 1
 
-        op_index = op_ids.index(op_id)
+            # tabulate each input tensor (edge) for this op. visit parent ops if inputs come from other ops.
+            cur_input_indices = []
+            for cur_input in cur_node._inputs:
+                try:
+                    resolved = _resolve_output(cur_input)
+                    parent = resolved.parent
+                    parent_index = op_ids.index(bfs(parent))
+                    output_index = resolved.index
+                    dag_input_index = None
+                except TypeError:
+                    if id(cur_input) not in dag_input_ids:
+                        dag_inputs.append(cur_input)
+                        dag_input_ids.append(id(cur_input))
+                    parent_index = None
+                    output_index = None
+                    dag_input_index = dag_input_ids.index(id(cur_input))
 
-        if not is_leaf:
-            for inp_n, inp in enumerate(op._inputs):
-                input_indices[-1].append(bfs(inp))
+                cur_input_indices.append({'parent_index': parent_index,
+                                          'output_index': output_index,
+                                          'dag_input_index': dag_input_index})
 
-        return [op_index, output_index]
+            input_indices[cur_index] = cur_input_indices
 
-    for outp_n, outp in enumerate(outputs):
-        bfs(outp)
+        return cur_id
 
-    # reverse traversal order
-    # ops.reverse()
-    # input_indices.reverse()
-    # num_nodes = len(ops)
-    # for ind in input_indices:
-    #     for cur_input in ind:
-    #         cur_input[0] = num_nodes - cur_input[0]
+    output_indices = []
+    for dag_output in outputs:
+        cur_output = _resolve_output(dag_output)
+        parent_index = op_ids.index(bfs(cur_output.parent))
+        output_index = cur_output.index
+        output_indices.append({'parent_index': parent_index, 'output_index': output_index})
 
-    print(ops)
-    print(op_ids)
-    print(input_indices)
-    return None
+    # reverse the order (and indices) of the ops so that they are ordered from left to right (bfs yields right to left)
+    num_ops = len(ops)
+    ops.reverse()
+    input_indices.reverse()
+    for input_index in input_indices:
+        for cur_input in input_index:
+            if cur_input['parent_index'] is not None:
+                cur_input['parent_index'] = num_ops - 1 - cur_input['parent_index']
+
+    for output_index in output_indices:
+        output_index['parent_index'] = num_ops - 1 - output_index['parent_index']
+
+    # create the protobuf representation
+    op_dag = lang.OperatorDAG()
+    for op in ops:
+        op_dag.operators.add().CopyFrom(op.op_expression_dag)
+
+    for dag_input in dag_inputs:
+        proto_type = TensorType.like(dag_input).as_proto()
+        op_dag.dag_input_types.add().CopyFrom(proto_type)
+
+    for input_index in input_indices:
+        ref_list = lang.OperatorDAG.OperatorInputReferences()
+        for cur_ref in input_index:
+            proto_ref = lang.OperatorDAG.OperatorInputReference()
+            if cur_ref['parent_index'] is None:
+                proto_ref.is_leaf = True
+                proto_ref.dag_input_index = cur_ref['dag_input_index']
+            else:
+                proto_ref.op_index = cur_ref['parent_index']
+                proto_ref.op_output_index = cur_ref['output_index']
+
+            ref_list.input_refs.add().CopyFrom(proto_ref)
+
+        op_dag.references.add().CopyFrom(ref_list)
+
+    for output_index in output_indices:
+        proto_ref = lang.OperatorDAG.DAGOutputReference()
+        proto_ref.op_index = output_index['parent_index']
+        proto_ref.op_output_index = output_index['output_index']
+        op_dag.dag_outputs.add().CopyFrom(proto_ref)
+
+    return op_dag, dag_inputs
