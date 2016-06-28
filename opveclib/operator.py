@@ -27,10 +27,51 @@ from .expression import TensorType, ExpressionDAG, input, float32, float64, Outp
 from .local import version, cache_directory, cuda_enabled, cuda_directory
 from .language_pb2 import _DTYPE
 
+
 class _TensorParam(ctypes.Structure):
     _fields_ = [("data", ctypes.c_void_p),
                 ("dtype", ctypes.c_int),
                 ("len", ctypes.c_size_t)]
+
+
+class UndefinedGradientError(NotImplementedError):
+    pass
+
+
+class _OperatorOutput(object):
+    """
+    Class which represents an un-evaluated output tensor, used for building lazily evaluated DAGs of operators
+    """
+    def __init__(self, parent, index):
+        if not isinstance(parent, Operator):
+            raise TypeError('parent must be an Operator')
+        if not isinstance(index, int):
+            raise TypeError('index must be an int')
+
+        self.parent = parent
+        self.index = index
+        self.shape = parent.output_types[index].shape
+        self.dtype = parent.output_types[index].dtype
+
+
+def _resolve_output(x):
+    """
+    Resolve whether or not an object is an _OperatorOutput. Converts single-output Operators to an _OperatorOutput
+
+    :param x: the argument to resolve
+    :return: the argument converted into an _OperatorOutput
+    :raises ValueError: When argument is a multi-output Operator
+    :raises TypeError: When argument is neither an Operator nor an _OperatorOutput
+    """
+    if isinstance(x, Operator):
+        if len(x.output_types) is not 1:
+            raise ValueError('Only a single-output Operator can be used as an input to another operator. '
+                             'Index a specific output from multi-output Operators.')
+        return x[0]
+    elif not isinstance(x, _OperatorOutput):
+        raise TypeError('Only operator outputs can be used to build an op dag.')
+    else:
+        return x
 
 
 class Operator(object):
@@ -259,6 +300,11 @@ class Operator(object):
         self._input_types = []
         for inp_n, inp in enumerate(inputs):
             try:
+                inp = _resolve_output(inp)
+            except TypeError:
+                pass
+
+            try:
                 self._input_types.append(TensorType.like(inp))
             except AttributeError:
                 raise TypeError('Received a ' + inp.__class__.__name__ + ' instead of a tensor at argument position ' +
@@ -394,7 +440,7 @@ class Operator(object):
             self.grad()
 
         # grad not defined
-        except ValueError:
+        except UndefinedGradientError:
             self.grad_expression_dag = None
             self.grad_name = None
             self.grad_c_src = None
@@ -472,6 +518,9 @@ class Operator(object):
         self._test_cuda_op = None
         self._test_c_op = None
 
+    def __getitem__(self, item):
+        return _OperatorOutput(self, item)
+
     def op(self, *input_tensors, **constants):
         """
         Abstract member that must be implemented to define an operator
@@ -482,8 +531,16 @@ class Operator(object):
         """
         raise NotImplementedError("Abstract class")
 
-    def grad(self, *inputs):
-        raise ValueError()
+    def grad(self, *input_tensors, **constants):
+        """
+        Abstract member that must be implemented to define an operator's gradient function
+
+        :param input_tensors: tensor arguments which must be in the same order and same type as the inputs and outputs
+            of the op function
+        :param constants: constant arguments, passed in by keyword
+        :return: Must return a list of output tensors, equal in TensorType to the inputs of the op function
+        """
+        raise UndefinedGradientError()
 
     def _define_eval_params(self, lib, fcn_name):
 
@@ -567,10 +624,9 @@ class Operator(object):
             with open(proto_header, 'w') as f:
                 f.write(h_src)
 
-
     def evaluate_c(self, profiling_iterations=None):
         """
-        Evaluate dthe compiled C code for this operator, mainly used for testing. This function uses a test operator
+        Evaluate the compiled C code for this operator, mainly used for testing. This function uses a test operator
         function for running the generated generic version of the operator so it does not depend on an external
         execution runtime. This also means that this function only works for operators whose inputs are numpy arrays.
 
@@ -877,3 +933,57 @@ class Operator(object):
             return tf_op[0]
         else:
             return tf_op
+
+
+def _build_op_dag(*outputs):
+    """
+    Perform BFS on the outputs to find all op nodes and the connecting edges
+    :param outputs:
+    :return:
+    """
+
+    ops = []
+    op_ids = []
+    input_indices = []
+
+    def bfs(cur_output):
+        try:
+            resolved = _resolve_output(cur_output)
+            op = resolved.parent
+            is_leaf = False
+            output_index = resolved.index
+        except TypeError:
+            op = cur_output
+            is_leaf = True
+            output_index = None
+
+        op_id = id(op)
+
+        if op_id not in op_ids:
+            ops.append(op)
+            op_ids.append(op_id)
+            input_indices.append([])
+
+        op_index = op_ids.index(op_id)
+
+        if not is_leaf:
+            for inp_n, inp in enumerate(op._inputs):
+                input_indices[-1].append(bfs(inp))
+
+        return [op_index, output_index]
+
+    for outp_n, outp in enumerate(outputs):
+        bfs(outp)
+
+    # reverse traversal order
+    # ops.reverse()
+    # input_indices.reverse()
+    # num_nodes = len(ops)
+    # for ind in input_indices:
+    #     for cur_input in ind:
+    #         cur_input[0] = num_nodes - cur_input[0]
+
+    print(ops)
+    print(op_ids)
+    print(input_indices)
+    return None
