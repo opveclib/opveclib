@@ -65,14 +65,12 @@ If it is not installed or you have a version lower than 8.1.1 installed, upgrade
     curl -O https://bootstrap.pypa.io/get-pip.py
     sudo python get-pip.py
 
-Install dependencies: nose2, protobuf compiler/libraries and g++:
+Install dependencies: nose2 and g++:
 
 .. code-block:: console
 
-    sudo apt-get install python-nose2 protobuf-compiler libprotobuf-dev g++
+    sudo apt-get install python-nose2 g++
     
-Note, this will install version 2.5 of libprotoc, which is only compatible with python 2. If you wish to use python 3, you will need version 3.0.0-beta-2 of protobuf-cpp for C++. It can be found and installed from here: https://github.com/google/protobuf/releases/
-
 Install the latest release of OVL:
 
 .. code-block:: console
@@ -115,6 +113,15 @@ To run all the example code tests, run:
 
 This will take 10-15 minutes on a GPU-enabled installation. 
 
+Developers
+-------------
+If you are an opveclib developer and need to make changes to language.proto, you will need to install the protoc compiler. 
+
+.. code-block:: console
+
+    sudo apt-get install protobuf-compiler
+    
+Note, this will install version 2.5 of protoc, which is only compatible with python 2. If you wish to use python 3, you will need version 3.0.0-beta-2 of protoc. It can be found and installed from here: https://github.com/google/protobuf/releases/
 
 Documentation
 -------------
