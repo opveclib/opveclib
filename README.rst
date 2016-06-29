@@ -125,5 +125,5 @@ Note, this will install version 2.5 of protoc, which is only compatible with pyt
 
 Documentation
 -------------
-.. TODO: Provide link to published docs.
+http://opveclib.readthedocs.io/
 
