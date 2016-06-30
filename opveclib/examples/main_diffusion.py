@@ -8,7 +8,7 @@
 # on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for
 # the specific language governing permissions and limitations under the License.
 
-import urllib.request
+from six.moves import urllib
 import os.path
 import matplotlib.image as mpimg
 import matplotlib.pyplot as plt
@@ -17,9 +17,9 @@ from test_diffusion import TensorToFloat64, diffusion2DGPU
 
 def downloadImage(fileURL, fileName, fileTmp):
     # Cache the downloaded file in the /tmp directory and only download it again if not present.
-    with urllib.request.urlopen(fileURL + fileName) as f:
-        with open(fileTmp, 'wb') as fHandle:
-            fHandle.write(f.read())
+    f = urllib.request.urlopen(fileURL + fileName)
+    with open(fileTmp, 'wb') as fHandle:
+        fHandle.write(f.read())
     return 1
 
 if __name__ == '__main__':
