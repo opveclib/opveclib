@@ -861,18 +861,16 @@ class TestDiffusion2D(unittest.TestCase):
         """
         print('*** Running Test: ' + self.__class__.__name__ + ' function: ' + _getframe().f_code.co_name)
 
-        # CUDA is required to run these.
-        if ops.local.cuda_enabled:
-            for nX in [15, 20]:
-                for nY in [15, 50]:
-                    print("Test case nX = %d and nY = %d." % (nX, nY)) # Print parameters of the test case.
-                    rng     = np.random.RandomState(1)
-                    imageIn = rng.uniform(0, 1, [nY, nX])
+        for nX in [15, 20]:
+            for nY in [15, 50]:
+                print("Test case nX = %d and nY = %d." % (nX, nY)) # Print parameters of the test case.
+                rng     = np.random.RandomState(1)
+                imageIn = rng.uniform(0, 1, [nY, nX])
 
-                    imageGPU    = diffusion2DGPU(imageIn, dt=5, l=3.5/255, s=3, nIter=3)
-                    imageNPY    = diffusion2DNp(imageIn, dt=5, l=3.5/255, s=3, nIter=3)
+                imageGPU    = diffusion2DGPU(imageIn, dt=5, l=3.5/255, s=3, nIter=3)
+                imageNPY    = diffusion2DNp(imageIn, dt=5, l=3.5/255, s=3, nIter=3)
 
-                    assert np.allclose(imageGPU, imageNPY)
+                assert np.allclose(imageGPU, imageNPY)
     test.regression = 0
 
 class TestAddBoundary(unittest.TestCase):
