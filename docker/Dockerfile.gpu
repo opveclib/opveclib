@@ -37,7 +37,7 @@ RUN apt-get update && apt-get install -y \
 # need to figure out how to get ssl certs inside docker or just ignore with curl -k option?
 RUN curl -O https://bootstrap.pypa.io/get-pip.py && \
     python get-pip.py && \
-    python3 get-pip.py && \0.9.0
+    python3 get-pip.py && \
     rm get-pip.py
 
 # Install TensorFlow CPU version for both python2.7 and python 3.4.
