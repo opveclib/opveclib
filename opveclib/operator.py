@@ -52,6 +52,29 @@ class _OperatorOutput(object):
         self.shape = parent.output_types[index].shape
         self.dtype = parent.output_types[index].dtype
 
+    # @staticmethod
+    # def _register_conversion():
+    #
+    #     if not Operation._conversion_registered:
+    #         import tensorflow as tf
+    #
+    #         def conv(value, dtype=None, name=None, as_ref=False):
+    #             if len(value.output_types) != 1:
+    #                 raise ValueError('Cannot implicitly convert multi-output Ops.')
+    #
+    #             output = value.as_tensorflow()
+    #
+    #             if as_ref:
+    #                 raise NotImplementedError()
+    #
+    #             if dtype is not None:
+    #                 raise NotImplementedError()
+    #
+    #             return output
+    #
+    #         tf.register_tensor_conversion_function(Operation, conv)
+    #         Operation._conversion_registered = True
+
 
 def _resolve_output(x):
     """
@@ -77,7 +100,6 @@ class Operator(object):
     """
     Class which is extended to define a new operator and its gradient.
     """
-    _inference_registered = False
     _dynamiclibop_module = None
     _gradient_registered = False
     _conversion_registered = False
@@ -192,87 +214,6 @@ class Operator(object):
                                                                       cpu_grad_lib_path='',
                                                                       cuda_threads_per_block=cuda_threads_per_block)
                     return grads
-
-    # @staticmethod
-    # def _register_conversion():
-    #
-    #     if not Operation._conversion_registered:
-    #         import tensorflow as tf
-    #
-    #         def conv(value, dtype=None, name=None, as_ref=False):
-    #             if len(value.output_types) != 1:
-    #                 raise ValueError('Cannot implicitly convert multi-output Ops.')
-    #
-    #             output = value.as_tensorflow()
-    #
-    #             if as_ref:
-    #                 raise NotImplementedError()
-    #
-    #             if dtype is not None:
-    #                 raise NotImplementedError()
-    #
-    #             return output
-    #
-    #         tf.register_tensor_conversion_function(Operation, conv)
-    #         Operation._conversion_registered = True
-
-    @staticmethod
-    def _make_generic_c(src, name):
-        # look for generic c++ shared library in the operator cache
-        generic_cpp_so_path = os.path.join(cache_directory, name + '_generic_cpp.so')
-        if not os.path.exists(generic_cpp_so_path):
-            generic_cpp_path = os.path.join(cache_directory, name + '_generic_cpp.cpp')
-            with open(generic_cpp_path, 'w') as f:
-                f.write(src)
-
-            this_file_path = os.path.abspath(__file__)
-            this_directory = os.path.split(this_file_path)[0]
-            try:
-                subprocess.check_output(['g++', '-fPIC', '-std=c++11', '-g', '-pedantic',
-                             '-Wall', '-Wextra',
-                             '-I'+this_directory,
-                             '-shared',
-                             '-o', generic_cpp_so_path, generic_cpp_path],
-                              stderr=subprocess.STDOUT,
-                              universal_newlines=True)
-            except subprocess.CalledProcessError as exception:
-                tf.logging.log(tf.logging.ERROR, 'g++ error: ' + exception.output)
-                raise
-
-        return generic_cpp_so_path
-
-    @staticmethod
-    def _make_generic_cuda(src, name):
-        # look for generic cuda shared library in the operator cache
-        generic_cuda_so_path = os.path.join(cache_directory, name + '_generic_cuda.so')
-        if not os.path.exists(generic_cuda_so_path):
-            # generate and compile generic cuda operator
-            nvcc_path = os.path.join(cuda_directory, 'bin/nvcc')
-            generic_cuda_path = os.path.join(cache_directory, name + '_generic_cuda.cu')
-            generic_cuda_o_path = os.path.join(cache_directory, name + '_generic_cuda.o')
-
-            with open(generic_cuda_path, 'w') as f:
-                f.write(src)
-
-            this_file_path = os.path.abspath(__file__)
-            this_directory = os.path.split(this_file_path)[0]
-            try:
-                subprocess.check_output([nvcc_path, '-O3', '--use_fast_math', '--relocatable-device-code=true', '--compile',
-                             '-Xcompiler', '-fPIC', '-std=c++11', '-I'+this_directory,
-                             generic_cuda_path, '-o', generic_cuda_o_path],
-                             stderr=subprocess.STDOUT,
-                             universal_newlines=True)
-                subprocess.check_output([nvcc_path, '-shared', '-o', generic_cuda_so_path, generic_cuda_o_path],
-                             stderr=subprocess.STDOUT,
-                             universal_newlines=True)
-            except subprocess.CalledProcessError as exception:
-                tf.logging.log(tf.logging.ERROR, 'nvcc error: ' + exception.output)
-                raise
-
-            # clean up .o files
-            subprocess.call(['rm', generic_cuda_o_path])
-
-        return generic_cuda_so_path
 
     @staticmethod
     def _unwrap_single(x):
@@ -412,110 +353,110 @@ class Operator(object):
 
         self.output_types, self.op_expression_dag = interpret_function(self._input_types, self.op)
 
-        # define a function name based on the operator hash
-        self.op_name = 'f' + hashlib.sha224(self.op_expression_dag.SerializeToString() + version.encode('utf-8')).hexdigest()
-
-        tf.logging.log(tf.logging.DEBUG, 'Generating code for Op ' +
-                       self.__class__.__name__ + ' as ' + self.op_name)
-
-        # generate code of the operator
-        self.op_c_src, self.op_cuda_src, self.op_cuda_launch_template, self.op_c_generic, self.op_cuda_generic = \
-            ExpressionDAG.generate(self.op_expression_dag, self.op_name)
-
-        # define the c types for op input and output arguments
-        self.op_argtypes = []
-        for in_cur in self._input_types:
-            t = in_cur.dtype.as_ctypes()
-            p = ndpointer(t, flags="C_CONTIGUOUS")
-            self.op_argtypes.append(p)
-
-        for out_cur in self.output_types:
-            t = out_cur.dtype.as_ctypes()
-            p = ndpointer(t, flags="C_CONTIGUOUS")
-            self.op_argtypes.append(p)
-
-        # parse grad function
-        try:
-            self.grad()
-
-        # grad not defined
-        except UndefinedGradientError:
-            self.grad_expression_dag = None
-            self.grad_name = None
-            self.grad_c_src = None
-            self.grad_cuda_src = None
-            self.grad_cuda_launch_template = None
-            self.grad_c_generic = None
-            self.grad_cuda_generic = None
-            self.grad_argtypes = None
-        except TypeError:
-            tf.logging.log(tf.logging.DEBUG, 'Creating gradient for Op ' + self.__class__.__name__)
-            grad_arg_spec = inspect.getargspec(self.grad).args[1:]
-
-            # make sure initial part of gradient function signature matches op function signature
-            for arg_n, op_arg in enumerate(inspect.getargspec(self.op).args[1:]):
-                if op_arg != grad_arg_spec[arg_n]:
-                    raise TypeError('Gradient function must have same initial argument names as the op function. ' +
-                                    'Expected arg "' + str(op_arg) + '", but got "' + str(grad_arg_spec[arg_n]) + '".')
-            grad_input_types = []
-            for t in self._input_types:
-                grad_input_types.append(TensorType.like(t))
-            for t in self.output_types:
-                grad_input_types.append(TensorType.like(t))
-
-            grad_types, self.grad_expression_dag = interpret_function(grad_input_types, self.grad)
-
-            for grad_n, grad_type in enumerate(grad_types):
-                if grad_type != self._input_types[grad_n]:
-                    raise TypeError('Gradient function must output tensor list with a types identical '
-                                    'to the op functions inputs.')
-
-            self.grad_name = 'f' + hashlib.sha224(self.grad_expression_dag.SerializeToString() + version.encode('utf-8')).hexdigest()
-            tf.logging.log(tf.logging.DEBUG, 'Generating code for gradient for Op ' +
-                           self.__class__.__name__ + ' as ' + self.grad_name)
-            self.grad_c_src, self.grad_cuda_src, self.grad_cuda_launch_template, self.grad_c_generic, \
-                self.grad_cuda_generic = ExpressionDAG.generate(self.grad_expression_dag, self.grad_name)
-
-            # define c types of grad arguments
-            self.grad_argtypes = []
-            for at in self.op_argtypes:
-                self.grad_argtypes.append(at)
-
-            for in_cur in self._input_types:
-                t = in_cur.dtype.as_ctypes()
-                p = ndpointer(t, flags="C_CONTIGUOUS")
-                self.grad_argtypes.append(p)
-
-        else:
-            raise TypeError('Badly formed gradient function. Gradient function requires arguments.')
-
-        # create cache directory if it doesn't already exist
-        try:
-            os.makedirs(cache_directory)
-        except OSError as exception:
-            if exception.errno != errno.EEXIST:
-                raise
-
-        # clear cache of all files related to this operator
-        if self._options['clear_cache']:
-            for filename in os.listdir(cache_directory):
-                if self.op_name in filename:
-                    os.remove(os.path.join(cache_directory, filename))
-                if self.grad_name is not None and self.grad_name in filename:
-                    os.remove(os.path.join(cache_directory, filename))
-
-        tf.logging.log(tf.logging.DEBUG, 'Finished creating Op ' + self.__class__.__name__)
-
-        # initialize lazily defined functions and buffers used by evaluation infrastructure
-        self._op_c_function = None
-        self._op_cuda_function = None
-        self._output_buffers = None
-        self._output_params = None
-        self._input_params = None
-        self._active_eval_fcn = None
-
-        self._test_cuda_op = None
-        self._test_c_op = None
+        # # define a function name based on the operator hash
+        # self.op_name = 'f' + hashlib.sha224(self.op_expression_dag.SerializeToString() + version.encode('utf-8')).hexdigest()
+        #
+        # tf.logging.log(tf.logging.DEBUG, 'Generating code for Op ' +
+        #                self.__class__.__name__ + ' as ' + self.op_name)
+        #
+        # # generate code of the operator
+        # self.op_c_src, self.op_cuda_src, self.op_cuda_launch_template, self.op_c_generic, self.op_cuda_generic = \
+        #     ExpressionDAG.generate(self.op_expression_dag, self.op_name)
+        #
+        # # define the c types for op input and output arguments
+        # self.op_argtypes = []
+        # for in_cur in self._input_types:
+        #     t = in_cur.dtype.as_ctypes()
+        #     p = ndpointer(t, flags="C_CONTIGUOUS")
+        #     self.op_argtypes.append(p)
+        #
+        # for out_cur in self.output_types:
+        #     t = out_cur.dtype.as_ctypes()
+        #     p = ndpointer(t, flags="C_CONTIGUOUS")
+        #     self.op_argtypes.append(p)
+        #
+        # # parse grad function
+        # try:
+        #     self.grad()
+        #
+        # # grad not defined
+        # except UndefinedGradientError:
+        #     self.grad_expression_dag = None
+        #     self.grad_name = None
+        #     self.grad_c_src = None
+        #     self.grad_cuda_src = None
+        #     self.grad_cuda_launch_template = None
+        #     self.grad_c_generic = None
+        #     self.grad_cuda_generic = None
+        #     self.grad_argtypes = None
+        # except TypeError:
+        #     tf.logging.log(tf.logging.DEBUG, 'Creating gradient for Op ' + self.__class__.__name__)
+        #     grad_arg_spec = inspect.getargspec(self.grad).args[1:]
+        #
+        #     # make sure initial part of gradient function signature matches op function signature
+        #     for arg_n, op_arg in enumerate(inspect.getargspec(self.op).args[1:]):
+        #         if op_arg != grad_arg_spec[arg_n]:
+        #             raise TypeError('Gradient function must have same initial argument names as the op function. ' +
+        #                             'Expected arg "' + str(op_arg) + '", but got "' + str(grad_arg_spec[arg_n]) + '".')
+        #     grad_input_types = []
+        #     for t in self._input_types:
+        #         grad_input_types.append(TensorType.like(t))
+        #     for t in self.output_types:
+        #         grad_input_types.append(TensorType.like(t))
+        #
+        #     grad_types, self.grad_expression_dag = interpret_function(grad_input_types, self.grad)
+        #
+        #     for grad_n, grad_type in enumerate(grad_types):
+        #         if grad_type != self._input_types[grad_n]:
+        #             raise TypeError('Gradient function must output tensor list with a types identical '
+        #                             'to the op functions inputs.')
+        #
+        #     self.grad_name = 'f' + hashlib.sha224(self.grad_expression_dag.SerializeToString() + version.encode('utf-8')).hexdigest()
+        #     tf.logging.log(tf.logging.DEBUG, 'Generating code for gradient for Op ' +
+        #                    self.__class__.__name__ + ' as ' + self.grad_name)
+        #     self.grad_c_src, self.grad_cuda_src, self.grad_cuda_launch_template, self.grad_c_generic, \
+        #         self.grad_cuda_generic = ExpressionDAG.generate(self.grad_expression_dag, self.grad_name)
+        #
+        #     # define c types of grad arguments
+        #     self.grad_argtypes = []
+        #     for at in self.op_argtypes:
+        #         self.grad_argtypes.append(at)
+        #
+        #     for in_cur in self._input_types:
+        #         t = in_cur.dtype.as_ctypes()
+        #         p = ndpointer(t, flags="C_CONTIGUOUS")
+        #         self.grad_argtypes.append(p)
+        #
+        # else:
+        #     raise TypeError('Badly formed gradient function. Gradient function requires arguments.')
+        #
+        # # create cache directory if it doesn't already exist
+        # try:
+        #     os.makedirs(cache_directory)
+        # except OSError as exception:
+        #     if exception.errno != errno.EEXIST:
+        #         raise
+        #
+        # # clear cache of all files related to this operator
+        # if self._options['clear_cache']:
+        #     for filename in os.listdir(cache_directory):
+        #         if self.op_name in filename:
+        #             os.remove(os.path.join(cache_directory, filename))
+        #         if self.grad_name is not None and self.grad_name in filename:
+        #             os.remove(os.path.join(cache_directory, filename))
+        #
+        # tf.logging.log(tf.logging.DEBUG, 'Finished creating Op ' + self.__class__.__name__)
+        #
+        # # initialize lazily defined functions and buffers used by evaluation infrastructure
+        # self._op_c_function = None
+        # self._op_cuda_function = None
+        # self._output_buffers = None
+        # self._output_params = None
+        # self._input_params = None
+        # self._active_eval_fcn = None
+        #
+        # self._test_cuda_op = None
+        # self._test_c_op = None
 
     def __getitem__(self, item):
         return _OperatorOutput(self, item)
@@ -937,12 +878,13 @@ class Operator(object):
 def _build_op_dag(*outputs):
     """
     Perform BFS on the op nodes
-    :param outputs:
-    :return:
+    :param outputs: a list of the operator outputs from which to build the dag
+    :return: a tuple containing the op DAG protobuf and a list of the tensor inputs to the DAG
     """
 
     ops = []
     op_ids = []
+    op_depth = []
     input_indices = []
     dag_inputs = []
     dag_input_ids = []
@@ -957,16 +899,20 @@ def _build_op_dag(*outputs):
         if cur_id not in op_ids:
             op_ids.append(cur_id)
             ops.append(cur_node)
+            op_depth.append(None)
             input_indices.append(None)
             cur_index = len(op_ids) - 1
 
             # tabulate each input tensor (edge) for this op. visit parent ops if inputs come from other ops.
             cur_input_indices = []
+            max_depth = -1
             for cur_input in cur_node._inputs:
                 try:
                     resolved = _resolve_output(cur_input)
                     parent = resolved.parent
-                    parent_index = op_ids.index(bfs(parent))
+                    parent_id, parent_depth = bfs(parent)
+                    max_depth = max(max_depth, parent_depth)
+                    parent_index = op_ids.index(parent_id)
                     output_index = resolved.index
                     dag_input_index = None
                 except TypeError:
@@ -982,27 +928,39 @@ def _build_op_dag(*outputs):
                                           'dag_input_index': dag_input_index})
 
             input_indices[cur_index] = cur_input_indices
+            cur_depth = max_depth + 1
+            op_depth[cur_index] = cur_depth
+        else:
+            cur_index = op_ids.index(cur_id)
+            cur_depth = op_depth[cur_index]
 
-        return cur_id
+        return cur_id, cur_depth
 
     output_indices = []
     for dag_output in outputs:
         cur_output = _resolve_output(dag_output)
-        parent_index = op_ids.index(bfs(cur_output.parent))
+        parent_id, parent_depth = bfs(cur_output.parent)
+        parent_index = op_ids.index(parent_id)
         output_index = cur_output.index
         output_indices.append({'parent_index': parent_index, 'output_index': output_index})
 
+    # print(op_ids)
+    # print(op_depth)
+    # sort the order of ops by their depth
+    sorted_index = np.argsort(op_depth)
+    print(op_depth)
+    print(sorted_index)
     # reverse the order (and indices) of the ops so that they are ordered from left to right (bfs yields right to left)
-    num_ops = len(ops)
-    ops.reverse()
-    input_indices.reverse()
-    for input_index in input_indices:
-        for cur_input in input_index:
-            if cur_input['parent_index'] is not None:
-                cur_input['parent_index'] = num_ops - 1 - cur_input['parent_index']
-
-    for output_index in output_indices:
-        output_index['parent_index'] = num_ops - 1 - output_index['parent_index']
+    # num_ops = len(ops)
+    # ops.reverse()
+    # input_indices.reverse()
+    # for input_index in input_indices:
+    #     for cur_input in input_index:
+    #         if cur_input['parent_index'] is not None:
+    #             cur_input['parent_index'] = num_ops - 1 - cur_input['parent_index']
+    #
+    # for output_index in output_indices:
+    #     output_index['parent_index'] = num_ops - 1 - output_index['parent_index']
 
     # create the protobuf representation
     op_dag = lang.OperatorDAG()
@@ -1035,3 +993,172 @@ def _build_op_dag(*outputs):
         op_dag.dag_outputs.add().CopyFrom(proto_ref)
 
     return op_dag, dag_inputs
+
+
+def _make_generic_c(src, name):
+    # look for generic c++ shared library in the operator cache
+    generic_cpp_so_path = os.path.join(cache_directory, name + '_generic_cpp.so')
+
+    if not os.path.exists(generic_cpp_so_path):
+        generic_cpp_path = os.path.join(cache_directory, name + '_generic_cpp.cpp')
+        with open(generic_cpp_path, 'w') as f:
+            f.write(src)
+
+        this_file_path = os.path.abspath(__file__)
+        this_directory = os.path.split(this_file_path)[0]
+        try:
+            subprocess.check_output(['g++', '-fPIC', '-std=c++11', '-g', '-pedantic',
+                                     '-Wall', '-Wextra',
+                                     '-I'+this_directory,
+                                     '-shared',
+                                     '-o', generic_cpp_so_path, generic_cpp_path],
+                                      stderr=subprocess.STDOUT,
+                                      universal_newlines=True)
+        except subprocess.CalledProcessError as exception:
+            tf.logging.log(tf.logging.ERROR, 'g++ error: ' + exception.output)
+            raise
+
+    return generic_cpp_so_path
+
+
+def _make_generic_cuda(src, name):
+    # look for generic cuda shared library in the operator cache
+    generic_cuda_so_path = os.path.join(cache_directory, name + '_generic_cuda.so')
+    if not os.path.exists(generic_cuda_so_path):
+        # generate and compile generic cuda operator
+        nvcc_path = os.path.join(cuda_directory, 'bin/nvcc')
+        generic_cuda_path = os.path.join(cache_directory, name + '_generic_cuda.cu')
+        generic_cuda_o_path = os.path.join(cache_directory, name + '_generic_cuda.o')
+
+        with open(generic_cuda_path, 'w') as f:
+            f.write(src)
+
+        this_file_path = os.path.abspath(__file__)
+        this_directory = os.path.split(this_file_path)[0]
+        try:
+            subprocess.check_output([nvcc_path, '-O3', '--use_fast_math', '--relocatable-device-code=true', '--compile',
+                         '-Xcompiler', '-fPIC', '-std=c++11', '-I'+this_directory,
+                         generic_cuda_path, '-o', generic_cuda_o_path],
+                         stderr=subprocess.STDOUT,
+                         universal_newlines=True)
+            subprocess.check_output([nvcc_path, '-shared', '-o', generic_cuda_so_path, generic_cuda_o_path],
+                         stderr=subprocess.STDOUT,
+                         universal_newlines=True)
+        except subprocess.CalledProcessError as exception:
+            tf.logging.log(tf.logging.ERROR, 'nvcc error: ' + exception.output)
+            raise
+
+        # clean up .o files
+        subprocess.call(['rm', generic_cuda_o_path])
+
+    return generic_cuda_so_path
+
+
+def evaluate(output_list, profiling_iterations=1):
+    """
+    Evaluate the compiled C code for this operator, mainly used for testing. This function uses a test operator
+    function for running the generated generic version of the operator so it does not depend on an external
+    execution runtime. This also means that this function only works for operators whose inputs are numpy arrays.
+
+    :param output_list: The outputs to evaluate
+    :param profiling_iterations: Number of times to run this operator for profiling purposes.
+        Must be a positive int.
+
+    :return:  If profiling_iterations is set to None, returns the numpy array, or list of numpy arrays if there are
+        multiple outputs, containing results from evaluation. If profiling_iterations is set, returns a tuple of the
+        output array(s), and a numpy array that contains the time, in ms, that each function evaluation took.
+    """
+
+    testlib_path = os.path.join(cache_directory, 'libtestcop.so.'+version)
+    try:
+        libtest = ctypes.cdll.LoadLibrary(testlib_path)
+    except OSError:
+        Operator._check_proto()
+        this_file_path = os.path.abspath(__file__)
+        this_directory = os.path.split(this_file_path)[0]
+
+        # build the test framework library
+        cc_path = os.path.join(this_directory, 'testcop.cc')
+
+        try:
+            subprocess.check_output(['g++', '-fPIC', '-Wall', '-shared',
+                         '-std=c++11', '-Ofast', '-Wextra',
+                         '-I'+this_directory,
+                         '-I'+cache_directory,
+                         '-o', testlib_path, cc_path],
+                         stderr=subprocess.STDOUT,
+                         universal_newlines=True)
+        except subprocess.CalledProcessError as exception:
+            tf.logging.log(tf.logging.ERROR, 'g++ error: ' + exception.output)
+            raise
+
+        libtest = ctypes.cdll.LoadLibrary(testlib_path)
+
+    test_c_op = libtest.testCOperator
+    test_c_op.restype = ctypes.c_int16
+    test_c_op.argtypes = \
+        [ctypes.c_char_p, ctypes.c_char_p,
+         ndpointer(dtype=_TensorParam, flags="C_CONTIGUOUS"), ctypes.c_size_t,
+         ndpointer(dtype=_TensorParam, flags="C_CONTIGUOUS"), ctypes.c_size_t,
+         ndpointer(dtype=ctypes.c_double, flags="C_CONTIGUOUS"), ctypes.c_size_t]
+
+    dag, inputs = _build_op_dag(*output_list)
+
+    # input_params = []
+    # output_params = []
+    output_buffers = []
+    # compile all ops in the dag
+    for op_index, op in enumerate(dag.operators):
+        name = 'f' + hashlib.sha224(op.SerializeToString() + version.encode('utf-8')).hexdigest()
+
+        # generate code
+        op_c_src, op_cuda_src, op_cuda_launch_template, op_c_generic, op_cuda_generic = \
+            ExpressionDAG.generate(op, name)
+
+        input_types, output_types = ExpressionDAG.io_types()
+        num_inputs = len(input_types)
+        num_outputs = len(output_types)
+
+        lib_path = _make_generic_c(op_c_generic, name)
+
+        eval_times_ms = np.empty(profiling_iterations, dtype=np.float64)
+        eval_times_ms[:] = np.nan
+
+        cur_input_params = np.empty(num_inputs, dtype=_TensorParam)
+        for input_index, input_ref in enumerate(dag.references[op_index].input_refs):
+            if input_ref.is_leaf:
+                cur_buffer = inputs[input_ref.dag_input_index]
+            else:
+                cur_buffer = output_buffers[input_ref.op_index][input_ref.op_output_index]
+
+            cur_data = cur_buffer.ctypes.data
+            cur_dtype = ctypes.c_int(input_types[input_index].dtype.proto_dtype)
+            cur_len = ctypes.c_size_t(input_types[input_index].size)
+            cur_input_params[input_index] = _TensorParam(data=cur_data, dtype=cur_dtype, len=cur_len)
+
+        # allocate output memory for the current operator
+        cur_output_params = np.empty(num_outputs, dtype=_TensorParam)
+        output_buffers.append([])
+        cur_buffers = output_buffers[-1]
+        for output_index, output_type in enumerate(output_types):
+            t = output_type.dtype.as_numpy()
+            new_buffer = np.empty(output_type.shape, dtype=t)
+            cur_buffers.append(new_buffer)
+
+            cur_data = new_buffer.ctypes.data
+            cur_dtype = ctypes.c_int(output_type.dtype.proto_dtype)
+            cur_len = ctypes.c_size_t(output_type.size)
+            cur_output_params[output_index] = _TensorParam(data=cur_data, dtype=cur_dtype, len=cur_len)
+
+        # evaluate the outputs
+        err = test_c_op(lib_path, name+'_generic_cpp',
+                        cur_input_params, ctypes.c_size_t(num_inputs),
+                        cur_output_params, ctypes.c_size_t(num_outputs),
+                        eval_times_ms,
+                        ctypes.c_size_t(profiling_iterations))
+
+        # TODO: invalidate un-needed output buffers
+    outputs = []
+    for out_ref in dag.dag_outputs:
+        outputs.append(output_buffers[out_ref.op_index][out_ref.op_output_index])
+    return outputs

@@ -270,6 +270,25 @@ class ExpressionDAG(object):
     num_inputs = 0
 
     @staticmethod
+    def io_types():
+        input_types = ExpressionDAG.num_inputs*[None]
+        output_types = ExpressionDAG.num_outputs*[None]
+
+        found_count = 0
+        for expr in ExpressionDAG.exprs:
+            if expr.proto_expr.code == lang.INPUT:
+                input_types[expr.proto_expr.io_index] = TensorType.from_proto(expr.proto_expr.tensor_type)
+                found_count += 1
+            elif expr.proto_expr.code == lang.OUTPUT:
+                output_types[expr.proto_expr.io_index] = TensorType.from_proto(expr.proto_expr.tensor_type)
+                found_count += 1
+            if found_count == ExpressionDAG.num_inputs + ExpressionDAG.num_outputs:
+                break
+
+        return input_types, output_types
+
+
+    @staticmethod
     def clear():
         """
         Clear all currently tracked expressions.
