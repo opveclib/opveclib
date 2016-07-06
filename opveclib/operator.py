@@ -947,9 +947,29 @@ def _build_op_dag(*outputs):
     # print(op_ids)
     # print(op_depth)
     # sort the order of ops by their depth
-    sorted_index = np.argsort(op_depth)
-    print(op_depth)
-    print(sorted_index)
+    new_to_old = np.argsort(op_depth)
+    old_to_new = np.argsort(new_to_old)
+    # print(op_depth)
+    # print(sorted_index)
+    sorted_ops = []
+    sorted_input_indices = []
+    for new_index, old_index in enumerate(new_to_old):
+        sorted_ops.append(ops[old_index])
+        sorted_input_indices.append([])
+        cur_input_indices = sorted_input_indices[-1]
+        for cur_index in input_indices[old_index]:
+            parent_index = cur_index['parent_index']
+            output_index = cur_index['output_index']
+            dag_input_index = cur_index['dag_input_index']
+            if parent_index is not None:
+                parent_index = old_to_new[parent_index]
+            cur_input_indices.append({'parent_index': parent_index,
+                                      'output_index': output_index,
+                                      'dag_input_index': dag_input_index})
+
+    for output_index in output_indices:
+        output_index['parent_index'] = old_to_new[output_index['parent_index']]
+
     # reverse the order (and indices) of the ops so that they are ordered from left to right (bfs yields right to left)
     # num_ops = len(ops)
     # ops.reverse()
@@ -964,14 +984,14 @@ def _build_op_dag(*outputs):
 
     # create the protobuf representation
     op_dag = lang.OperatorDAG()
-    for op in ops:
+    for op in sorted_ops:
         op_dag.operators.add().CopyFrom(op.op_expression_dag)
 
     for dag_input in dag_inputs:
         proto_type = TensorType.like(dag_input).as_proto()
         op_dag.dag_input_types.add().CopyFrom(proto_type)
 
-    for input_index in input_indices:
+    for input_index in sorted_input_indices:
         ref_list = lang.OperatorDAG.OperatorInputReferences()
         for cur_ref in input_index:
             proto_ref = lang.OperatorDAG.OperatorInputReference()
