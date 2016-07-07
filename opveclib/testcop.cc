@@ -14,7 +14,7 @@
 #include <chrono>
 #include <vector>
 #include "dynamiclibop.h"
-#include "language.pb.h"
+#include "language_dtype.h"
 
 typedef uint16_t
         (*C_FUNPTR)(std::vector<std::shared_ptr<const InputParameter>> inputs,

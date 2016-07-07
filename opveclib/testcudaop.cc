@@ -17,7 +17,7 @@
 #include <chrono>
 #include <vector>
 #include "dynamiclibop.h"
-#include "language.pb.h"
+#include "language_dtype.h"
 
 #define CUDA_RUNTIME_SAFE_CALL(x)                                     \
     do {                                                          \
