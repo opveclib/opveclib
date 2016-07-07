@@ -55,14 +55,14 @@ def diffusion2DGPU(image, dt, l, s, nIter):
     .. doctest::
 
         >>> from opveclib.examples.test_diffusion import TensorToFloat64, diffusion2DGPU
-        >>> import urllib.request
+        >>> from six.moves import urllib
         >>> import matplotlib.image as mpimg
         >>> fileURL     = "https://upload.wikimedia.org/wikipedia/commons/6/68/"
         >>> fileName    = "Head_MRI%2C_enlarged_inferior_sagittal_sinus.png"
         >>> fileTmp     = "/tmp/MRI.png"
-        >>> with urllib.request.urlopen(fileURL + fileName) as f:
-        >>>     with open(fileTmp, 'wb') as fHandle:
-        >>>         fHandle.write(f.read())
+        >>> f = urllib.request.urlopen(fileURL + fileName)
+        >>> with open(fileTmp, 'wb') as fHandle:
+        ...         fHandle.write(f.read())
         >>> imageIn = TensorToFloat64(mpimg.imread(fileTmp)).evaluate_c()
         >>> imageOut = diffusion2DGPU(imageIn, dt=5, l=3.5/255, s=3, nIter=3)
 
@@ -861,18 +861,16 @@ class TestDiffusion2D(unittest.TestCase):
         """
         print('*** Running Test: ' + self.__class__.__name__ + ' function: ' + _getframe().f_code.co_name)
 
-        # CUDA is required to run these.
-        if ops.local.cuda_enabled:
-            for nX in [15, 20]:
-                for nY in [15, 50]:
-                    print("Test case nX = %d and nY = %d." % (nX, nY)) # Print parameters of the test case.
-                    rng     = np.random.RandomState(1)
-                    imageIn = rng.uniform(0, 1, [nY, nX])
+        for nX in [15, 20]:
+            for nY in [15, 50]:
+                print("Test case nX = %d and nY = %d." % (nX, nY)) # Print parameters of the test case.
+                rng     = np.random.RandomState(1)
+                imageIn = rng.uniform(0, 1, [nY, nX])
 
-                    imageGPU    = diffusion2DGPU(imageIn, dt=5, l=3.5/255, s=3, nIter=3)
-                    imageNPY    = diffusion2DNp(imageIn, dt=5, l=3.5/255, s=3, nIter=3)
+                imageGPU    = diffusion2DGPU(imageIn, dt=5, l=3.5/255, s=3, nIter=3)
+                imageNPY    = diffusion2DNp(imageIn, dt=5, l=3.5/255, s=3, nIter=3)
 
-                    assert np.allclose(imageGPU, imageNPY)
+                assert np.allclose(imageGPU, imageNPY)
     test.regression = 0
 
 class TestAddBoundary(unittest.TestCase):
