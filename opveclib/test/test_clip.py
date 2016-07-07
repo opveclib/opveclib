@@ -12,7 +12,7 @@ from __future__ import print_function
 import unittest
 import numpy as np
 from sys import _getframe
-from ..operator import Operator
+from ..operator import Operator, evaluate
 from ..expression import position_in, output_like, if_, elif_, else_
 from ..local import cuda_enabled
 
@@ -41,12 +41,12 @@ class TestClip(unittest.TestCase):
         print('*** Running Test: ' + self.__class__.__name__ + ' function: ' + _getframe().f_code.co_name)
         a = np.random.random(1000)
         op = Clip(a, threshold1=0.1, threshold2=0.9, clear_cache=True)
-        op_c = op.evaluate_c()
+        op_c = evaluate(op, target_language='cpp')
         op_np = np.clip(a, 0.1, 0.9)
         assert np.all(np.equal(op_c, op_np))
 
         if cuda_enabled:
-            op_cuda = op.evaluate_cuda()
+            op_cuda = evaluate(op, target_language='cuda')
             assert np.all(np.equal(op_cuda, op_np))
 
 if __name__ == '__main__':

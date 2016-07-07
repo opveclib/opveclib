@@ -12,7 +12,7 @@ from __future__ import print_function
 import unittest
 import numpy as np
 from sys import _getframe
-from ..operator import Operator
+from ..operator import Operator, evaluate
 from ..expression import position_in, output_like
 from ..local import cuda_enabled
 
@@ -46,14 +46,14 @@ class TestMultipleOutputs(unittest.TestCase):
         b = np.random.random(5)
         c = np.random.random(5)
         op = MultiOp(a, b, c, clear_cache=True)
-        op_c = op.evaluate_c()
+        op_c = evaluate(op, target_language='cpp')
 
         assert np.allclose(op_c[0], a+b)
         assert np.allclose(op_c[1], (a+b)*c)
         assert np.allclose(op_c[2], a+b+c)
 
         if cuda_enabled:
-            op_cuda = op.evaluate_cuda()
+            op_cuda = evaluate(op, target_language='cuda')
             assert np.allclose(op_cuda[0], a+b)
             assert np.allclose(op_cuda[1], (a+b)*c)
             assert np.allclose(op_cuda[2], a+b+c)

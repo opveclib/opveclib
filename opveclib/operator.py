@@ -10,7 +10,6 @@
 # the specific language governing permissions and limitations under the License.
 
 import ctypes
-import errno
 import hashlib
 import os
 import inspect

@@ -12,7 +12,7 @@ from __future__ import print_function
 import unittest
 import numpy as np
 from sys import _getframe
-from ..operator import Operator
+from ..operator import Operator, evaluate
 from ..expression import position_in, output_like
 
 
@@ -21,6 +21,7 @@ class TestOutputReturn(unittest.TestCase):
     # in which they are declared
     def test_return_reordering(self):
         print('*** Running Test: ' + self.__class__.__name__ + ' function: ' + _getframe().f_code.co_name)
+
         class ReorderOp(Operator):
             def op(self, input0):
                 pos = position_in(input0.shape)
@@ -43,16 +44,17 @@ class TestOutputReturn(unittest.TestCase):
 
         a = np.random.random(5)
         op = ReorderOp(a, clear_cache=True)
-        o0, o1, o2, o3 = op.evaluate_c()
+        o0, o1, o2, o3 = evaluate(op, target_language='cpp')
 
         assert np.alltrue(np.equal(o0, 2*a))
         assert np.alltrue(np.equal(o1, 3*a))
         assert np.alltrue(np.equal(o2, 4*a))
         assert np.alltrue(np.equal(o3, 5*a))
 
-    # Operation should throw and error when user tries to return the wrong number of outputs or the wrong type of value
+    # Operation should throw an error when user tries to return the wrong number of outputs or the wrong type of value
     def test_output_error(self):
         print('*** Running Test: ' + self.__class__.__name__ + ' function: ' + _getframe().f_code.co_name)
+
         class TooFew(Operator):
             def op(self, input0):
                 pos = position_in(input0.shape)

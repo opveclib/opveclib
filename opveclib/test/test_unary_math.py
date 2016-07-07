@@ -12,13 +12,13 @@ from __future__ import print_function
 import unittest
 import numpy as np
 from sys import _getframe
-from ..operator import Operator
+from ..operator import Operator, evaluate
 from ..expression import output_like, position_in, absolute, logical_not, arctan, arccos, arcsin, \
     cos, cosh, sin, sinh, tan, tanh, exp, log, log10, sqrt, ceil, floor
 from ..local import cuda_enabled
 
 
-def gen(input, ops_func, np_func, cuda_tolerance=None):
+def gen(input_tensor, ops_func, np_func, cuda_tolerance=None):
     class UnaryMath(Operator):
         def op(self, input0):
 
@@ -29,17 +29,18 @@ def gen(input, ops_func, np_func, cuda_tolerance=None):
 
             return output
 
-    op = UnaryMath(input, clear_cache=True)
-    op_c = op.evaluate_c()
-    assert np.allclose(op_c, np_func(input))
+    op = UnaryMath(input_tensor, clear_cache=True)
+    op_c = evaluate(op, target_language='cpp')
+    assert np.allclose(op_c, np_func(input_tensor))
 
     if cuda_enabled:
-        op_cuda = op.evaluate_cuda()
+        op_cuda = evaluate(op, target_language='cuda')
         if cuda_tolerance is None:
-            assert np.allclose(op_cuda, np_func(input))
+            assert np.allclose(op_cuda, np_func(input_tensor))
         else:
-            assert np.allclose(op_cuda, np_func(input),
+            assert np.allclose(op_cuda, np_func(input_tensor),
                                atol=cuda_tolerance['atol'], rtol=cuda_tolerance['rtol'])
+
 
 class TestUnaryMath(unittest.TestCase):
     def test_unary_float(self):
@@ -78,7 +79,9 @@ class TestUnaryMath(unittest.TestCase):
 
         rand = rng.uniform(-10, 10, length)
 
-        neg = lambda x: -x
+        def neg(x):
+            return -x
+
         types = [np.float32, np.float64, np.int8, np.int16, np.int32, np.int64]
         for t in types:
             gen(rand.astype(t), neg, neg)
@@ -90,8 +93,12 @@ class TestUnaryMath(unittest.TestCase):
         rng = np.random.RandomState(1)
         rand = rng.randint(0, 2, length)
 
-        not_ops = lambda x: logical_not(x)
-        not_np = lambda x: np.logical_not(x)
+        def not_ops(x):
+            return logical_not(x)
+
+        def not_np(x):
+            return np.logical_not(x)
+        
         types = [np.float32, np.float64, np.int8, np.int16, np.int32, np.int64,
                  np.uint8, np.uint16, np.uint32, np.uint64]
         for t in types:

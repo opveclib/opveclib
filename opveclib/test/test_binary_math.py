@@ -12,7 +12,7 @@ from __future__ import print_function
 import unittest
 import numpy as np
 from sys import _getframe
-from ..operator import Operator
+from ..operator import Operator, evaluate
 from ..expression import output_like, position_in, minimum, maximum, power, arctan2, logical_and, logical_or
 from ..local import cuda_enabled
 
@@ -29,11 +29,11 @@ def gen(input0, input1, ops_func, np_func):
             return output
 
     op = BinaryMath(input0, input1, clear_cache=True)
-    op_c = op.evaluate_c()
+    op_c = evaluate(op, target_language='cpp')
     assert np.allclose(op_c, np_func(input0, input1))
 
     if cuda_enabled:
-        op_cuda = op.evaluate_cuda()
+        op_cuda = evaluate(op, target_language='cuda')
         assert np.allclose(op_cuda, np_func(input0, input1))
 
 

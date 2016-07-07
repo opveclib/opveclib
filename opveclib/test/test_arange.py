@@ -12,7 +12,7 @@ from __future__ import print_function
 import unittest
 import numpy as np
 from sys import _getframe
-from ..operator import Operator
+from ..operator import Operator, evaluate
 from ..expression import output, position_in, arange, cast
 from ..local import cuda_enabled
 
@@ -44,15 +44,15 @@ class TestArange(unittest.TestCase):
         num_elements = 10
         x = rng.uniform(-1, 1, num_elements)
 
-        op = FillRange(x, clear_cache=True)
+        right, left = FillRange(x, clear_cache=True)
 
         np_ref = x * np.arange(num_elements)
-        right_c, left_c = op.evaluate_c()
+        right_c, left_c = evaluate([right, left], target_language='cpp')
         assert np.all(right_c == np_ref)
         assert np.all(left_c == np_ref)
 
         if cuda_enabled:
-            right_cuda, left_cuda = op.evaluate_cuda()
+            right_cuda, left_cuda = evaluate([right, left], target_language='cuda')
             assert np.all(right_cuda == np_ref)
             assert np.all(left_cuda == np_ref)
 

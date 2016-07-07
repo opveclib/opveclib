@@ -38,7 +38,7 @@ from .expression import arange
 from .expression import if_, elif_, else_
 
 # @ Operator
-from .operator import Operator
+from .operator import Operator, evaluate
 
 # @ Localization info
 from .local import version, cuda_enabled, cache_directory

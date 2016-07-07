@@ -12,7 +12,7 @@ from __future__ import print_function
 import unittest
 import numpy as np
 from sys import _getframe
-from ..operator import Operator
+from ..operator import Operator, evaluate
 from ..expression import output, position_in, variable, uint32, float64, arange
 from ..local import cuda_enabled
 
@@ -44,11 +44,11 @@ class TestDot(unittest.TestCase):
         op = Dot(x, y, clear_cache=True)
 
         op_np = np.sum(x*y, axis=1)
-        op_c = op.evaluate_c()
+        op_c = evaluate(op, target_language='cpp')
         assert np.allclose(op_c, op_np)
 
         if cuda_enabled:
-            op_cuda = op.evaluate_cuda()
+            op_cuda = evaluate(op, target_language='cuda')
             assert np.allclose(op_cuda, op_np)
 
 if __name__ == '__main__':
