@@ -482,277 +482,226 @@ class Operator(object):
         """
         raise UndefinedGradientError()
 
-    def _define_eval_params(self, lib, fcn_name):
+    # def _define_eval_params(self, lib, fcn_name):
+    #
+    #     # determine input parameters
+    #     if self._input_params is None:
+    #
+    #         for inp in self._inputs:
+    #             if not isinstance(inp, np.ndarray):
+    #                 raise SyntaxError('Can only evaluate operators when the inputs are numpy arrays.')
+    #
+    #         inputs = []
+    #         for in_t, in_data in zip(self._input_types, self._inputs):
+    #             inputs.append(_TensorParam(data=in_data.ctypes.data,
+    #                                        dtype=ctypes.c_int(in_t.dtype.proto_dtype),
+    #                                        len=ctypes.c_size_t(in_t.size)))
+    #         self._input_params = np.array(inputs, dtype=_TensorParam)
+    #
+    #     # allocate new buffers for output arrays and define output parameters
+    #     if self._output_buffers is None:
+    #         self._output_buffers = []
+    #         for out_cur in self.output_types:
+    #             t = out_cur.dtype.as_numpy()
+    #             new_buff = np.empty(out_cur.shape, dtype=t)
+    #             self._output_buffers.append(new_buff)
+    #
+    #         outputs = []
+    #         for out_t, out_array in zip(self.output_types, self._output_buffers):
+    #             outputs.append(_TensorParam(data=out_array.ctypes.data,
+    #                                         dtype=ctypes.c_int(out_t.dtype.proto_dtype),
+    #                                         len=ctypes.c_size_t(out_t.size)))
+    #         self._output_params = np.array(outputs, dtype=_TensorParam)
+    #
+    #     # if changing lib functions, initialize with zeros to avoid carry-over from previous results
+    #     if self._active_eval_fcn != lib+fcn_name:
+    #         self._active_eval_fcn = lib+fcn_name
+    #         for out in self._output_buffers:
+    #             out[:] = 0
+    #
+    # @staticmethod
+    # def _check_proto():
+    #     # build the protobuf header file. This must match the version of protoc
+    #     # and libprotobuf-dev that is installed on the user system. Otherwise the generated file
+    #     # will be incompatible with the protoc system header files.
+    #     proto_header = os.path.join(cache_directory, 'language.pb.h')
+    #     if not os.path.exists(proto_header):
+    #         # this_file_path = os.path.abspath(__file__)
+    #         # this_directory = os.path.split(this_file_path)[0]
+    #         # proto_path = os.path.join(this_directory, 'language.proto')
+    #         #
+    #         # try:
+    #         #     subprocess.check_output(['protoc', proto_path, '--proto_path='+this_directory,
+    #         #                  '--cpp_out='+cache_directory],
+    #         #                  stderr=subprocess.STDOUT,
+    #         #                  universal_newlines=True)
+    #         # except subprocess.CalledProcessError as exception:
+    #         #     tf.logging.log(tf.logging.ERROR, 'protoc error: ' + exception.output)
+    #         #     raise
+    #         #
+    #
+    #         # just create the single enum we need ourselves instead of requiring the full protoc C++ development environment
+    #         enum_src = ''
+    #         enum_val = 0
+    #         for enum_name in lang._DTYPE.values:
+    #             enum_src += '    ' + enum_name.name + ' = ' + str(enum_val) + ',\n'
+    #             enum_val += 1
+    #
+    #         # generate header enum
+    #         h_src = """
+    #         |//Generated Code - do not edit
+    #         |#ifndef LANGUAGE_PB2_H
+    #         |#define LANGUAGE_PB2_H
+    #         |namespace opveclib {
+    #         |enum DType {
+    #         |${enum_src}
+    #         |};
+    #         |}
+    #         |#endif  // LANGUAGE_PB2_H
+    #         """
+    #         h_src = string.Template(h_src).substitute(locals())
+    #         h_src = re.sub('\n[ \t]*\|', '\n', h_src)
+    #         with open(proto_header, 'w') as f:
+    #             f.write(h_src)
 
-        # determine input parameters
-        if self._input_params is None:
+    # def evaluate_c(self, profiling_iterations=None):
+    #     """
+    #     Evaluate the compiled C code for this operator, mainly used for testing. This function uses a test operator
+    #     function for running the generated generic version of the operator so it does not depend on an external
+    #     execution runtime. This also means that this function only works for operators whose inputs are numpy arrays.
+    #
+    #     :param profiling_iterations: Number of times to run this operator for profiling purposes.
+    #         Must be a positive int.
+    #
+    #     :return:  If profiling_iterations is set to None, returns the numpy array, or list of numpy arrays if there are
+    #         multiple outputs, containing results from evaluation. If profiling_iterations is set, returns a tuple of the
+    #         output array(s), and a numpy array that contains the time, in ms, that each function evaluation took.
+    #     """
+    #
+    #     # get the C test function from it's .so (compiles if necessary)
+    #     lib_path = Operator._make_generic_c(self.op_c_generic, self.op_name).encode('utf-8')
+    #     fcn_name = (self.op_name + '_generic_cpp').encode('utf-8')
+    #
+    #     self._define_eval_params(lib_path, fcn_name)
+    #
+    #     if profiling_iterations is None:
+    #         iters = 1
+    #     else:
+    #         if not isinstance(profiling_iterations, int) or profiling_iterations < 1:
+    #             raise ValueError('Profiling iterations must be a positive int, but received: ' +
+    #                              str(profiling_iterations))
+    #         iters = profiling_iterations
+    #
+    #     eval_times_ms = np.empty(iters, dtype=np.float64)
+    #     eval_times_ms[:] = np.nan
+    #
+    #     num_inputs = len(self._input_types)
+    #     num_outputs = len(self.output_types)
+    #
+    #     if self._test_c_op is None:
+    #         testlib_path = os.path.join(cache_directory, 'libtestcop.so.'+version)
+    #         try:
+    #             libtest = ctypes.cdll.LoadLibrary(testlib_path)
+    #         except OSError:
+    #             Operator._check_proto()
+    #             this_file_path = os.path.abspath(__file__)
+    #             this_directory = os.path.split(this_file_path)[0]
+    #
+    #             # build the test framework library
+    #             cc_path = os.path.join(this_directory, 'testcop.cc')
+    #
+    #             try:
+    #                 subprocess.check_output(['g++', '-fPIC', '-Wall', '-shared',
+    #                              '-std=c++11', '-Ofast', '-Wextra',
+    #                              '-I'+this_directory,
+    #                              '-I'+cache_directory,
+    #                              '-o', testlib_path, cc_path],
+    #                              stderr=subprocess.STDOUT,
+    #                              universal_newlines=True)
+    #             except subprocess.CalledProcessError as exception:
+    #                 tf.logging.log(tf.logging.ERROR, 'g++ error: ' + exception.output)
+    #                 raise
+    #
+    #             libtest = ctypes.cdll.LoadLibrary(testlib_path)
+    #
+    #         self._test_c_op = libtest.testCOperator
+    #         self._test_c_op.restype = ctypes.c_int16
+    #         self._test_c_op.argtypes = \
+    #             [ctypes.c_char_p, ctypes.c_char_p,
+    #              ndpointer(dtype=_TensorParam, flags="C_CONTIGUOUS"), ctypes.c_size_t,
+    #              ndpointer(dtype=_TensorParam, flags="C_CONTIGUOUS"), ctypes.c_size_t,
+    #              ndpointer(dtype=ctypes.c_double, flags="C_CONTIGUOUS"), ctypes.c_size_t]
+    #
+    #     # run the operator
+    #     err = self._test_c_op(lib_path, fcn_name,
+    #                           self._input_params, ctypes.c_size_t(num_inputs),
+    #                           self._output_params, ctypes.c_size_t(num_outputs),
+    #                           eval_times_ms,
+    #                           ctypes.c_size_t(iters))
+    #
+    #     if err != 0 or np.isnan(eval_times_ms).any():
+    #         tf.logging.log(tf.logging.ERROR, 'Test C operator failed for Op ' + self.__class__.__name__)
+    #         raise ValueError('Test C operator failed for Op ' + self.__class__.__name__)
+    #
+    #     if profiling_iterations is None:
+    #         return Operator._unwrap_single(self._output_buffers)
+    #     else:
+    #         return Operator._unwrap_single(self._output_buffers), eval_times_ms
 
-            for inp in self._inputs:
-                if not isinstance(inp, np.ndarray):
-                    raise SyntaxError('Can only evaluate operators when the inputs are numpy arrays.')
-
-            inputs = []
-            for in_t, in_data in zip(self._input_types, self._inputs):
-                inputs.append(_TensorParam(data=in_data.ctypes.data,
-                                           dtype=ctypes.c_int(in_t.dtype.proto_dtype),
-                                           len=ctypes.c_size_t(in_t.size)))
-            self._input_params = np.array(inputs, dtype=_TensorParam)
-
-        # allocate new buffers for output arrays and define output parameters
-        if self._output_buffers is None:
-            self._output_buffers = []
-            for out_cur in self.output_types:
-                t = out_cur.dtype.as_numpy()
-                new_buff = np.empty(out_cur.shape, dtype=t)
-                self._output_buffers.append(new_buff)
-
-            outputs = []
-            for out_t, out_array in zip(self.output_types, self._output_buffers):
-                outputs.append(_TensorParam(data=out_array.ctypes.data,
-                                            dtype=ctypes.c_int(out_t.dtype.proto_dtype),
-                                            len=ctypes.c_size_t(out_t.size)))
-            self._output_params = np.array(outputs, dtype=_TensorParam)
-
-        # if changing lib functions, initialize with zeros to avoid carry-over from previous results
-        if self._active_eval_fcn != lib+fcn_name:
-            self._active_eval_fcn = lib+fcn_name
-            for out in self._output_buffers:
-                out[:] = 0
-
-    @staticmethod
-    def _check_proto():
-        # build the protobuf header file. This must match the version of protoc
-        # and libprotobuf-dev that is installed on the user system. Otherwise the generated file
-        # will be incompatible with the protoc system header files.
-        proto_header = os.path.join(cache_directory, 'language.pb.h')
-        if not os.path.exists(proto_header):
-            # this_file_path = os.path.abspath(__file__)
-            # this_directory = os.path.split(this_file_path)[0]
-            # proto_path = os.path.join(this_directory, 'language.proto')
-            #
-            # try:
-            #     subprocess.check_output(['protoc', proto_path, '--proto_path='+this_directory,
-            #                  '--cpp_out='+cache_directory],
-            #                  stderr=subprocess.STDOUT,
-            #                  universal_newlines=True)
-            # except subprocess.CalledProcessError as exception:
-            #     tf.logging.log(tf.logging.ERROR, 'protoc error: ' + exception.output)
-            #     raise
-            #
-
-            # just create the single enum we need ourselves instead of requiring the full protoc C++ development environment
-            enum_src = ''
-            enum_val = 0
-            for enum_name in lang._DTYPE.values:
-                enum_src += '    ' + enum_name.name + ' = ' + str(enum_val) + ',\n'
-                enum_val += 1
-
-            # generate header enum
-            h_src = """
-            |//Generated Code - do not edit
-            |#ifndef LANGUAGE_PB2_H
-            |#define LANGUAGE_PB2_H
-            |namespace opveclib {
-            |enum DType {
-            |${enum_src}
-            |};
-            |}
-            |#endif  // LANGUAGE_PB2_H
-            """
-            h_src = string.Template(h_src).substitute(locals())
-            h_src = re.sub('\n[ \t]*\|', '\n', h_src)
-            with open(proto_header, 'w') as f:
-                f.write(h_src)
-
-    def evaluate_c(self, profiling_iterations=None):
-        """
-        Evaluate the compiled C code for this operator, mainly used for testing. This function uses a test operator
-        function for running the generated generic version of the operator so it does not depend on an external
-        execution runtime. This also means that this function only works for operators whose inputs are numpy arrays.
-
-        :param profiling_iterations: Number of times to run this operator for profiling purposes.
-            Must be a positive int.
-
-        :return:  If profiling_iterations is set to None, returns the numpy array, or list of numpy arrays if there are
-            multiple outputs, containing results from evaluation. If profiling_iterations is set, returns a tuple of the
-            output array(s), and a numpy array that contains the time, in ms, that each function evaluation took.
-        """
-
-        # get the C test function from it's .so (compiles if necessary)
-        lib_path = Operator._make_generic_c(self.op_c_generic, self.op_name).encode('utf-8')
-        fcn_name = (self.op_name + '_generic_cpp').encode('utf-8')
-
-        self._define_eval_params(lib_path, fcn_name)
-
-        if profiling_iterations is None:
-            iters = 1
-        else:
-            if not isinstance(profiling_iterations, int) or profiling_iterations < 1:
-                raise ValueError('Profiling iterations must be a positive int, but received: ' +
-                                 str(profiling_iterations))
-            iters = profiling_iterations
-
-        eval_times_ms = np.empty(iters, dtype=np.float64)
-        eval_times_ms[:] = np.nan
-
-        num_inputs = len(self._input_types)
-        num_outputs = len(self.output_types)
-
-        if self._test_c_op is None:
-            testlib_path = os.path.join(cache_directory, 'libtestcop.so.'+version)
-            try:
-                libtest = ctypes.cdll.LoadLibrary(testlib_path)
-            except OSError:
-                Operator._check_proto()
-                this_file_path = os.path.abspath(__file__)
-                this_directory = os.path.split(this_file_path)[0]
-
-                # build the test framework library
-                cc_path = os.path.join(this_directory, 'testcop.cc')
-
-                try:
-                    subprocess.check_output(['g++', '-fPIC', '-Wall', '-shared',
-                                 '-std=c++11', '-Ofast', '-Wextra',
-                                 '-I'+this_directory,
-                                 '-I'+cache_directory,
-                                 '-o', testlib_path, cc_path],
-                                 stderr=subprocess.STDOUT,
-                                 universal_newlines=True)
-                except subprocess.CalledProcessError as exception:
-                    tf.logging.log(tf.logging.ERROR, 'g++ error: ' + exception.output)
-                    raise
-
-                libtest = ctypes.cdll.LoadLibrary(testlib_path)
-
-            self._test_c_op = libtest.testCOperator
-            self._test_c_op.restype = ctypes.c_int16
-            self._test_c_op.argtypes = \
-                [ctypes.c_char_p, ctypes.c_char_p,
-                 ndpointer(dtype=_TensorParam, flags="C_CONTIGUOUS"), ctypes.c_size_t,
-                 ndpointer(dtype=_TensorParam, flags="C_CONTIGUOUS"), ctypes.c_size_t,
-                 ndpointer(dtype=ctypes.c_double, flags="C_CONTIGUOUS"), ctypes.c_size_t]
-
-        # run the operator
-        err = self._test_c_op(lib_path, fcn_name,
-                              self._input_params, ctypes.c_size_t(num_inputs),
-                              self._output_params, ctypes.c_size_t(num_outputs),
-                              eval_times_ms,
-                              ctypes.c_size_t(iters))
-
-        if err != 0 or np.isnan(eval_times_ms).any():
-            tf.logging.log(tf.logging.ERROR, 'Test C operator failed for Op ' + self.__class__.__name__)
-            raise ValueError('Test C operator failed for Op ' + self.__class__.__name__)
-
-        if profiling_iterations is None:
-            return Operator._unwrap_single(self._output_buffers)
-        else:
-            return Operator._unwrap_single(self._output_buffers), eval_times_ms
-
-    def evaluate_cuda(self, cuda_threads_per_block=_default_cuda_threads_per_block, profiling_iterations=None):
-        """
-        Evaluate the compiled CUDA code for this operator, mainly used for testing. This function uses a test operator
-        function for running the generated generic version of the operator so it does not depend on an external
-        execution runtime. This also means that this function only works for operators whose inputs are numpy arrays.
-
-        :param profiling_iterations: Number of times to run this operator for profiling purposes.
-            Must be a positive int.
-        :param cuda_threads_per_block: number of cuda threads to use
-
-        :return: If profiling_iterations is set to None, returns the numpy array, or list of numpy arrays if there are
-            multiple outputs, that results from evaluation. If profiling_iterations is set, returns a tuple of the
-            output array(s), and a numpy array that contains the time, in ms, that each function evaluation took.
-        """
-        if not cuda_enabled:
-            raise RuntimeError('CUDA is not enabled')
-
-        # get the CUDA test function from it's .so (compiles if necessary)
-        lib_path = Operator._make_generic_cuda(self.op_cuda_generic, self.op_name).encode('utf-8')
-        fcn_name = (self.op_name + '_generic_cuda').encode('utf-8')
-        self._define_eval_params(lib_path, fcn_name)
-
-        num_inputs = len(self._input_types)
-        num_outputs = len(self.output_types)
-
-        if profiling_iterations is None:
-            iters = 1
-        else:
-            if not isinstance(profiling_iterations, int) or profiling_iterations < 1:
-                raise ValueError('Profiling iterations must be a positive int, but received: ' +
-                                 str(profiling_iterations))
-            iters = profiling_iterations
-
-        eval_times_ms = np.empty(iters, dtype=np.float64)
-        eval_times_ms[:] = np.nan
-
-        # lazily compile testcudaop.cc
-        if self._test_cuda_op is None:
-            testlib_path = os.path.join(cache_directory, 'libtestcudaop.so.'+version)
-            try:
-                libtest = ctypes.cdll.LoadLibrary(testlib_path)
-            except OSError:
-                Operator._check_proto()
-                this_file_path = os.path.abspath(__file__)
-                this_directory = os.path.split(this_file_path)[0]
-
-                # build the test framework library
-                cc_path = os.path.join(this_directory, 'testcudaop.cc')
-                o_path = os.path.join(cache_directory, 'testcudaop.o')
-                nvcc_path = os.path.join(cuda_directory, 'bin/nvcc')
-                try:
-                    subprocess.check_output([nvcc_path, '-O3', '--relocatable-device-code=true',
-                                 '-x', 'cu', '--compile', '-Xcompiler',
-                                 '-fPIC', '-std=c++11',
-                                 '-I'+this_directory,
-                                 '-I'+cache_directory,
-                                 cc_path, '-o', o_path],
-                                 stderr=subprocess.STDOUT,
-                                 universal_newlines=True)
-
-                    # relocatable device code has to be defined when linking in addition
-                    # to compiling. g++ has no concept of this, so we have to do an extra
-                    # device code link step with a dummy link file
-                    linko_path = os.path.join(cache_directory, 'link.o')
-                    subprocess.check_output([nvcc_path, '-dlink', '-Xcompiler', '-fPIC',
-                                     '-o', linko_path, o_path],
-                                     stderr=subprocess.STDOUT,
-                                     universal_newlines=True)
-                    subprocess.check_output(['g++', '-shared',
-                                     '-o', testlib_path, o_path, linko_path,
-                                     '-lcuda'],
-                                     stderr=subprocess.STDOUT,
-                                     universal_newlines=True)
-                except subprocess.CalledProcessError as exception:
-                    tf.logging.log(tf.logging.ERROR, 'nvcc error: ' + exception.output)
-                    raise
-
-                # clean up .o files
-                subprocess.call(['rm', o_path, linko_path])
-
-                libtest = ctypes.cdll.LoadLibrary(testlib_path)
-
-            self._test_cuda_op = libtest.testCUDAOperator
-            self._test_cuda_op.restype = ctypes.c_int16
-            self._test_cuda_op.argtypes = \
-                [ctypes.c_char_p, ctypes.c_char_p,
-                 ndpointer(dtype=_TensorParam, flags="C_CONTIGUOUS"), ctypes.c_size_t,
-                 ndpointer(dtype=_TensorParam, flags="C_CONTIGUOUS"), ctypes.c_size_t,
-                 ctypes.c_uint16,
-                 ndpointer(dtype=ctypes.c_double, flags="C_CONTIGUOUS"), ctypes.c_size_t]
-
-        err = self._test_cuda_op(lib_path, fcn_name,
-                                 self._input_params, ctypes.c_size_t(num_inputs),
-                                 self._output_params, ctypes.c_size_t(num_outputs),
-                                 ctypes.c_uint16(cuda_threads_per_block),
-                                 eval_times_ms, ctypes.c_size_t(iters))
-
-        if err != 0 or np.isnan(eval_times_ms).any():
-            tf.logging.log(tf.logging.ERROR, 'Test CUDA operator failed for Op ' + self.__class__.__name__)
-            raise ValueError('Test CUDA operator failed for Op ' + self.__class__.__name__)
-
-        if profiling_iterations is None:
-            return Operator._unwrap_single(self._output_buffers)
-        else:
-            return Operator._unwrap_single(self._output_buffers), eval_times_ms
+    # def evaluate_cuda(self, cuda_threads_per_block=_default_cuda_threads_per_block, profiling_iterations=None):
+    #     """
+    #     Evaluate the compiled CUDA code for this operator, mainly used for testing. This function uses a test operator
+    #     function for running the generated generic version of the operator so it does not depend on an external
+    #     execution runtime. This also means that this function only works for operators whose inputs are numpy arrays.
+    #
+    #     :param profiling_iterations: Number of times to run this operator for profiling purposes.
+    #         Must be a positive int.
+    #     :param cuda_threads_per_block: number of cuda threads to use
+    #
+    #     :return: If profiling_iterations is set to None, returns the numpy array, or list of numpy arrays if there are
+    #         multiple outputs, that results from evaluation. If profiling_iterations is set, returns a tuple of the
+    #         output array(s), and a numpy array that contains the time, in ms, that each function evaluation took.
+    #     """
+    #     if not cuda_enabled:
+    #         raise RuntimeError('CUDA is not enabled')
+    #
+    #     # get the CUDA test function from it's .so (compiles if necessary)
+    #     lib_path = Operator._make_generic_cuda(self.op_cuda_generic, self.op_name).encode('utf-8')
+    #     fcn_name = (self.op_name + '_generic_cuda').encode('utf-8')
+    #     self._define_eval_params(lib_path, fcn_name)
+    #
+    #     num_inputs = len(self._input_types)
+    #     num_outputs = len(self.output_types)
+    #
+    #     if profiling_iterations is None:
+    #         iters = 1
+    #     else:
+    #         if not isinstance(profiling_iterations, int) or profiling_iterations < 1:
+    #             raise ValueError('Profiling iterations must be a positive int, but received: ' +
+    #                              str(profiling_iterations))
+    #         iters = profiling_iterations
+    #
+    #     eval_times_ms = np.empty(iters, dtype=np.float64)
+    #     eval_times_ms[:] = np.nan
+    #
+    #     # lazily compile testcudaop.cc
+    #     if self._test_cuda_op is None:
+    #
+    #
+    #     err = self._test_cuda_op(lib_path, fcn_name,
+    #                              self._input_params, ctypes.c_size_t(num_inputs),
+    #                              self._output_params, ctypes.c_size_t(num_outputs),
+    #                              ctypes.c_uint16(cuda_threads_per_block),
+    #                              eval_times_ms, ctypes.c_size_t(iters))
+    #
+    #     if err != 0 or np.isnan(eval_times_ms).any():
+    #         tf.logging.log(tf.logging.ERROR, 'Test CUDA operator failed for Op ' + self.__class__.__name__)
+    #         raise ValueError('Test CUDA operator failed for Op ' + self.__class__.__name__)
+    #
+    #     if profiling_iterations is None:
+    #         return Operator._unwrap_single(self._output_buffers)
+    #     else:
+    #         return Operator._unwrap_single(self._output_buffers), eval_times_ms
 
     # TODO - need to figure out how to test gradients
     # def evaluate_c_grad(self, *grads):
@@ -944,13 +893,9 @@ def _build_op_dag(*outputs):
         output_index = cur_output.index
         output_indices.append({'parent_index': parent_index, 'output_index': output_index})
 
-    # print(op_ids)
-    # print(op_depth)
-    # sort the order of ops by their depth
+    # sort ops according to their DAG depth
     new_to_old = np.argsort(op_depth)
     old_to_new = np.argsort(new_to_old)
-    # print(op_depth)
-    # print(sorted_index)
     sorted_ops = []
     sorted_input_indices = []
     for new_index, old_index in enumerate(new_to_old):
@@ -967,20 +912,9 @@ def _build_op_dag(*outputs):
                                       'output_index': output_index,
                                       'dag_input_index': dag_input_index})
 
+    # update parent indices for the outputs
     for output_index in output_indices:
         output_index['parent_index'] = old_to_new[output_index['parent_index']]
-
-    # reverse the order (and indices) of the ops so that they are ordered from left to right (bfs yields right to left)
-    # num_ops = len(ops)
-    # ops.reverse()
-    # input_indices.reverse()
-    # for input_index in input_indices:
-    #     for cur_input in input_index:
-    #         if cur_input['parent_index'] is not None:
-    #             cur_input['parent_index'] = num_ops - 1 - cur_input['parent_index']
-    #
-    # for output_index in output_indices:
-    #     output_index['parent_index'] = num_ops - 1 - output_index['parent_index']
 
     # create the protobuf representation
     op_dag = lang.OperatorDAG()
@@ -1074,7 +1008,7 @@ def _make_generic_cuda(src, name):
     return generic_cuda_so_path
 
 
-def evaluate(output_list, profiling_iterations=1):
+def evaluate(output_list, profiling_iterations=1, target_language='cpp'):
     """
     Evaluate the compiled C code for this operator, mainly used for testing. This function uses a test operator
     function for running the generated generic version of the operator so it does not depend on an external
@@ -1083,49 +1017,133 @@ def evaluate(output_list, profiling_iterations=1):
     :param output_list: The outputs to evaluate
     :param profiling_iterations: Number of times to run this operator for profiling purposes.
         Must be a positive int.
+    :param target_language:
 
     :return:  If profiling_iterations is set to None, returns the numpy array, or list of numpy arrays if there are
         multiple outputs, containing results from evaluation. If profiling_iterations is set, returns a tuple of the
         output array(s), and a numpy array that contains the time, in ms, that each function evaluation took.
     """
 
-    testlib_path = os.path.join(cache_directory, 'libtestcop.so.'+version)
-    try:
-        libtest = ctypes.cdll.LoadLibrary(testlib_path)
-    except OSError:
-        Operator._check_proto()
-        this_file_path = os.path.abspath(__file__)
-        this_directory = os.path.split(this_file_path)[0]
+    # Generate the protobuf header file.
+    # Since all we need for the test libraries is the DType enum, do not use protoc to generate the
+    # fully functional protobuf code, since this introduces a dependency on the C++ protobuf development libraries.
+    proto_header = os.path.join(cache_directory, 'language_dtype.h')
+    if not os.path.exists(proto_header):
+        enum_src = ''
+        enum_val = 0
+        for enum_name in lang._DTYPE.values:
+            enum_src += '    ' + enum_name.name + ' = ' + str(enum_val) + ',\n'
+            enum_val += 1
 
-        # build the test framework library
-        cc_path = os.path.join(this_directory, 'testcop.cc')
+        # generate header enum
+        h_src = """
+        |//Generated Code - do not edit
+        |#ifndef LANGUAGE_DTYPE_H
+        |#define LANGUAGE_DTYPE_H
+        |namespace opveclib {
+        |enum DType {
+        |${enum_src}
+        |};
+        |}
+        |#endif  // LANGUAGE_DTYPE_H
+        """
+        h_src = string.Template(h_src).substitute(locals())
+        h_src = re.sub('\n[ \t]*\|', '\n', h_src)
+        with open(proto_header, 'w') as f:
+            f.write(h_src)
 
+    # Dynamically load the test library, compile if necessary
+    invalid_language = 'Unsupported target_language: ' + target_language
+    if target_language == 'cpp':
+        testlib_path = os.path.join(cache_directory, 'libtestcop.so.'+version)
         try:
-            subprocess.check_output(['g++', '-fPIC', '-Wall', '-shared',
-                         '-std=c++11', '-Ofast', '-Wextra',
-                         '-I'+this_directory,
-                         '-I'+cache_directory,
-                         '-o', testlib_path, cc_path],
-                         stderr=subprocess.STDOUT,
-                         universal_newlines=True)
-        except subprocess.CalledProcessError as exception:
-            tf.logging.log(tf.logging.ERROR, 'g++ error: ' + exception.output)
-            raise
+            libtest = ctypes.cdll.LoadLibrary(testlib_path)
+        except OSError:
+            this_file_path = os.path.abspath(__file__)
+            this_directory = os.path.split(this_file_path)[0]
 
-        libtest = ctypes.cdll.LoadLibrary(testlib_path)
+            # build the test framework library
+            cc_path = os.path.join(this_directory, 'testcop.cc')
 
-    test_c_op = libtest.testCOperator
-    test_c_op.restype = ctypes.c_int16
-    test_c_op.argtypes = \
-        [ctypes.c_char_p, ctypes.c_char_p,
-         ndpointer(dtype=_TensorParam, flags="C_CONTIGUOUS"), ctypes.c_size_t,
-         ndpointer(dtype=_TensorParam, flags="C_CONTIGUOUS"), ctypes.c_size_t,
-         ndpointer(dtype=ctypes.c_double, flags="C_CONTIGUOUS"), ctypes.c_size_t]
+            try:
+                subprocess.check_output(['g++', '-fPIC', '-Wall', '-shared',
+                                         '-std=c++11', '-Ofast', '-Wextra',
+                                         '-I'+this_directory,
+                                         '-I'+cache_directory,
+                                         '-o', testlib_path, cc_path],
+                                        stderr=subprocess.STDOUT,
+                                        universal_newlines=True)
+            except subprocess.CalledProcessError as exception:
+                tf.logging.log(tf.logging.ERROR, 'g++ error: ' + exception.output)
+                raise
+
+            libtest = ctypes.cdll.LoadLibrary(testlib_path)
+
+        test_c_op = libtest.testCOperator
+        test_c_op.restype = ctypes.c_int16
+        test_c_op.argtypes = \
+            [ctypes.c_char_p, ctypes.c_char_p,
+             ndpointer(dtype=_TensorParam, flags="C_CONTIGUOUS"), ctypes.c_size_t,
+             ndpointer(dtype=_TensorParam, flags="C_CONTIGUOUS"), ctypes.c_size_t,
+             ndpointer(dtype=ctypes.c_double, flags="C_CONTIGUOUS"), ctypes.c_size_t]
+
+    elif target_language == 'cuda':
+        testlib_path = os.path.join(cache_directory, 'libtestcudaop.so.'+version)
+        try:
+            libtest = ctypes.cdll.LoadLibrary(testlib_path)
+        except OSError:
+            this_file_path = os.path.abspath(__file__)
+            this_directory = os.path.split(this_file_path)[0]
+
+            # build the test framework library
+            cc_path = os.path.join(this_directory, 'testcudaop.cc')
+            o_path = os.path.join(cache_directory, 'testcudaop.o')
+            nvcc_path = os.path.join(cuda_directory, 'bin/nvcc')
+            try:
+                subprocess.check_output([nvcc_path, '-O3', '--relocatable-device-code=true',
+                                         '-x', 'cu', '--compile', '-Xcompiler',
+                                         '-fPIC', '-std=c++11',
+                                         '-I'+this_directory,
+                                         '-I'+cache_directory,
+                                         cc_path, '-o', o_path],
+                                        stderr=subprocess.STDOUT,
+                                        universal_newlines=True)
+
+                # relocatable device code has to be defined when linking in addition
+                # to compiling. g++ has no concept of this, so we have to do an extra
+                # device code link step with a dummy link file
+                linko_path = os.path.join(cache_directory, 'link.o')
+                subprocess.check_output([nvcc_path, '-dlink', '-Xcompiler', '-fPIC',
+                                         '-o', linko_path, o_path],
+                                        stderr=subprocess.STDOUT,
+                                        universal_newlines=True)
+                subprocess.check_output(['g++', '-shared',
+                                         '-o', testlib_path, o_path, linko_path,
+                                         '-lcuda'],
+                                        stderr=subprocess.STDOUT,
+                                        universal_newlines=True)
+            except subprocess.CalledProcessError as exception:
+                tf.logging.log(tf.logging.ERROR, 'nvcc error: ' + exception.output)
+                raise
+
+            # clean up .o files
+            subprocess.call(['rm', o_path, linko_path])
+
+            libtest = ctypes.cdll.LoadLibrary(testlib_path)
+
+        test_cuda_op = libtest.testCUDAOperator
+        test_cuda_op.restype = ctypes.c_int16
+        test_cuda_op.argtypes = \
+            [ctypes.c_char_p, ctypes.c_char_p,
+             ndpointer(dtype=_TensorParam, flags="C_CONTIGUOUS"), ctypes.c_size_t,
+             ndpointer(dtype=_TensorParam, flags="C_CONTIGUOUS"), ctypes.c_size_t,
+             ctypes.c_uint16,
+             ndpointer(dtype=ctypes.c_double, flags="C_CONTIGUOUS"), ctypes.c_size_t]
+    else:
+        raise ValueError(invalid_language)
 
     dag, inputs = _build_op_dag(*output_list)
 
-    # input_params = []
-    # output_params = []
     output_buffers = []
     # compile all ops in the dag
     for op_index, op in enumerate(dag.operators):
@@ -1138,8 +1156,6 @@ def evaluate(output_list, profiling_iterations=1):
         input_types, output_types = ExpressionDAG.io_types()
         num_inputs = len(input_types)
         num_outputs = len(output_types)
-
-        lib_path = _make_generic_c(op_c_generic, name)
 
         eval_times_ms = np.empty(profiling_iterations, dtype=np.float64)
         eval_times_ms[:] = np.nan
@@ -1171,13 +1187,28 @@ def evaluate(output_list, profiling_iterations=1):
             cur_output_params[output_index] = _TensorParam(data=cur_data, dtype=cur_dtype, len=cur_len)
 
         # evaluate the outputs
-        err = test_c_op(lib_path, name+'_generic_cpp',
-                        cur_input_params, ctypes.c_size_t(num_inputs),
-                        cur_output_params, ctypes.c_size_t(num_outputs),
-                        eval_times_ms,
-                        ctypes.c_size_t(profiling_iterations))
+        if target_language == 'cpp':
+            lib_path = _make_generic_c(op_c_generic, name)
+            err = test_c_op(lib_path, name+'_generic_cpp',
+                            cur_input_params, ctypes.c_size_t(num_inputs),
+                            cur_output_params, ctypes.c_size_t(num_outputs),
+                            eval_times_ms,
+                            ctypes.c_size_t(profiling_iterations))
+        elif target_language == 'cuda':
+            lib_path = _make_generic_cuda(op_cuda_generic, name)
+            # TODO: expose this parameter to the user?
+            cuda_threads_per_block = 32
+            err = test_cuda_op(lib_path, name+'_generic_cuda',
+                               cur_input_params, ctypes.c_size_t(num_inputs),
+                               cur_output_params, ctypes.c_size_t(num_outputs),
+                               ctypes.c_uint16(cuda_threads_per_block),
+                               eval_times_ms,
+                               ctypes.c_size_t(profiling_iterations))
+        else:
+            raise ValueError(invalid_language)
 
-        # TODO: invalidate un-needed output buffers
+        # TODO: deallocate output buffers that are no longer needed
+
     outputs = []
     for out_ref in dag.dag_outputs:
         outputs.append(output_buffers[out_ref.op_index][out_ref.op_output_index])
