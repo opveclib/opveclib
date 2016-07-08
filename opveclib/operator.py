@@ -25,6 +25,62 @@ from .expression import TensorType, ExpressionDAG, input, float32, float64, Outp
 from .local import version, cache_directory, cuda_enabled, cuda_directory
 from . import language_pb2 as lang
 
+_default_cuda_threads_per_block = 32
+
+
+class _DynamicLibOp(object):
+    _loaded_module = None
+    _shape_infernence_registered = False
+
+    @staticmethod
+    def module():
+        if _DynamicLibOp._loaded_module is None:
+            libname = 'dynamiclibop.so.' + version
+            dynamiclibop_path = os.path.join(cache_directory, libname)
+
+            # build the library if it does not exist already
+            if not os.path.exists(dynamiclibop_path):
+                tf_include = tf.sysconfig.get_include()
+                # resolve the directory of this file
+                this_file_path = os.path.abspath(__file__)
+                this_directory = os.path.split(this_file_path)[0]
+                try:
+                    if cuda_enabled:
+                        tf.logging.log(tf.logging.INFO, '*** building dynamiclibop for GPU')
+                        subprocess.check_output(['g++', '-fPIC', '-Wall', '-shared',
+                                                 '-std=c++11', '-O2', '-Wextra', '-DGOOGLE_CUDA=1',
+                                                 '-o', dynamiclibop_path,
+                                                 this_directory + '/dynamiclibop.cc',
+                                                 '-isystem', cuda_directory + '/include',
+                                                 '-isystem', tf_include],
+                                                stderr=subprocess.STDOUT,
+                                                universal_newlines=True)
+                    else:
+                        tf.logging.log(tf.logging.INFO, '*** building dynamiclibop for CPU')
+                        subprocess.check_output(['g++', '-fPIC', '-Wall', '-shared',
+                                                 '-std=c++11', '-O2', '-Wextra',
+                                                 '-o', dynamiclibop_path,
+                                                 this_directory + '/dynamiclibop.cc',
+                                                 '-isystem', tf_include],
+                                                stderr=subprocess.STDOUT,
+                                                universal_newlines=True)
+                except subprocess.CalledProcessError as exception:
+                    tf.logging.log(tf.logging.ERROR, 'g++ error: ' + exception.output)
+                    raise
+
+            _DynamicLibOp._loaded_module = tf.load_op_library(dynamiclibop_path)
+
+        return _DynamicLibOp._loaded_module
+
+    @staticmethod
+    def register_shape_inference():
+        if _DynamicLibOp._shape_infernence_registered is False:
+            _DynamicLibOp._shape_infernence_registered = True
+
+            @tf.RegisterShape("DynamicLib")
+            def get_out_shapes(op):
+                return op.get_attr('out_shapes')
+
 
 class _TensorParam(ctypes.Structure):
     _fields_ = [("data", ctypes.c_void_p),
@@ -76,54 +132,6 @@ class Operator(object):
     """
     Class which is extended to define a new operator and its gradient.
     """
-    _dynamiclibop_module = None
-    _default_cuda_threads_per_block = 64
-
-    @staticmethod
-    def _register_shape_inference():
-        if Operator._inference_registered is False:
-            Operator._inference_registered = True
-
-            @tf.RegisterShape("DynamicLib")
-            def _tensor_ops_shape(op):
-                return op.get_attr('out_shapes')
-
-    @staticmethod
-    def _load_dynamiclib_module():
-        if Operator._dynamiclibop_module is None:
-            libname = 'dynamiclibop.so.' + version
-            dynamiclibop_path = os.path.join(cache_directory, libname)
-            if not os.path.exists(dynamiclibop_path):
-                # build the library if it does not exist already
-                tf_include = tf.sysconfig.get_include()
-                # resolve the directory of this file
-                this_file_path = os.path.abspath(__file__)
-                this_directory = os.path.split(this_file_path)[0]
-                try:
-                    if cuda_enabled:
-                        tf.logging.log(tf.logging.INFO, '*** building dynamiclibop for GPU')
-                        subprocess.check_output(['g++', '-fPIC', '-Wall', '-shared',
-                                         '-std=c++11', '-O2', '-Wextra', '-DGOOGLE_CUDA=1',
-                                         '-o', dynamiclibop_path,
-                                         this_directory + '/dynamiclibop.cc',
-                                         '-isystem', cuda_directory + '/include',
-                                         '-isystem', tf_include],
-                                          stderr=subprocess.STDOUT,
-                                          universal_newlines=True)
-                    else:
-                        tf.logging.log(tf.logging.INFO, '*** building dynamiclibop for CPU')
-                        subprocess.check_output(['g++', '-fPIC', '-Wall', '-shared',
-                                         '-std=c++11', '-O2', '-Wextra',
-                                         '-o', dynamiclibop_path,
-                                         this_directory + '/dynamiclibop.cc',
-                                         '-isystem', tf_include],
-                                          stderr=subprocess.STDOUT,
-                                          universal_newlines=True)
-                except subprocess.CalledProcessError as exception:
-                    tf.logging.log(tf.logging.ERROR, 'g++ error: ' + exception.output)
-                    raise
-
-            Operator._dynamiclibop_module = tf.load_op_library(dynamiclibop_path)
 
     @staticmethod
     def _register_gradient():
@@ -344,74 +352,6 @@ class Operator(object):
         :return: Must return a list of output tensors, equal in TensorType to the inputs of the op function
         """
         raise UndefinedGradientError()
-
-    def as_tensorflow(self, cuda_threads_per_block=_default_cuda_threads_per_block):
-        """
-        Create a TensorFlow operator based on this operation and register it with the current TensorFlow Graph. The
-        inputs to the operator must be numpy arrays or TensorFlow tensors. The operation will be evaluated later
-        by the TensorFlow session.
-
-        :param cuda_threads_per_block: number of cuda threads to use per thread block
-
-        :return: A TensorFlow operator.
-        """
-        tf.logging.log(tf.logging.DEBUG, 'Compiling generic C++ for Op ' + self.__class__.__name__)
-        cpu_op_lib = Operator._make_generic_c(self.op_c_generic, self.op_name)
-        if cuda_enabled:
-            tf.logging.log(tf.logging.DEBUG, 'Compiling generic CUDA for Op ' + self.__class__.__name__)
-            cuda_op_lib = Operator._make_generic_cuda(self.op_cuda_generic, self.op_name)
-        else:
-            cuda_op_lib = ''
-
-        if self.grad_name is None:
-            gpu_grad_name = ''
-            gpu_grad_lib = ''
-            cpu_grad_name = ''
-            cpu_grad_lib = ''
-        else:
-            tf.logging.log(tf.logging.DEBUG, 'Compiling generic C++ for gradient of Op ' + self.__class__.__name__)
-            cpu_grad_lib = Operator._make_generic_c(self.grad_c_generic, self.grad_name)
-            cpu_grad_name = self.grad_name + '_generic_cpp'
-            if cuda_enabled:
-                tf.logging.log(tf.logging.DEBUG, 'Compiling generic CUDA for gradient of Op ' + self.__class__.__name__)
-                gpu_grad_lib = Operator._make_generic_cuda(self.grad_cuda_generic, self.grad_name)
-                gpu_grad_name = self.grad_name + '_generic_cuda'
-            else:
-                gpu_grad_name = ''
-                gpu_grad_lib = ''
-
-        out_shapes = []
-        out_types = []
-        for cur_type in self.output_types:
-            if cur_type.dtype == float32:
-                tf_type = 'float'
-            elif cur_type.dtype == float64:
-                tf_type = 'double'
-            else:
-                raise NotImplementedError('Only floats and doubles currently supported.')
-
-            out_types.append(tf_type)
-            out_shapes.append(cur_type.shape)
-
-        Operator._register_shape_inference()
-        Operator._load_dynamiclib_module()
-        Operator._register_gradient()
-        tf_op = Operator._dynamiclibop_module.dynamic_lib(inputs=self._inputs,
-                                                          out_shapes=out_shapes,
-                                                          out_types=out_types,
-                                                          cpu_lib_path=cpu_op_lib,
-                                                          cpu_func_name=self.op_name + '_generic_cpp',
-                                                          gpu_lib_path=cuda_op_lib,
-                                                          gpu_func_name=self.op_name + '_generic_cuda',
-                                                          gpu_grad_func_name=gpu_grad_name,
-                                                          gpu_grad_lib_path=gpu_grad_lib,
-                                                          cpu_grad_func_name=cpu_grad_name,
-                                                          cpu_grad_lib_path=cpu_grad_lib,
-                                                          cuda_threads_per_block=cuda_threads_per_block)
-        if len(out_shapes) == 1:
-            return tf_op[0]
-        else:
-            return tf_op
 
 
 def _build_op_dag(*outputs):
@@ -787,11 +727,11 @@ def evaluate(output_list, profiling_iterations=1, target_language='cpp'):
         elif target_language == 'cuda':
             lib_path = _make_generic_cuda(op_cuda_generic, name)
             # TODO: expose this parameter to the user?
-            cuda_threads_per_block = 32
+
             err = test_cuda_op(lib_path, name+'_generic_cuda',
                                cur_input_params, ctypes.c_size_t(num_inputs),
                                cur_output_params, ctypes.c_size_t(num_outputs),
-                               ctypes.c_uint16(cuda_threads_per_block),
+                               ctypes.c_uint16(_default_cuda_threads_per_block),
                                eval_times_ms,
                                ctypes.c_size_t(profiling_iterations))
         else:
@@ -802,4 +742,67 @@ def evaluate(output_list, profiling_iterations=1, target_language='cpp'):
     outputs = []
     for out_ref in dag.dag_outputs:
         outputs.append(output_buffers[out_ref.op_index][out_ref.op_output_index])
+    return outputs
+
+
+def as_tensorflow(tensor_list):
+    """
+    Create a DAG of TensorFlow operators based on a DAG OVL operators and register it with the current
+    TensorFlow Graph. The inputs to the DAG must be numpy arrays or TensorFlow tensors.
+
+    :param tensors: output tensors to
+
+    :return: A TensorFlow operator.
+    """
+    dag, inputs = _build_op_dag(*tensor_list)
+
+    output_tensors = []
+    # compile all ops in the dag
+    for op_index, op in enumerate(dag.operators):
+        name = 'f' + hashlib.sha224(op.SerializeToString() + version.encode('utf-8')).hexdigest()
+
+        # generate code
+        op_c_src, op_cuda_src, op_cuda_launch_template, op_c_generic, op_cuda_generic = \
+            ExpressionDAG.generate(op, name)
+
+        tf.logging.log(tf.logging.DEBUG, 'Compiling generic C++ for Op ' + name)
+        cpu_op_lib = _make_generic_c(op_c_generic, name)
+        if cuda_enabled:
+            tf.logging.log(tf.logging.DEBUG, 'Compiling generic CUDA for Op ' + name)
+            cuda_op_lib = _make_generic_cuda(op_cuda_generic, name)
+        else:
+            cuda_op_lib = ''
+
+        input_types, output_types = ExpressionDAG.io_types()
+
+        out_shapes = []
+        out_tf_types = []
+        for cur_type in output_types:
+            out_tf_types.append(cur_type.dtype.as_tensorflow())
+            out_shapes.append(cur_type.shape)
+
+        cur_inputs = []
+        for ref in dag.references[op_index].input_refs:
+            if ref.is_leaf:
+                cur_inputs.append(inputs[ref.dag_input_index])
+            else:
+                cur_inputs.append(output_tensors[ref.op_index][ref.op_output_index])
+
+        tf_op = _DynamicLibOp.module().dynamic_lib(inputs=cur_inputs,
+                                                   out_shapes=out_shapes,
+                                                   out_types=out_tf_types,
+                                                   cpu_lib_path=cpu_op_lib,
+                                                   cpu_func_name=name + '_generic_cpp',
+                                                   gpu_lib_path=cuda_op_lib,
+                                                   gpu_func_name=name + '_generic_cuda',
+                                                   gpu_grad_func_name='',
+                                                   gpu_grad_lib_path='',
+                                                   cpu_grad_func_name='',
+                                                   cpu_grad_lib_path='',
+                                                   cuda_threads_per_block=_default_cuda_threads_per_block)
+        output_tensors.append(tf_op)
+
+    outputs = []
+    for out_ref in dag.dag_outputs:
+        outputs.append(output_tensors[out_ref.op_index][out_ref.op_output_index])
     return outputs

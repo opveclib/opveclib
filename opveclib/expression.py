@@ -20,27 +20,6 @@ import numpy as np
 from tensorflow import logging
 from . import language_pb2 as lang
 
-# lazily compile the language proto to python library
-# from .local import cache_directory
-# sys.path.append(cache_directory)
-# try:
-#     import language_pb2 as lang
-# except ImportError:
-#     this_file_path = os.path.abspath(__file__)
-#     this_directory = os.path.split(this_file_path)[0]
-#     proto_path = os.path.join(this_directory, 'language.proto')
-#     try:
-#         subprocess.check_output(['protoc', proto_path,
-#                                  '--proto_path='+this_directory,
-#                                  '--python_out='+cache_directory],
-#                                 stderr=subprocess.STDOUT,
-#                                 universal_newlines=True)
-#     except subprocess.CalledProcessError as exception:
-#         logging.log(logging.ERROR, 'protoc error: ' + exception.output)
-#         raise
-#
-#     import language_pb2 as lang
-
 
 class DType(object):
     """
@@ -85,6 +64,17 @@ class DType(object):
         lang.UINT64: 'uint64_t'
     }
 
+    _tensorflow_lookup = {
+        lang.FLOAT32: 'float',
+        lang.FLOAT64: 'double',
+        lang.INT8: 'int8',
+        lang.INT16: 'int16',
+        lang.INT32: 'int32',
+        lang.INT64: 'int64',
+        lang.UINT8: 'uint8',
+        lang.UINT16: 'uint16'
+    }
+
     def __init__(self, dtype):
 
         if type(dtype) is DType:
@@ -124,6 +114,9 @@ class DType(object):
 
     def as_cstr(self):
         return DType._cstr_lookup[self.proto_dtype]
+
+    def as_tensorflow(self):
+        return DType._tensorflow_lookup[self.proto_dtype]
 
     def as_proto(self):
         return self.proto_dtype
