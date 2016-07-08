@@ -13,8 +13,8 @@ import numpy as np
 import os
 import unittest
 import subprocess
-from opveclib.operator import Operator
-from opveclib.local import cuda_enabled, cuda_directory, cache_directory
+from opveclib.operator import _DynamicLibOp, _default_cuda_threads_per_block
+from opveclib.local import cuda_enabled, cuda_directory, cache_directory, clear_op_cache
 
 
 # Test to ensure valid calculation on both CPU and GPU.
@@ -22,8 +22,6 @@ from opveclib.local import cuda_enabled, cuda_directory, cache_directory
 # code is actually running on GPU
 class DynamicLibAddGPUTest(unittest.TestCase):
     def test1(self):
-        # build the dynamiclibop.so if needed
-        Operator._load_dynamiclib_module()
 
         # build the operator libs if needed
         cpulib = os.path.join(cache_directory, "libaddcpu.so")
@@ -38,7 +36,6 @@ class DynamicLibAddGPUTest(unittest.TestCase):
                          '-g', '-pedantic',
                          '-I'+this_directory+'/..',
                          '-o', cpulib, '-shared',  cpp_path])
-
 
         if cuda_enabled:
             if not os.path.exists(gpulib):
@@ -71,7 +68,7 @@ class DynamicLibAddGPUTest(unittest.TestCase):
                     in0 = np.random.rand(3,5).astype(np.float32)
                     in1 = np.random.rand(3,5).astype(np.float32)
                     ones = np.ones((3,5), dtype=np.float32)
-                    output = Operator._dynamiclibop_module.dynamic_lib(inputs=[in0, in1],
+                    output = _DynamicLibOp.module().dynamic_lib(inputs=[in0, in1],
                                                                        out_shapes=[[3,5]],
                                                                        out_types=['float'],
                                                                        cpu_lib_path=cpulib,
@@ -82,7 +79,7 @@ class DynamicLibAddGPUTest(unittest.TestCase):
                                                                        gpu_grad_lib_path='',
                                                                        cpu_grad_func_name='',
                                                                        cpu_grad_lib_path='',
-                                                                       cuda_threads_per_block=Operator._default_cuda_threads_per_block)
+                                                                       cuda_threads_per_block=_default_cuda_threads_per_block)
 
                     ref = np.add(in0,in1)
                     if (dev_string is '/gpu:0'):
@@ -91,7 +88,7 @@ class DynamicLibAddGPUTest(unittest.TestCase):
 
                     tf.logging.log(tf.logging.INFO, '*** addFloatDoubleFloat')
                     in2 = np.random.rand(3,5).astype(np.float64)
-                    output = Operator._dynamiclibop_module.dynamic_lib(inputs=[in0, in2, in1],
+                    output = _DynamicLibOp.module().dynamic_lib(inputs=[in0, in2, in1],
                                                                        out_shapes=[[3,5]],
                                                                        out_types=['float'],
                                                                        cpu_lib_path= cpulib,
@@ -102,14 +99,14 @@ class DynamicLibAddGPUTest(unittest.TestCase):
                                                                        gpu_grad_lib_path='',
                                                                        cpu_grad_func_name='',
                                                                        cpu_grad_lib_path='',
-                                                                       cuda_threads_per_block=Operator._default_cuda_threads_per_block)
+                                                                       cuda_threads_per_block=_default_cuda_threads_per_block)
                     ref = (in0 + in2 + in1).astype(np.float32)
                     if (dev_string is '/gpu:0'):
                         ref = ref + ones
                     assert np.allclose(output[0].eval(), ref)
 
                     tf.logging.log(tf.logging.INFO, '*** sumAndSq')
-                    output = Operator._dynamiclibop_module.dynamic_lib(inputs=[in0, in2],
+                    output = _DynamicLibOp.module().dynamic_lib(inputs=[in0, in2],
                                                                        out_shapes=[[3,5], [3,5]],
                                                                        out_types=['float', 'float'],
                                                                        cpu_lib_path= cpulib,
@@ -120,7 +117,7 @@ class DynamicLibAddGPUTest(unittest.TestCase):
                                                                        gpu_grad_lib_path='',
                                                                        cpu_grad_func_name='',
                                                                        cpu_grad_lib_path='',
-                                                                       cuda_threads_per_block=Operator._default_cuda_threads_per_block)
+                                                                       cuda_threads_per_block=_default_cuda_threads_per_block)
 
                     out0 = (in0 + in2).astype(np.float32)
                     if (dev_string is '/gpu:0'):
@@ -140,4 +137,5 @@ class DynamicLibAddGPUTest(unittest.TestCase):
                     assert np.allclose(x, t_verified.eval())
 
 if __name__ == "__main__":
+    clear_op_cache()
     unittest.main()

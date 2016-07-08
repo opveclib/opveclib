@@ -14,6 +14,7 @@ from sys import _getframe
 import numpy as np
 import opveclib as ops
 
+
 class GraphTriangleCountOp(ops.Operator):
     """Counts the triangles in an undirected graph.
 
@@ -118,7 +119,7 @@ def countTrianglesCPU(startEdge, fromVertex, toVertex):
         >>> print(nTriangle)
         3
     """
-    count = GraphTriangleCountOp(startEdge, fromVertex, toVertex).evaluate_c()
+    count = ops.evaluate(GraphTriangleCountOp(startEdge, fromVertex, toVertex), target_language='cpp')
     return np.sum(count, axis=0, dtype=np.uint64)
 
 def countTrianglesGPU(startEdge, fromVertex, toVertex):
@@ -146,7 +147,7 @@ def countTrianglesGPU(startEdge, fromVertex, toVertex):
         >>> print(nTriangle)
         3
     """
-    count = GraphTriangleCountOp(startEdge, fromVertex, toVertex).evaluate_cuda()
+    count = ops.evaluate(GraphTriangleCountOp(startEdge, fromVertex, toVertex), target_language='cuda')
     return np.sum(count, axis=0, dtype=np.uint64)
 
 def countTrianglesNp(startEdge, fromVertex, toVertex):
@@ -431,4 +432,5 @@ class TestGraphTriangleCountOp(unittest.TestCase):
             assert nTriangleGPU==nTriangle
 
 if __name__ == '__main__':
+    ops.clear_op_cache()
     unittest.main()

@@ -40,5 +40,5 @@ from .expression import if_, elif_, else_
 # @ Operator
 from .operator import Operator, evaluate, as_tensorflow
 
-# @ Localization info
-from .local import version, cuda_enabled, cache_directory
+# @ Localization
+from .local import version, cuda_enabled, cache_directory, clear_op_cache

@@ -14,6 +14,7 @@ import numpy as np
 from sys import _getframe
 from ..operator import Operator, evaluate
 from ..expression import position_in, output_like
+from ..local import clear_op_cache
 
 
 class TestOutputReturn(unittest.TestCase):
@@ -43,7 +44,7 @@ class TestOutputReturn(unittest.TestCase):
                 return output0, output1, output2, output3
 
         a = np.random.random(5)
-        op = ReorderOp(a, clear_cache=True)
+        op = ReorderOp(a)
         o0, o1, o2, o3 = evaluate(op, target_language='cpp')
 
         assert np.alltrue(np.equal(o0, 2*a))
@@ -77,7 +78,7 @@ class TestOutputReturn(unittest.TestCase):
 
         a = np.random.random(5)
         try:
-            TooFew(a, clear_cache=True)
+            TooFew(a)
         except ValueError:
             pass
         else:
@@ -92,7 +93,7 @@ class TestOutputReturn(unittest.TestCase):
                 output0[pos] = 2*input_value
 
         try:
-            NoOutputs(a, clear_cache=True)
+            NoOutputs(a)
         except ValueError:
             pass
         else:
@@ -109,7 +110,7 @@ class TestOutputReturn(unittest.TestCase):
                 return input_value
 
         try:
-            BadReturn(a, clear_cache=True)
+            BadReturn(a)
         except TypeError:
             pass
         else:
@@ -117,4 +118,5 @@ class TestOutputReturn(unittest.TestCase):
 
 
 if __name__ == '__main__':
+    clear_op_cache()
     unittest.main()

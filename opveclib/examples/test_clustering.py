@@ -93,8 +93,8 @@ def condForWhile(iter, nMaxIter, rms, th, data, center):
 
 def bodyForWhile(iter, nMaxIter, rms, th, data, center):
     oldCenter = center
-    minIndex = KMeansMinDistOp(data, center).as_tensorflow()
-    center = KMeansNewCenOp(data, minIndex, nCenter=int(center.get_shape()[1])).as_tensorflow()
+    minIndex = KMeansMinDistOp(data, center)
+    center = ops.as_tensorflow(KMeansNewCenOp(data, minIndex, nCenter=int(center.get_shape()[1])))
     rms = tf.reduce_sum(tf.sqrt(tf.reduce_sum((center-oldCenter)*(center-oldCenter), 0)), 0)
     return [iter+1, nMaxIter, rms, th, data, center]
 
@@ -315,4 +315,5 @@ class TestKMeans(unittest.TestCase):
         assert compareClusterCenters(clusterCenterGt, clusterCenterTF, rtol=0.1, atol=0.1)
 
 if __name__ == '__main__':
+    ops.clear_op_cache()
     unittest.main()

@@ -269,8 +269,8 @@ class TestLSTMGradient(unittest.TestCase):
             assert np.sum(comp).astype(np.float32)/(batches*vec_len) > 0.999
 
         # jacobian adjoint test
-        jacobian = LSTMP_jacobian(concat, c, delta_concat, delta_c, forget_bias=forget, clear_cache=True)
-        jacobian_adjoint = LSTMP_jacobian_adjoint(concat, c, d_new_c, d_new_h, forget_bias=forget, clear_cache=True)
+        jacobian = LSTMP_jacobian(concat, c, delta_concat, delta_c, forget_bias=forget)
+        jacobian_adjoint = LSTMP_jacobian_adjoint(concat, c, d_new_c, d_new_h, forget_bias=forget)
 
         lhs = []
         rhs = []

@@ -155,24 +155,25 @@ class TestAccumulate(unittest.TestCase):
 
         a = np.random.random((5, 5, 5))
         logging.log(logging.INFO, u'Testing C')
-        assert np.allclose(np.cumsum(a, axis=0), cumsum(a, axis=0).evaluate_c())
-        assert np.allclose(np.cumsum(a, axis=1), cumsum(a, axis=1).evaluate_c())
-        assert np.allclose(np.cumsum(a, axis=2), cumsum(a, axis=2).evaluate_c())
+        assert np.allclose(np.cumsum(a, axis=0), ops.evaluate(cumsum(a, axis=0), target_language='cpp'))
+        assert np.allclose(np.cumsum(a, axis=1), ops.evaluate(cumsum(a, axis=1), target_language='cpp'))
+        assert np.allclose(np.cumsum(a, axis=2), ops.evaluate(cumsum(a, axis=2), target_language='cpp'))
 
-        assert np.allclose(np.cumprod(a, axis=0), cumprod(a, axis=0).evaluate_c())
-        assert np.allclose(np.cumprod(a, axis=1), cumprod(a, axis=1).evaluate_c())
-        assert np.allclose(np.cumprod(a, axis=2), cumprod(a, axis=2).evaluate_c())
+        assert np.allclose(np.cumprod(a, axis=0), ops.evaluate(cumprod(a, axis=0), target_language='cpp'))
+        assert np.allclose(np.cumprod(a, axis=1), ops.evaluate(cumprod(a, axis=1), target_language='cpp'))
+        assert np.allclose(np.cumprod(a, axis=2), ops.evaluate(cumprod(a, axis=2), target_language='cpp'))
 
         if ops.cuda_enabled:
             logging.log(logging.INFO, u'Testing CUDA')
-            assert np.allclose(np.cumsum(a, axis=0), cumsum(a, axis=0).evaluate_cuda())
-            assert np.allclose(np.cumsum(a, axis=1), cumsum(a, axis=1).evaluate_cuda())
-            assert np.allclose(np.cumsum(a, axis=2), cumsum(a, axis=2).evaluate_cuda())
+            assert np.allclose(np.cumsum(a, axis=0), ops.evaluate(cumsum(a, axis=0), target_language='cuda'))
+            assert np.allclose(np.cumsum(a, axis=1), ops.evaluate(cumsum(a, axis=1), target_language='cuda'))
+            assert np.allclose(np.cumsum(a, axis=2), ops.evaluate(cumsum(a, axis=2), target_language='cuda'))
 
-            assert np.allclose(np.cumprod(a, axis=0), cumprod(a, axis=0).evaluate_cuda())
-            assert np.allclose(np.cumprod(a, axis=1), cumprod(a, axis=1).evaluate_cuda())
-            assert np.allclose(np.cumprod(a, axis=2), cumprod(a, axis=2).evaluate_cuda())
+            assert np.allclose(np.cumprod(a, axis=0), ops.evaluate(cumprod(a, axis=0), target_language='cuda'))
+            assert np.allclose(np.cumprod(a, axis=1), ops.evaluate(cumprod(a, axis=1), target_language='cuda'))
+            assert np.allclose(np.cumprod(a, axis=2), ops.evaluate(cumprod(a, axis=2), target_language='cuda'))
 
 
 if __name__ == '__main__':
+    ops.clear_op_cache()
     unittest.main()

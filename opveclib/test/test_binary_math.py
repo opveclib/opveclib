@@ -14,7 +14,7 @@ import numpy as np
 from sys import _getframe
 from ..operator import Operator, evaluate
 from ..expression import output_like, position_in, minimum, maximum, power, arctan2, logical_and, logical_or
-from ..local import cuda_enabled
+from ..local import cuda_enabled, clear_op_cache
 
 
 def gen(input0, input1, ops_func, np_func):
@@ -28,7 +28,7 @@ def gen(input0, input1, ops_func, np_func):
 
             return output
 
-    op = BinaryMath(input0, input1, clear_cache=True)
+    op = BinaryMath(input0, input1)
     op_c = evaluate(op, target_language='cpp')
     assert np.allclose(op_c, np_func(input0, input1))
 
@@ -107,4 +107,5 @@ class TestBinary(unittest.TestCase):
 
 
 if __name__ == '__main__':
+    clear_op_cache()
     unittest.main()

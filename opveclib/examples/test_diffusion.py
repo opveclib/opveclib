@@ -63,7 +63,7 @@ def diffusion2DGPU(image, dt, l, s, nIter):
         >>> f = urllib.request.urlopen(fileURL + fileName)
         >>> with open(fileTmp, 'wb') as fHandle:
         ...         fHandle.write(f.read())
-        >>> imageIn = TensorToFloat64(mpimg.imread(fileTmp)).evaluate_c()
+        >>> imageIn = TensorToFloat64(mpimg.imread(fileTmp))
         >>> imageOut = diffusion2DGPU(imageIn, dt=5, l=3.5/255, s=3, nIter=3)
 
     """
@@ -76,13 +76,13 @@ def diffusion2DGPU(image, dt, l, s, nIter):
     test_config=tf.ConfigProto(allow_soft_placement=False)
     test_config.graph_options.optimizer_options.opt_level = -1
     with tf.Session(config=test_config) as sess:
-        I = AddBoundaryOp(image).as_tensorflow()
-        Gauss = Gauss2DOp(dimOut=[nGauss, nGauss]).as_tensorflow()
+        I = ops.as_tensorflow(AddBoundaryOp(image))
+        Gauss = ops.as_tensorflow(Gauss2DOp(dimOut=[nGauss, nGauss]))
 
         for iter in range(nIter):
-            G =  Filter2DOp(I, Gauss).as_tensorflow()
+            G =  ops.as_tensorflow(Filter2DOp(I, Gauss))
 
-            GRowPlus, GRowMinus, GColPlus, GColMinus = DiffusionGradient2DOp(G, l2=l2).as_tensorflow()
+            GRowPlus, GRowMinus, GColPlus, GColMinus = ops.as_tensorflow(DiffusionGradient2DOp(G, l2=l2))
 
             AlphaRow    = 1 - (- (GRowPlus + GRowMinus)) * nDim * dt
             BetaRow     = - GRowMinus * nDim * dt
@@ -92,12 +92,12 @@ def diffusion2DGPU(image, dt, l, s, nIter):
             BetaCol     = - GColMinus * nDim * dt
             GammaCol    = - GColPlus * nDim * dt
 
-            I = SolveDiagRow2DOp(AlphaRow, BetaRow, GammaRow, I).as_tensorflow() \
-              + SolveDiagCol2DOp(AlphaCol, BetaCol, GammaCol, I).as_tensorflow()
+            I = ops.as_tensorflow(SolveDiagRow2DOp(AlphaRow, BetaRow, GammaRow, I)) \
+              + ops.as_tensorflow(SolveDiagCol2DOp(AlphaCol, BetaCol, GammaCol, I))
             I = I / nDim
-            I = CopyBoundaryOp(I).as_tensorflow()
+            I = ops.as_tensorflow(CopyBoundaryOp(I))
 
-        I = DelBoundaryOp(I).as_tensorflow()
+        I = ops.as_tensorflow(DelBoundaryOp(I))
 
     return sess.run(I)
 
@@ -887,15 +887,15 @@ class TestAddBoundary(unittest.TestCase):
                 print("Test case nX = %d and nY = %d." % (nX, nY)) # Print parameters of the test case.
                 rng     = np.random.RandomState(1)
                 dataIn  = rng.uniform(0, 255, [nY, nX])
-                op      = AddBoundaryOp(dataIn, clear_cache=True)
+                op      = AddBoundaryOp(dataIn)
 
-                dataCPU = op.evaluate_c()
+                dataCPU = ops.evaluate(op, target_language='cpp')
                 dataNPY = addBoundaryNp(dataIn)
 
                 assert np.allclose(dataCPU, dataNPY)
 
                 if ops.local.cuda_enabled:
-                    dataGPU = op.evaluate_cuda()
+                    dataGPU = ops.evaluate(op, target_language='cuda')
                     assert np.allclose(dataGPU, dataNPY)
     test.regression = 0
 
@@ -915,13 +915,13 @@ class TestDelBoundary(unittest.TestCase):
 
                 rng     = np.random.RandomState(1)
                 dataIn  = rng.uniform(0, 255, [nY, nX])
-                op      = DelBoundaryOp(dataIn, clear_cache=True)
-                dataCPU = op.evaluate_c()
+                op      = DelBoundaryOp(dataIn)
+                dataCPU = ops.evaluate(op, target_language='cpp')
                 dataNPY = delBoundaryNp(dataIn)
                 assert np.allclose(dataCPU, dataNPY)
 
                 if ops.local.cuda_enabled:
-                    dataGPU = op.evaluate_cuda()
+                    dataGPU = ops.evaluate(op, target_language='cuda')
                     assert np.allclose(dataGPU, dataNPY)
     test.regression = 1
 
@@ -940,13 +940,13 @@ class TestCopyBoundary(unittest.TestCase):
 
                 rng     = np.random.RandomState(1)
                 dataIn  = rng.uniform(0, 255, [nY, nX])
-                op      = CopyBoundaryOp(dataIn, clear_cache=True)
-                dataCPU = op.evaluate_c()
+                op      = CopyBoundaryOp(dataIn)
+                dataCPU = ops.evaluate(op, target_language='cpp')
                 dataNPY = copyBoundaryNp(dataIn)
                 assert np.allclose(dataCPU, dataNPY)
 
                 if ops.local.cuda_enabled:
-                    dataGPU = op.evaluate_cuda()
+                    dataGPU = ops.evaluate(op, target_language='cuda')
                     assert np.allclose(dataGPU, dataNPY)
     test.regression = 1
 
@@ -966,14 +966,14 @@ class TestGauss2DOp(unittest.TestCase):
         for mY in [1, 2, 3, 9]:
             for mX in [1, 2, 3, 8]:
                 print("Test case mX = %d and mY = %d." % (mX, mY)) # Print parameters of the test case.
-                op = Gauss2DOp(dimOut=[mY,mX], clear_cache=True)
+                op = Gauss2DOp(dimOut=[mY,mX])
 
-                dataCPU = op.evaluate_c()
+                dataCPU = ops.evaluate(op, target_language='cpp')
                 dataNPY = gauss2DNp([mY,mX])
                 assert np.allclose(dataCPU, dataNPY)
 
                 if ops.local.cuda_enabled:
-                    dataGPU = op.evaluate_cuda()
+                    dataGPU = ops.evaluate(op, target_language='cuda')
                     assert np.allclose(dataGPU, dataNPY)
     test.regression = 1
 
@@ -998,14 +998,14 @@ class TestFilter2D(unittest.TestCase):
                         rng         = np.random.RandomState(1)
                         dataIn      = rng.uniform(0, 255, [nY, nX])
                         kernelIn    = rng.uniform(0, 255, [mY, mX])
-                        op          = Filter2DOp(dataIn, kernelIn, clear_cache=True)
-                        dataCPU     = op.evaluate_c()
+                        op          = Filter2DOp(dataIn, kernelIn)
+                        dataCPU     = ops.evaluate(op, target_language='cpp')
                         dataNPY     = filter2DNp(dataIn, kernelIn)
 
                         assert np.allclose(dataCPU, dataNPY)
 
                         if ops.local.cuda_enabled:
-                            dataGPU = op.evaluate_cuda()
+                            dataGPU = ops.evaluate(op, target_language='cuda')
                             assert np.allclose(dataGPU, dataNPY)
     test.regression = 1
 
@@ -1024,8 +1024,8 @@ class TestDiffusionGradient(unittest.TestCase):
                 image = rng.uniform(0, 255, [nY, nX])
                 l = 3.5/255
                 l2 = l*l
-                op = DiffusionGradient2DOp(image, l2=l2, clear_cache=True)
-                gradRowPlusCPU, gradRowMinusCPU, gradColPlusCPU, gradColMinusCPU = op.evaluate_c()
+                op = DiffusionGradient2DOp(image, l2=l2)
+                gradRowPlusCPU, gradRowMinusCPU, gradColPlusCPU, gradColMinusCPU = ops.evaluate(op, target_language='cpp')
                 gradRowPlusNPY, gradRowMinusNPY, gradColPlusNPY, gradColMinusNPY = diffusionGradient2DNp(image, l2)
 
                 assert np.allclose(gradRowPlusCPU, gradRowPlusNPY)
@@ -1034,7 +1034,7 @@ class TestDiffusionGradient(unittest.TestCase):
                 assert np.allclose(gradColMinusCPU, gradColMinusNPY)
 
                 if ops.local.cuda_enabled:
-                    gradRowPlusGPU, gradRowMinusGPU, gradColPlusGPU, gradColMinusGPU = op.evaluate_cuda()
+                    gradRowPlusGPU, gradRowMinusGPU, gradColPlusGPU, gradColMinusGPU = ops.evaluate(op, target_language='cuda')
                     assert np.allclose(gradRowPlusGPU, gradRowPlusNPY)
                     assert np.allclose(gradRowMinusGPU, gradRowMinusNPY)
                     assert np.allclose(gradColPlusGPU, gradColPlusNPY)
@@ -1061,25 +1061,24 @@ class TestSolveDiag2DOp(unittest.TestCase):
                 gamma   = rng.uniform(0, 1, [nY, nX])
                 y       = rng.uniform(0, 1, [nY, nX])
 
-                opRow   = SolveDiagRow2DOp(alpha, beta, gamma, y, clear_cache=True)
-                xRowCPU = opRow.evaluate_c()
+                opRow   = SolveDiagRow2DOp(alpha, beta, gamma, y)
+                xRowCPU = ops.evaluate(opRow, target_language='cpp')
                 xRowNPY = solveDiagRow2DNp(alpha, beta, gamma, y)
 
-                opCol   = SolveDiagCol2DOp(alpha, beta, gamma, y, clear_cache=True)
-                xColCPU = opCol.evaluate_c()
+                opCol   = SolveDiagCol2DOp(alpha, beta, gamma, y)
+                xColCPU = ops.evaluate(opCol, target_language='cpp')
                 xColNPY = solveDiagCol2DNp(alpha, beta, gamma, y)
 
                 assert np.allclose(xColCPU, xColNPY)
                 assert np.allclose(xRowCPU, xRowNPY)
 
                 if ops.local.cuda_enabled:
-                    xRowGPU = opRow.evaluate_cuda()
-                    xColGPU = opCol.evaluate_cuda()
+                    xRowGPU = ops.evaluate(opRow, target_language='cuda')
+                    xColGPU = ops.evaluate(opCol, target_language='cuda')
                     assert np.allclose(xColGPU, xColNPY)
                     assert np.allclose(xRowGPU, xRowNPY)
     test.regression = 1
 
-
-
 if __name__ == '__main__':
+    ops.clear_op_cache()
     unittest.main()

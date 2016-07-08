@@ -14,7 +14,7 @@ import numpy as np
 from sys import _getframe
 from ..operator import Operator, evaluate
 from ..expression import output, position_in, arange, cast
-from ..local import cuda_enabled
+from ..local import cuda_enabled, clear_op_cache
 
 
 class FillRange(Operator):
@@ -44,7 +44,7 @@ class TestArange(unittest.TestCase):
         num_elements = 10
         x = rng.uniform(-1, 1, num_elements)
 
-        right, left = FillRange(x, clear_cache=True)
+        right, left = FillRange(x)
 
         np_ref = x * np.arange(num_elements)
         right_c, left_c = evaluate([right, left], target_language='cpp')
@@ -57,4 +57,5 @@ class TestArange(unittest.TestCase):
             assert np.all(left_cuda == np_ref)
 
 if __name__ == '__main__':
+    clear_op_cache()
     unittest.main()

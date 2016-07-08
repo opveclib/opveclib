@@ -14,7 +14,7 @@ import errno
 import tensorflow as tf
 
 #: Version string for current version
-version = '0.3.6-dev'
+version = '1.0.0-dev'
 
 # set directories for cuda and operator cache
 cuda_directory = os.getenv('CUDA_HOME', '/usr/local/cuda')
@@ -30,6 +30,15 @@ except OSError as exception:
     if exception.errno != errno.EEXIST:
         raise
 
+
+def clear_op_cache():
+    """
+    Delete all cached operators in the current cache directory. Generally used to make sure there are no stale
+    operators in the cache when testing and debugging.
+    """
+    for filename in os.listdir(cache_directory):
+        if filename[0] == 'f':
+            os.remove(os.path.join(cache_directory, filename))
 
 #: Flag which indicates whether or not CUDA operators are enabled
 cuda_enabled = True

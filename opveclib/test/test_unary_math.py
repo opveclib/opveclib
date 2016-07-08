@@ -15,7 +15,7 @@ from sys import _getframe
 from ..operator import Operator, evaluate
 from ..expression import output_like, position_in, absolute, logical_not, arctan, arccos, arcsin, \
     cos, cosh, sin, sinh, tan, tanh, exp, log, log10, sqrt, ceil, floor
-from ..local import cuda_enabled
+from ..local import cuda_enabled, clear_op_cache
 
 
 def gen(input_tensor, ops_func, np_func, cuda_tolerance=None):
@@ -29,7 +29,7 @@ def gen(input_tensor, ops_func, np_func, cuda_tolerance=None):
 
             return output
 
-    op = UnaryMath(input_tensor, clear_cache=True)
+    op = UnaryMath(input_tensor)
     op_c = evaluate(op, target_language='cpp')
     assert np.allclose(op_c, np_func(input_tensor))
 
@@ -142,4 +142,5 @@ class TestUnaryMath(unittest.TestCase):
             gen(rand, lambda x: tan(x), lambda x: np.tan(x))
 
 if __name__ == '__main__':
+    clear_op_cache()
     unittest.main()

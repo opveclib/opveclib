@@ -12,13 +12,11 @@ from __future__ import print_function
 
 import unittest
 from sys import _getframe
-
 import numpy as np
-
 import tensorflow as tf
 from opveclib.expression import position_in, output_like
-from opveclib.operator import Operator
-from opveclib.local import cuda_enabled
+from opveclib.operator import Operator, as_tensorflow
+from opveclib.local import cuda_enabled, clear_op_cache
 
 
 class TestIntegration(unittest.TestCase):
@@ -36,7 +34,7 @@ class TestIntegration(unittest.TestCase):
         in1 = np.random.random(5).astype(np.float32)
         reference = 4*(in0 + in1)*(in0 + in1)
 
-        test_config=tf.ConfigProto(allow_soft_placement=False)
+        test_config = tf.ConfigProto(allow_soft_placement=False)
         # Don't perform optimizations for tests so we don't inadvertently run
         # gpu ops on cpu
         test_config.graph_options.optimizer_options.opt_level = -1
@@ -44,13 +42,13 @@ class TestIntegration(unittest.TestCase):
             with tf.device('/cpu:0'):
                 a = in0*2
                 b = in1*2
-                c = AddOp(a, b, clear_cache=True).as_tensorflow()
+                c = as_tensorflow(AddOp(a, b))
                 squared = tf.square(c)
             if cuda_enabled:
                 with tf.device('/gpu:0'):
                     a_gpu = in0*2
                     b_gpu = in1*2
-                    c_gpu = AddOp(a_gpu, b_gpu).as_tensorflow()
+                    c_gpu = as_tensorflow(AddOp(a_gpu, b_gpu))
                     squared_gpu = tf.square(c_gpu)
                 result, result_gpu = sess.run([squared, squared_gpu])
                 assert np.allclose(reference, result_gpu)
@@ -58,7 +56,6 @@ class TestIntegration(unittest.TestCase):
                 result = sess.run([squared])
 
         assert np.allclose(reference, result)
-
 
     def test_multiple_outputs(self):
         print('*** Running Test: ' + self.__class__.__name__ + ' function: ' + _getframe().f_code.co_name)
@@ -92,7 +89,7 @@ class TestIntegration(unittest.TestCase):
         np2 = np1*in2
         np3 = np1 + in2
 
-        test_config=tf.ConfigProto(allow_soft_placement=False)
+        test_config = tf.ConfigProto(allow_soft_placement=False)
         # Don't perform optimizations for tests so we don't inadvertently run
         # gpu ops on cpu
         test_config.graph_options.optimizer_options.opt_level = -1
@@ -101,13 +98,13 @@ class TestIntegration(unittest.TestCase):
             sq1 = tf.square(in1)
 
             with tf.device('/cpu:0'):
-                op = MultiOp(sq0, sq1, in2, clear_cache=True)
-                out0, out1, out2 = op.as_tensorflow()
+                op = MultiOp(sq0, sq1, in2)
+                out0, out1, out2 = as_tensorflow(op)
 
             if cuda_enabled:
                 with tf.device('/gpu:0'):
-                    op_gpu = MultiOp(sq0, sq1, in2, clear_cache=True)
-                    out0_gpu, out1_gpu, out2_gpu = op_gpu.as_tensorflow()
+                    op_gpu = MultiOp(sq0, sq1, in2)
+                    out0_gpu, out1_gpu, out2_gpu = as_tensorflow(op_gpu)
 
                 eval1, eval2, eval3, eval1_gpu, eval2_gpu, eval3_gpu = \
                     sess.run([out0, out1, out2, out0_gpu, out1_gpu, out2_gpu])
@@ -123,4 +120,5 @@ class TestIntegration(unittest.TestCase):
 
 
 if __name__ == '__main__':
+    clear_op_cache()
     unittest.main()

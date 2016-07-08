@@ -14,7 +14,7 @@ import numpy as np
 from sys import _getframe
 from ..operator import Operator, evaluate
 from ..expression import position_in, output_like
-from ..local import cuda_enabled
+from ..local import cuda_enabled, clear_op_cache
 
 
 class MultiOp(Operator):
@@ -45,7 +45,7 @@ class TestMultipleOutputs(unittest.TestCase):
         a = np.random.random(5)
         b = np.random.random(5)
         c = np.random.random(5)
-        op = MultiOp(a, b, c, clear_cache=True)
+        op = MultiOp(a, b, c)
         op_c = evaluate(op, target_language='cpp')
 
         assert np.allclose(op_c[0], a+b)
@@ -60,4 +60,5 @@ class TestMultipleOutputs(unittest.TestCase):
 
 
 if __name__ == '__main__':
+    clear_op_cache()
     unittest.main()

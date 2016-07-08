@@ -14,7 +14,7 @@ import numpy as np
 from sys import _getframe
 from ..operator import Operator, evaluate
 from ..expression import output, position_in, variable, uint32, float64, arange
-from ..local import cuda_enabled
+from ..local import cuda_enabled, clear_op_cache
 
 
 class Dot(Operator):
@@ -41,7 +41,7 @@ class TestDot(unittest.TestCase):
         rng = np.random.RandomState(1)
         x = rng.uniform(-1, 1, (100, 10))
         y = rng.uniform(-1, 1, (100, 10))
-        op = Dot(x, y, clear_cache=True)
+        op = Dot(x, y)
 
         op_np = np.sum(x*y, axis=1)
         op_c = evaluate(op, target_language='cpp')
@@ -52,4 +52,5 @@ class TestDot(unittest.TestCase):
             assert np.allclose(op_cuda, op_np)
 
 if __name__ == '__main__':
+    clear_op_cache()
     unittest.main()
