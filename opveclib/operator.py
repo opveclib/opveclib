@@ -70,16 +70,14 @@ class _DynamicLibOp(object):
 
             _DynamicLibOp._loaded_module = tf.load_op_library(dynamiclibop_path)
 
-        return _DynamicLibOp._loaded_module
-
-    @staticmethod
-    def register_shape_inference():
         if _DynamicLibOp._shape_infernence_registered is False:
             _DynamicLibOp._shape_infernence_registered = True
 
             @tf.RegisterShape("DynamicLib")
             def get_out_shapes(op):
                 return op.get_attr('out_shapes')
+
+        return _DynamicLibOp._loaded_module
 
 
 class _TensorParam(ctypes.Structure):
@@ -460,8 +458,8 @@ def _build_op_dag(*outputs):
                 proto_ref.is_leaf = True
                 proto_ref.dag_input_index = cur_ref['dag_input_index']
             else:
-                proto_ref.op_index = cur_ref['parent_index']
-                proto_ref.op_output_index = cur_ref['output_index']
+                proto_ref.op_index = int(cur_ref['parent_index'])
+                proto_ref.op_output_index = int(cur_ref['output_index'])
 
             ref_list.input_refs.add().CopyFrom(proto_ref)
 
@@ -469,8 +467,8 @@ def _build_op_dag(*outputs):
 
     for output_index in output_indices:
         proto_ref = lang.OperatorDAG.DAGOutputReference()
-        proto_ref.op_index = output_index['parent_index']
-        proto_ref.op_output_index = output_index['output_index']
+        proto_ref.op_index = int(output_index['parent_index'])
+        proto_ref.op_output_index = int(output_index['output_index'])
         op_dag.dag_outputs.add().CopyFrom(proto_ref)
 
     return op_dag, dag_inputs
@@ -535,7 +533,26 @@ def _make_generic_cuda(src, name):
     return generic_cuda_so_path
 
 
-def evaluate(output_list, profiling_iterations=1, target_language='cpp'):
+def evaluate(output_list, target_language='cpp'):
+    """
+    Evaluate a collection of OVL operator, mainly used for testing. This function uses a test operator
+    function for running the generated generic version of the operator so it does not depend on an external
+    execution runtime. This also means that this function only works for operators whose inputs are numpy arrays.
+
+    :param output_list: The outputs to evaluate
+    :param target_language: 'cpp' or 'cuda'
+
+    :return:  A list of numpy arrays for each operator output in output_list
+    """
+    evaluated_outputs = profile(output_list, target_language=target_language, profiling_iterations=1)[0]
+
+    if len(evaluated_outputs) == 1:
+        return evaluated_outputs[0]
+    else:
+        return evaluated_outputs
+
+
+def profile(output_list, target_language='cpp', profiling_iterations=1):
     """
     Evaluate a collection of OVL operator, mainly used for testing. This function uses a test operator
     function for running the generated generic version of the operator so it does not depend on an external
@@ -546,9 +563,8 @@ def evaluate(output_list, profiling_iterations=1, target_language='cpp'):
         Must be a positive int.
     :param target_language: 'cpp' or 'cuda'
 
-    :return:  If profiling_iterations is set to None, returns the numpy array, or list of numpy arrays if there are
-        multiple outputs, containing results from evaluation. If profiling_iterations is set, returns a tuple of the
-        output array(s), and a numpy array that contains the time, in ms, that each function evaluation took.
+    :return:  A tuple containing a list of numpy arrays for each operator output in output_list, and a dictionary of
+        numpy arrays containing the execution times for each operator in the operator DAG.
     """
 
     # Generate the protobuf header file.
@@ -672,6 +688,7 @@ def evaluate(output_list, profiling_iterations=1, target_language='cpp'):
     dag, inputs = _build_op_dag(*output_list)
 
     output_buffers = []
+    profiling_times = {}
     # compile all ops in the dag
     for op_index, op in enumerate(dag.operators):
         name = _op_hash(op)
@@ -716,16 +733,18 @@ def evaluate(output_list, profiling_iterations=1, target_language='cpp'):
         # evaluate the outputs
         if target_language == 'cpp':
             lib_path = _make_generic_c(op_c_generic, name)
-            err = test_c_op(lib_path, name+'_generic_cpp',
+            lib_path = ctypes.c_char_p(lib_path.encode('ascii'))
+            f_name = ctypes.c_char_p((name+'_generic_cpp').encode('ascii'))
+            err = test_c_op(lib_path, f_name,
                             cur_input_params, ctypes.c_size_t(num_inputs),
                             cur_output_params, ctypes.c_size_t(num_outputs),
                             eval_times_ms,
                             ctypes.c_size_t(profiling_iterations))
         elif target_language == 'cuda':
             lib_path = _make_generic_cuda(op_cuda_generic, name)
-            # TODO: expose this parameter to the user?
-
-            err = test_cuda_op(lib_path, name+'_generic_cuda',
+            lib_path = ctypes.c_char_p(lib_path.encode('ascii'))
+            f_name = ctypes.c_char_p((name+'_generic_cuda').encode('ascii'))
+            err = test_cuda_op(lib_path, f_name,
                                cur_input_params, ctypes.c_size_t(num_inputs),
                                cur_output_params, ctypes.c_size_t(num_outputs),
                                ctypes.c_uint16(_default_cuda_threads_per_block),
@@ -734,16 +753,14 @@ def evaluate(output_list, profiling_iterations=1, target_language='cpp'):
         else:
             raise ValueError(invalid_language)
 
+        profiling_times[name] = eval_times_ms
         # TODO: deallocate output buffers that are no longer needed
 
     outputs = []
     for out_ref in dag.dag_outputs:
         outputs.append(output_buffers[out_ref.op_index][out_ref.op_output_index])
 
-    if len(outputs) == 1:
-        return outputs[0]
-    else:
-        return outputs
+    return outputs, profiling_times
 
 
 def as_tensorflow(tensor_list):
@@ -751,7 +768,7 @@ def as_tensorflow(tensor_list):
     Create a DAG of TensorFlow operators based on a DAG OVL operators and register it with the current
     TensorFlow Graph. The inputs to the DAG must be numpy arrays or TensorFlow tensors.
 
-    :param tensors: output tensors to
+    :param tensor_list: operator outputs to convert to TensorFlow tensors
 
     :return: A TensorFlow operator.
     """

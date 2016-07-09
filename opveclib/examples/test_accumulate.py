@@ -99,12 +99,13 @@ def cumsum(x, axis=0):
     .. doctest::
 
         >>> import numpy
+        >>> from opveclib import evaluate
         >>> from opveclib.examples import cumsum
         >>> a = numpy.arange(1, 6)
-        >>> cumsum(a).evaluate_c()
+        >>> evaluate(cumsum(a))
         array([ 1,  3,  6, 10, 15])
         >>> b = numpy.arange(1,16).reshape(3,5)
-        >>> cumsum(b, axis=0).evaluate_c()
+        >>> evaluate(cumsum(b, axis=0))
         array([[ 1,  2,  3,  4,  5],
                [ 7,  9, 11, 13, 15],
                [18, 21, 24, 27, 30]])
@@ -132,12 +133,13 @@ def cumprod(x, axis=0):
     .. doctest::
 
         >>> import numpy
+        >>> from opveclib import evaluate
         >>> from opveclib.examples import cumprod
         >>> a = numpy.arange(1, 6)
-        >>> cumprod(a).evaluate_c()
+        >>> evaluate(cumprod(a))
         array([  1,   2,   6,  24, 120])
         >>> b = numpy.arange(1,16).reshape(3,5)
-        >>> cumprod(b, axis=0).evaluate_c()
+        >>> evaluate(cumprod(b, axis=0))
         array([[  1,   2,   3,   4,   5],
                [  6,  14,  24,  36,  50],
                [ 66, 168, 312, 504, 750]])

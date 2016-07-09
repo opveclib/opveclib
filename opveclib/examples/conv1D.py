@@ -268,9 +268,9 @@ def reference(x, v, mode, orientation, data_format):
 
         return output
 
-bb = 9
-cc = 50
-ee = 1000
+bb = 1
+cc = 1
+ee = 100
 k_num = 5
 
 a1 = np.random.random((bb, cc, ee))
@@ -287,17 +287,17 @@ for k_ee in range(13, 14):
             op = Convolution1D(a1, b, mode=md, kernel_orientation=orientation)
 
             # result1 =
-            assert np.allclose(op.evaluate_cuda(), y1)
+            assert np.allclose(ops.evaluate(op, target_language='cuda'), y1)
             # for d in range(1):
             a1[:] = a2[:]
-            assert np.allclose(op.evaluate_cuda(), y2)
+            assert np.allclose(ops.evaluate(op, target_language='cuda'), y2)
 
-            res, prof = op.evaluate_cuda(profiling_iterations=100)
+            res, prof = ops.profile(op, target_language='cpp', profiling_iterations=100)
 
-            # print('#################')
+            print(prof)
             # print(debug)
             # print(op[0, 0, :])
-            print(k_ee, md, orientation, (t2-t1)*1000, np.min(prof))
+            print(k_ee, md, orientation, (t2-t1)*1000, np.min(prof.values()[0]))
             # assert np.allclose(result1, y1)
             # assert np.allclose(result2, y2)
 

@@ -54,6 +54,7 @@ def diffusion2DGPU(image, dt, l, s, nIter):
 
     .. doctest::
 
+        >>> from opveclib import evaluate
         >>> from opveclib.examples.test_diffusion import TensorToFloat64, diffusion2DGPU
         >>> from six.moves import urllib
         >>> import matplotlib.image as mpimg
@@ -63,7 +64,7 @@ def diffusion2DGPU(image, dt, l, s, nIter):
         >>> f = urllib.request.urlopen(fileURL + fileName)
         >>> with open(fileTmp, 'wb') as fHandle:
         ...         fHandle.write(f.read())
-        >>> imageIn = TensorToFloat64(mpimg.imread(fileTmp))
+        >>> imageIn = evaluate(TensorToFloat64(mpimg.imread(fileTmp)))
         >>> imageOut = diffusion2DGPU(imageIn, dt=5, l=3.5/255, s=3, nIter=3)
 
     """
