@@ -12,7 +12,7 @@ from __future__ import absolute_import
 import os.path
 from test_graph import loadGraphFromTextFile, countTrianglesCPU, countTrianglesGPU, countTrianglesNp
 import opveclib as ops
-import urllib.request
+from six.moves import urllib
 import gzip
 import os.path
 
@@ -29,13 +29,14 @@ def downloadAndUnzipGraph(urlName, tmpName):
     if not os.path.isfile(tmpName):
         print("Downloading data file %s." % (urlName))
 
-    with urllib.request.urlopen(urlName) as f:
-        tmpNameGz = tmpName + ".gz"
-        with open(tmpNameGz, 'wb') as fCompressed:
-            fCompressed.write(f.read())
-            decompressedFile = gzip.GzipFile(tmpNameGz, mode='rb')
-            with open(tmpName, 'w') as fDecompressed:
-                fDecompressed.write(decompressedFile.read().decode("utf-8"))
+    f = urllib.request.urlopen(urlName)
+    tmpNameGz = tmpName + ".gz"
+    with open(tmpNameGz, 'wb') as fCompressed:
+        fCompressed.write(f.read())
+        fCompressed.close()
+        decompressedFile = gzip.GzipFile(tmpNameGz, mode='rb')
+        with open(tmpName, 'w') as fDecompressed:
+            fDecompressed.write(decompressedFile.read().decode("utf-8"))
 
 if __name__ == '__main__':
     """Demo program for the counting of triangles in an undirected graph.
