@@ -12,12 +12,12 @@ from __future__ import print_function
 import unittest
 import numpy as np
 from sys import _getframe
-from ..operator import Operator, evaluate
+from ..operator import _Operator, evaluate
 from ..expression import position_in, output_like
 from ..local import cuda_enabled, clear_op_cache
 
 
-class MultiOp(Operator):
+class MultiOp(_Operator):
 
     # first output is the sum of first two inputs
     # second output is the sum of the first two multiplied by the third

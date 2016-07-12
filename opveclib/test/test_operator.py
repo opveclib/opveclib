@@ -11,11 +11,11 @@
 from __future__ import print_function
 import unittest
 import numpy as np
-from ..operator import Operator, _build_op_dag
+from ..operator import _Operator, _build_op_dag
 from ..expression import position_in, output_like
 
 
-class AddOne(Operator):
+class AddOne(_Operator):
     def op(self, x, y):
         assert x.shape == y.shape
 

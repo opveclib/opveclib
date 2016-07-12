@@ -12,12 +12,12 @@ from __future__ import print_function
 import unittest
 import numpy as np
 from sys import _getframe
-from ..operator import Operator, evaluate
+from ..operator import _Operator, evaluate
 from ..expression import position_in, output_like, if_, elif_, else_
 from ..local import cuda_enabled, clear_op_cache
 
 
-class Clip(Operator):
+class Clip(_Operator):
     def op(self, arg, threshold1, threshold2):
         pos = position_in(arg.shape)
 

@@ -95,7 +95,7 @@ class _OperatorOutput(object):
     Class which represents an un-evaluated output tensor, used for building lazily evaluated DAGs of operators
     """
     def __init__(self, parent, index):
-        if not isinstance(parent, Operator):
+        if not isinstance(parent, _Operator):
             raise TypeError('parent must be an Operator')
         if not isinstance(index, int):
             raise TypeError('index must be an int')
@@ -115,7 +115,7 @@ def _resolve_output(x):
     :raises ValueError: When argument is a multi-output Operator
     :raises TypeError: When argument is neither an Operator nor an _OperatorOutput
     """
-    if isinstance(x, Operator):
+    if isinstance(x, _Operator):
         if len(x.output_types) is not 1:
             raise ValueError('Only a single-output Operator can be used as an input to another operator. '
                              'Index a specific output from multi-output Operators.')
@@ -130,131 +130,27 @@ def _op_hash(op):
     return 'f' + hashlib.sha224(op.SerializeToString() + version.encode('utf-8')).hexdigest()
 
 
-def operator(forbid_none_constants=True):
-    def wrapper(op_function):
-        if inspect.getargspec(op_function).keywords is not None:
-            raise SyntaxError('Operator functions cannot accept keyword arguments without default values.')
+class _OpGenerator(object):
+    def __init__(self, op_function, forbid_none_valued_constants):
+        self.op_function = op_function
+        self.forbid_none_valued_constants = forbid_none_valued_constants
 
-        # TODO: implement vararg input parsing
-        if inspect.getargspec(op_function).varargs is not None:
-            raise NotImplementedError('Operator functions cannot accept varags. '
-                                      'This functionality will be enabled in the future.')
+    def __call__(self, *inputs, **defined_constants):
+        func_args, func_varargs, func_keywords, func_defaults = inspect.getargspec(self.op_function)
+        input_names = func_args[:-len(func_defaults)]
+        constants = dict(zip(func_args[-len(func_defaults):], func_defaults))
+        constants.update(defined_constants)
 
-        @wraps(op_function)
-        def create_op(*inputs, **defined_constants):
-            func_args, func_varargs, func_keywords, func_defaults = inspect.getargspec(op_function)
-            input_names = func_args[:-len(func_defaults)]
-            constants = dict(zip(func_args[-len(func_defaults):], func_defaults))
-            constants.update(defined_constants)
+        f_name = self.op_function.__name__
 
-            f_name = op_function.__name__
+        if self.forbid_none_valued_constants:
+            for key in constants.keys():
+                if constants[key] is None:
+                    raise ValueError(f_name + ' argument ' + key + ' is None, which implies an unset constant.\n'
+                                     '  If a None constant is meaningful for this operator, the operator should be '
+                                     'defined with the appropriate decorator flag.')
 
-            if forbid_none_constants:
-                for key in constants.keys():
-                    if constants[key] is None:
-                        raise ValueError(f_name + ' argument ' + key + ' is None, which implies an unset constant.\n'
-                                         '  If a None constant is meaningful for this operator, the operator should be '
-                                         'defined with the appropriate decorator flag.')
-
-            input_types = []
-            for inp_n, inp in enumerate(inputs):
-                try:
-                    inp = _resolve_output(inp)
-                except TypeError:
-                    pass
-
-                try:
-                    input_types.append(TensorType.like(inp))
-                except AttributeError:
-                    raise TypeError('Unexpectedly received a ' + inp.__class__.__name__ +
-                                    ' instead of a tensor at argument position ' +
-                                    str(inp_n + 1) + ' in the call to ' + f_name + '.  '
-                                    'Should this argument be passed as a constant (keyword argument) instead?')
-
-            num_inputs = len(input_types)
-
-            if len(input_names) != num_inputs:
-                err_msg = '\n'
-                err_msg += f_name + ' function signature expects ' + str(len(input_names)) + \
-                    ' input tensor argument(s):\n' + str(input_names) + '\n'
-                err_msg += 'but was supplied with ' + str(num_inputs) + '.\n'
-                if len(input_names) > num_inputs:
-                    remaining_names = input_names[num_inputs - len(input_names):]
-                    err_msg += 'Should ' + str(remaining_names) + ' be passed to constructor as constant?'
-                raise TypeError(err_msg)
-
-            ExpressionDAG.clear()
-
-            # create input expressions
-            input_exprs = []
-            for cur_type in input_types:
-                input_exprs.append(input(cur_type))
-
-            # interpret function to build up ExpressionDAG
-            output_exprs = op_function(*input_exprs, **constants)
-
-            if output_exprs is None:
-                raise ValueError('No outputs returned from op function')
-
-            # wrap as list if only one output
-            try:
-                len(output_exprs)
-            except TypeError:
-                output_exprs = [output_exprs]
-
-            # make sure number of returned parameters equals the number of declared outputs
-            if len(output_exprs) != ExpressionDAG.num_outputs:
-                raise ValueError('Defined ' + str(ExpressionDAG.num_outputs) + ' outputs, but returned ' +
-                                 str(len(output_exprs)) +
-                                 '. Number of defined outputs must equal number of returned outputs.')
-
-            # make sure all returned values are output expressions
-            # reorder output io_index according to return order instead of declaration order
-            output_types = []
-            prev_index = []
-            for index, expr in enumerate(output_exprs):
-                if type(expr) is not OutputTensor:
-                    raise TypeError('User functions must only return outputs. Instead got:\n' + str(expr))
-                prev_index.append(ExpressionDAG.expr_index(expr))
-                expr.proto_expr.io_index = index
-                output_types.append(TensorType.like(expr))
-
-            # reorder declaration of outputs in expression dag
-            prev_index.sort()
-            for index, expr in zip(prev_index, output_exprs):
-                ExpressionDAG.exprs[index] = expr
-                ExpressionDAG.expr_ids[index] = id(expr)
-
-            expression_dag = ExpressionDAG.as_proto()
-            ExpressionDAG.clear()
-
-            return expression_dag
-
-        return create_op
-    return wrapper
-
-
-class Operator(object):
-    """
-    Class which is extended to define a new operator and its gradient.
-    """
-
-    @staticmethod
-    def _unwrap_single(x):
-        if len(x) is 1:
-            return x[0]
-        else:
-            return x
-
-    def __init__(self, *inputs, **kwargs):
-        # set default options
-        self._options = kwargs
-
-        tf.logging.log(tf.logging.DEBUG, 'Creating Op ' + self.__class__.__name__)
-
-        self._inputs = list(inputs)
-
-        self._input_types = []
+        input_types = []
         for inp_n, inp in enumerate(inputs):
             try:
                 inp = _resolve_output(inp)
@@ -262,48 +158,19 @@ class Operator(object):
                 pass
 
             try:
-                self._input_types.append(TensorType.like(inp))
+                input_types.append(TensorType.like(inp))
             except AttributeError:
-                raise TypeError('Received a ' + inp.__class__.__name__ + ' instead of a tensor at argument position ' +
-                                str(inp_n + 1) + ' in the Op constructor. ' +
+                raise TypeError('Unexpectedly received a ' + inp.__class__.__name__ +
+                                ' instead of a tensor at argument position ' +
+                                str(inp_n + 1) + ' in the call to ' + f_name + '.  '
                                 'Should this argument be passed as a constant (keyword argument) instead?')
 
-        num_inputs = len(self._input_types)
+        num_inputs = len(input_types)
 
-        # parse arg spec of the function and build up a dictionary of defaults to be applied if constants
-        # of the same name are not passed to contructor
-        arg_spec = inspect.getargspec(self.op).args[1:]
-        defaults = inspect.getargspec(self.op).defaults
-        defaults_dict = {}
-        if defaults is not None:
-            for default_n, cur_default in enumerate(defaults):
-                defaults_dict[arg_spec[default_n-len(defaults)]] = cur_default
-
-        # keep track of which names are present in the constants dict or the defaults dict.
-        input_names = []
-        constant_names = []
-        default_names = []
-        for arg in arg_spec:
-            if arg in list(self._options.keys()):
-                constant_names.append(arg)
-            elif arg in list(defaults_dict.keys()):
-                default_names.append(arg)
-            else:
-                input_names.append(arg)
-
-        # raise an error if the number of non-keyword args in the constructor is different from the number of
-        # non-constant inputs to the function
         if len(input_names) != num_inputs:
             err_msg = '\n'
-            additional = ''
-            if len(constant_names) > 0:
-                err_msg += 'op function received ' + str(len(constant_names)) + ' constants:\n' + \
-                           str(constant_names) + '\n'
-                additional = ' additional'
-
-            err_msg += 'Based on constructor call pattern, op function signature expects ' + \
-                       str(len(input_names)) + additional + \
-                       ' input tensor argument(s):\n' + str(input_names) + '\n'
+            err_msg += f_name + ' function signature expects ' + str(len(input_names)) + \
+                ' input tensor argument(s):\n' + str(input_names) + '\n'
             err_msg += 'but was supplied with ' + str(num_inputs) + '.\n'
             if len(input_names) > num_inputs:
                 remaining_names = input_names[num_inputs - len(input_names):]
@@ -314,22 +181,12 @@ class Operator(object):
 
         # create input expressions
         input_exprs = []
-        for cur_type in self._input_types:
+        for cur_type in input_types:
             input_exprs.append(input(cur_type))
 
-        args = []
-        expr_n = 0
-        for cur_arg in arg_spec:
-            if cur_arg in list(self._options.keys()):
-                args.append(self._options[cur_arg])
-            elif cur_arg in defaults_dict:
-                args.append(defaults_dict[cur_arg])
-            else:
-                args.append(input_exprs[expr_n])
-                expr_n += 1
-
         # interpret function to build up ExpressionDAG
-        output_exprs = self.op(*args)
+        output_exprs = self.op_function(*input_exprs, **constants)
+
         if output_exprs is None:
             raise ValueError('No outputs returned from op function')
 
@@ -347,74 +204,82 @@ class Operator(object):
 
         # make sure all returned values are output expressions
         # reorder output io_index according to return order instead of declaration order
-        self.output_types = []
+        output_types = []
         prev_index = []
         for index, expr in enumerate(output_exprs):
             if type(expr) is not OutputTensor:
                 raise TypeError('User functions must only return outputs. Instead got:\n' + str(expr))
             prev_index.append(ExpressionDAG.expr_index(expr))
             expr.proto_expr.io_index = index
-            self.output_types.append(TensorType.like(expr))
+            output_types.append(TensorType.like(expr))
+
         # reorder declaration of outputs in expression dag
         prev_index.sort()
         for index, expr in zip(prev_index, output_exprs):
             ExpressionDAG.exprs[index] = expr
             ExpressionDAG.expr_ids[index] = id(expr)
 
-        self.expression_dag = ExpressionDAG.as_proto()
+        expression_dag = ExpressionDAG.as_proto()
         ExpressionDAG.clear()
 
-        #
-        # try:
-        #     self.grad()
-        # except UndefinedGradientError:
-        #     # gradient is not defined, do not parse
-        #     pass
-        # except TypeError:
-        #     grad_arg_spec = inspect.getargspec(self.grad).args[1:]
-        #
-        #     # make sure initial part of gradient function signature matches op function signature
-        #     for arg_n, op_arg in enumerate(inspect.getargspec(self.op).args[1:]):
-        #         if op_arg != grad_arg_spec[arg_n]:
-        #             raise TypeError('Gradient function must have same initial argument names as the op function. ' +
-        #                             'Expected arg "' + str(op_arg) + '", but got "' + str(grad_arg_spec[arg_n]) + '".')
-        #
-        #     grad_input_types = []
-        #     for t in self._input_types:
-        #         grad_input_types.append(TensorType.like(t))
-        #     for t in self.output_types:
-        #         grad_input_types.append(TensorType.like(t))
-        #
-            # grad_types, self.grad_expression_dag = interpret_function(grad_input_types, self.grad)
-            #
-            # for grad_n, grad_type in enumerate(grad_types):
-            #     if grad_type != self._input_types[grad_n]:
-            #         raise TypeError('Gradient function must output tensor list with a types identical '
-            #                         'to the op functions inputs.')
+        return _Operator(expression_dag, output_types, inputs)
+
+
+def operator(forbid_none_valued_constants=True):
+    def wrapper(op_function):
+        if inspect.getargspec(op_function).keywords is not None:
+            raise SyntaxError('Operator functions cannot accept keyword arguments without default values.')
+
+        # TODO: implement vararg input parsing
+        if inspect.getargspec(op_function).varargs is not None:
+            raise NotImplementedError('Operator functions cannot accept varags. '
+                                      'This functionality will be enabled in the future.')
+
+        # @wraps(op_function)
+        # def create_op(*inputs, **defined_constants):
+
+        return _OpGenerator(op_function, forbid_none_valued_constants)
+    return wrapper
+
+
+def gradient(op):
+    def wrapper(grad_function):
+        # print(op.create_op)
+        # print(op.op_function)
+        pass
+        # func_args, func_varargs, func_keywords, func_defaults = inspect.getargspec(grad_function)
+
+        # # make sure initial part of gradient function signature matches op function signature
+        # for arg_n, op_arg in enumerate(inspect.getargspec(self.op).args[1:]):
+        #     if op_arg != grad_arg_spec[arg_n]:
+        #         raise TypeError('Gradient function must have same initial argument names as the op function. ' +
+        #                         'Expected arg "' + str(op_arg) + '", but got "' + str(grad_arg_spec[arg_n]) + '".')
+        # grad_input_types = []
+        # for t in self._input_types:
+        #     grad_input_types.append(TensorType.like(t))
+        # for t in self.output_types:
+        #     grad_input_types.append(TensorType.like(t))
+
+    return wrapper
+
+
+class _Operator(object):
+    """
+    Class which is extended to define a new operator and its gradient.
+    """
+    def __init__(self, dag, output_types, inputs):
+        self.inputs = inputs
+        self.expression_dag = dag
+        self.output_types = output_types
+
+        self.gradient_op_dag = None
+        self.gradient_differentials = None
 
     def __getitem__(self, item):
         return _OperatorOutput(self, item)
 
-    def op(self, *input_tensors, **constants):
-        """
-        Abstract member that must be implemented to define an operator
-
-        :param input_tensors: tensor arguments
-        :param constants: constant arguments, passed in by keyword
-        :return: Must return a list of output tensors, defined by this function
-        """
-        raise NotImplementedError("Abstract class")
-
-    def grad(self, *input_tensors, **constants):
-        """
-        Abstract member that must be implemented to define an operator's gradient function
-
-        :param input_tensors: tensor arguments which must be in the same order and same type as the inputs and outputs
-            of the op function
-        :param constants: constant arguments, passed in by keyword
-        :return: Must return a list of output tensors, equal in TensorType to the inputs of the op function
-        """
-        raise UndefinedGradientError()
+    def register_grad(self):
+        pass
 
 
 def _build_op_dag(*outputs):
@@ -432,7 +297,7 @@ def _build_op_dag(*outputs):
     dag_input_ids = []
 
     def traverse(cur_node):
-        if not isinstance(cur_node, Operator):
+        if not isinstance(cur_node, _Operator):
             raise TypeError()
 
         cur_id = id(cur_node)
@@ -448,7 +313,7 @@ def _build_op_dag(*outputs):
             # tabulate each input tensor (edge) for this op. visit parent ops if inputs come from other ops.
             cur_input_indices = []
             max_depth = -1
-            for cur_input in cur_node._inputs:
+            for cur_input in cur_node.inputs:
                 try:
                     resolved = _resolve_output(cur_input)
                     parent = resolved.parent

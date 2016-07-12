@@ -158,7 +158,7 @@ def diffusion2DNp(image, dt, l, s, nIter):
     return delBoundaryNp(I)
 
 
-class TensorToFloat64(ops.Operator):
+class TensorToFloat64(ops._Operator):
     """
     Convert a tensor from any type into a float64 type using the ops.cast function.
     """
@@ -175,7 +175,7 @@ class TensorToFloat64(ops.Operator):
 
         return dataOut
 
-class AddBoundaryOp(ops.Operator):
+class AddBoundaryOp(ops._Operator):
     """Adds a one pixel boundary to a 2D field.
 
     This class defines an operator to add a boundary to a 2D field.
@@ -268,7 +268,7 @@ def addBoundaryNp(dataIn):
     return dataOut
 
 
-class DelBoundaryOp(ops.Operator):
+class DelBoundaryOp(ops._Operator):
     """Deletes values from a one pixel wide boundary for a 2D field.
 
     This class defines an operator to delete the boundary values of a 2D field.
@@ -330,7 +330,7 @@ def delBoundaryNp(dataIn):
     return dataOut
 
 
-class CopyBoundaryOp(ops.Operator):
+class CopyBoundaryOp(ops._Operator):
     """Copies values from inside the boundary to the one pixel boundary for 2D field.
 
     This class defines an operator to copy the boundary values of a 2D field.
@@ -421,7 +421,7 @@ def copyBoundaryNp(dataIn):
     return dataOut
 
 
-class Gauss2DOp(ops.Operator):
+class Gauss2DOp(ops._Operator):
     """Gaussian 2D kernel.
 
     Define a 2D Gaussian kernel.
@@ -499,7 +499,7 @@ def gauss2DNp(dimOut):
 
     return dataOut
 
-class Filter2DOp(ops.Operator):
+class Filter2DOp(ops._Operator):
     """Filtering for 2D input data and kernels using the circular boundary condition.
 
     The filtering function is not an efficient implementation for large kernels, typically larger than 7 x 7 pixels.
@@ -579,7 +579,7 @@ def filter2DNp(dataIn, kernelIn):
 
 
 
-class DiffusionGradient2DOp(ops.Operator):
+class DiffusionGradient2DOp(ops._Operator):
     """Computes the gradient for image diffusion.
 
     The method uses a forward (plus) and backward (minus) difference to compute the gradient of the provided image.
@@ -651,7 +651,7 @@ def diffusionGradient2DNp(image, l2):
 
 
 
-class SolveDiagRow2DOp(ops.Operator):
+class SolveDiagRow2DOp(ops._Operator):
     """Solves a sparse linear equation system of the form: gamma(i-1) x(i-1) + alpha(i) x(i) + beta(i+1) x(i+1) = Y(i).
     The solution is computed for ROWS.
 
@@ -756,7 +756,7 @@ def solveDiagRow2DNp(alpha, beta, gamma, y):
     return x
 
 
-class SolveDiagCol2DOp(ops.Operator):
+class SolveDiagCol2DOp(ops._Operator):
     """Solves a sparse linear equation system of the form: gamma(i-1) x(i-1) + alpha(i) x(i) + beta(i+1) x(i+1) = Y(i).
     The solution is computed for COLUMNS.
 

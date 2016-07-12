@@ -21,7 +21,7 @@ import logging
 import opveclib as ops
 
 
-class Accumulate(ops.Operator):
+class Accumulate(ops._Operator):
     def op(self, x, inner_fcn, axis):
         """
         Define the operator function.

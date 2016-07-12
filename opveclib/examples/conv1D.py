@@ -12,7 +12,7 @@ import numpy as np
 import opveclib as ops
 
 
-class Convolution1D(ops.Operator):
+class Convolution1D(ops._Operator):
     def op(self, x, v, kernel_orientation='as-is', stride=1, mode='same', data_format='NCE'):
         """
         :param x: An input tensor of shape [num_batches, num_channels, num_elements].

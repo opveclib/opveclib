@@ -15,7 +15,7 @@ import numpy as np
 import opveclib as ops
 
 
-class GraphTriangleCountOp(ops.Operator):
+class GraphTriangleCountOp(ops._Operator):
     """Counts the triangles in an undirected graph.
 
     Notice that this method assumes that the graph is given as an adjacency list where all lists with vertex neighbors

@@ -14,16 +14,16 @@ import unittest
 from sys import _getframe
 import numpy as np
 import tensorflow as tf
-from opveclib.expression import position_in, output_like
-from opveclib.operator import Operator, as_tensorflow
-from opveclib.local import cuda_enabled, clear_op_cache
+from ..expression import position_in, output_like
+from ..operator import _Operator, as_tensorflow
+from ..local import cuda_enabled, clear_op_cache
 
 
 class TestIntegration(unittest.TestCase):
     def test_single_output(self):
         print('*** Running Test: ' + self.__class__.__name__ + ' function: ' + _getframe().f_code.co_name)
 
-        class AddOp(Operator):
+        class AddOp(_Operator):
             def op(self, x, y):
                 pos = position_in(x.shape)
                 out = output_like(x)
@@ -60,7 +60,7 @@ class TestIntegration(unittest.TestCase):
     def test_multiple_outputs(self):
         print('*** Running Test: ' + self.__class__.__name__ + ' function: ' + _getframe().f_code.co_name)
 
-        class MultiOp(Operator):
+        class MultiOp(_Operator):
             # first output is the sum of first two inputs
             # second output is the sum of the first two multiplied by the third
             # third output is sum of all three inputs

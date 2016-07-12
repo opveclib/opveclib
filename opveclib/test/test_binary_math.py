@@ -12,13 +12,13 @@ from __future__ import print_function
 import unittest
 import numpy as np
 from sys import _getframe
-from ..operator import Operator, evaluate
+from ..operator import _Operator, evaluate
 from ..expression import output_like, position_in, minimum, maximum, power, arctan2, logical_and, logical_or
 from ..local import cuda_enabled, clear_op_cache
 
 
 def gen(input0, input1, ops_func, np_func):
-    class BinaryMath(Operator):
+    class BinaryMath(_Operator):
         def op(self, input0, input1):
 
             output = output_like(input0)

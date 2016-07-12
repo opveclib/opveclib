@@ -14,7 +14,7 @@ import numpy as np
 from sys import _getframe
 import tensorflow as tf
 from opveclib.expression import exp, logical_and, variable, if_, tanh, position_in, output_like
-from opveclib.operator import Operator
+from opveclib.operator import _Operator
 #
 #
 # def sig(arg):

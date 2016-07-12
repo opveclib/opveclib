@@ -15,7 +15,7 @@ import opveclib as ops
 import sys
 import tensorflow as tf
 
-class KMeansMinDistOp(ops.Operator):
+class KMeansMinDistOp(ops._Operator):
     """Minimum distance computation for kMean clustering.
 
     For each data point find the closest cluster center and keep that assignment stored in an index.
@@ -54,7 +54,7 @@ class KMeansMinDistOp(ops.Operator):
 
         return minIndex
 
-class KMeansNewCenOp(ops.Operator):
+class KMeansNewCenOp(ops._Operator):
     """Computation of new cluster centers for kMeans.
 
     Use the assignment index of closest data points for a cluster center and recomputes the cluster centers

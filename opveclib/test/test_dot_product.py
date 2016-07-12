@@ -12,12 +12,12 @@ from __future__ import print_function
 import unittest
 import numpy as np
 from sys import _getframe
-from ..operator import Operator, evaluate
+from ..operator import _Operator, evaluate
 from ..expression import output, position_in, variable, uint32, float64, arange
 from ..local import cuda_enabled, clear_op_cache
 
 
-class Dot(Operator):
+class Dot(_Operator):
     def op(self, input0, input1):
         num_vectors = input0.shape[0]
 

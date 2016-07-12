@@ -12,14 +12,14 @@ from __future__ import print_function
 import unittest
 import numpy as np
 from sys import _getframe
-from ..operator import Operator, evaluate
+from ..operator import _Operator, evaluate
 from ..expression import output_like, position_in, absolute, logical_not, arctan, arccos, arcsin, \
     cos, cosh, sin, sinh, tan, tanh, exp, log, log10, sqrt, ceil, floor
 from ..local import cuda_enabled, clear_op_cache
 
 
 def gen(input_tensor, ops_func, np_func, cuda_tolerance=None):
-    class UnaryMath(Operator):
+    class UnaryMath(_Operator):
         def op(self, input0):
 
             output = output_like(input0)

@@ -12,12 +12,12 @@ from __future__ import print_function
 import unittest
 import numpy as np
 from sys import _getframe
-from ..operator import Operator, evaluate
+from ..operator import _Operator, evaluate
 from ..expression import output, position_in, arange, cast
 from ..local import cuda_enabled, clear_op_cache
 
 
-class FillRange(Operator):
+class FillRange(_Operator):
     """
     Fill two output arrays, one increasing to the right, one decreasing to the left
     """

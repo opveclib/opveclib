@@ -12,7 +12,7 @@ from __future__ import print_function
 import unittest
 import numpy as np
 from sys import _getframe
-from ..operator import Operator, evaluate
+from ..operator import _Operator, evaluate
 from ..expression import position_in, output_like
 from ..local import clear_op_cache
 
@@ -23,7 +23,7 @@ class TestOutputReturn(unittest.TestCase):
     def test_return_reordering(self):
         print('*** Running Test: ' + self.__class__.__name__ + ' function: ' + _getframe().f_code.co_name)
 
-        class ReorderOp(Operator):
+        class ReorderOp(_Operator):
             def op(self, input0):
                 pos = position_in(input0.shape)
 
@@ -56,7 +56,7 @@ class TestOutputReturn(unittest.TestCase):
     def test_output_error(self):
         print('*** Running Test: ' + self.__class__.__name__ + ' function: ' + _getframe().f_code.co_name)
 
-        class TooFew(Operator):
+        class TooFew(_Operator):
             def op(self, input0):
                 pos = position_in(input0.shape)
 
@@ -84,7 +84,7 @@ class TestOutputReturn(unittest.TestCase):
         else:
             assert False
 
-        class NoOutputs(Operator):
+        class NoOutputs(_Operator):
             def op(self, input0):
                 pos = position_in(input0.shape)
 
@@ -99,7 +99,7 @@ class TestOutputReturn(unittest.TestCase):
         else:
             assert False
 
-        class BadReturn(Operator):
+        class BadReturn(_Operator):
             def op(self, input0):
                 pos = position_in(input0.shape)
 
