@@ -16,7 +16,7 @@ import inspect
 import subprocess
 import string
 import re
-
+from functools import wraps
 import tensorflow as tf
 import numpy as np
 from numpy.ctypeslib import ndpointer
@@ -130,74 +130,114 @@ def _op_hash(op):
     return 'f' + hashlib.sha224(op.SerializeToString() + version.encode('utf-8')).hexdigest()
 
 
+def operator(forbid_none_constants=True):
+    def wrapper(op_function):
+        if inspect.getargspec(op_function).keywords is not None:
+            raise SyntaxError('Operator functions cannot accept keyword arguments without default values.')
+
+        # TODO: implement vararg input parsing
+        if inspect.getargspec(op_function).varargs is not None:
+            raise NotImplementedError('Operator functions cannot accept varags. '
+                                      'This functionality will be enabled in the future.')
+
+        @wraps(op_function)
+        def create_op(*inputs, **defined_constants):
+            func_args, func_varargs, func_keywords, func_defaults = inspect.getargspec(op_function)
+            input_names = func_args[:-len(func_defaults)]
+            constants = dict(zip(func_args[-len(func_defaults):], func_defaults))
+            constants.update(defined_constants)
+
+            f_name = op_function.__name__
+
+            if forbid_none_constants:
+                for key in constants.keys():
+                    if constants[key] is None:
+                        raise ValueError(f_name + ' argument ' + key + ' is None, which implies an unset constant.\n'
+                                         '  If a None constant is meaningful for this operator, the operator should be '
+                                         'defined with the appropriate decorator flag.')
+
+            input_types = []
+            for inp_n, inp in enumerate(inputs):
+                try:
+                    inp = _resolve_output(inp)
+                except TypeError:
+                    pass
+
+                try:
+                    input_types.append(TensorType.like(inp))
+                except AttributeError:
+                    raise TypeError('Unexpectedly received a ' + inp.__class__.__name__ +
+                                    ' instead of a tensor at argument position ' +
+                                    str(inp_n + 1) + ' in the call to ' + f_name + '.  '
+                                    'Should this argument be passed as a constant (keyword argument) instead?')
+
+            num_inputs = len(input_types)
+
+            if len(input_names) != num_inputs:
+                err_msg = '\n'
+                err_msg += f_name + ' function signature expects ' + str(len(input_names)) + \
+                    ' input tensor argument(s):\n' + str(input_names) + '\n'
+                err_msg += 'but was supplied with ' + str(num_inputs) + '.\n'
+                if len(input_names) > num_inputs:
+                    remaining_names = input_names[num_inputs - len(input_names):]
+                    err_msg += 'Should ' + str(remaining_names) + ' be passed to constructor as constant?'
+                raise TypeError(err_msg)
+
+            ExpressionDAG.clear()
+
+            # create input expressions
+            input_exprs = []
+            for cur_type in input_types:
+                input_exprs.append(input(cur_type))
+
+            # interpret function to build up ExpressionDAG
+            output_exprs = op_function(*input_exprs, **constants)
+
+            if output_exprs is None:
+                raise ValueError('No outputs returned from op function')
+
+            # wrap as list if only one output
+            try:
+                len(output_exprs)
+            except TypeError:
+                output_exprs = [output_exprs]
+
+            # make sure number of returned parameters equals the number of declared outputs
+            if len(output_exprs) != ExpressionDAG.num_outputs:
+                raise ValueError('Defined ' + str(ExpressionDAG.num_outputs) + ' outputs, but returned ' +
+                                 str(len(output_exprs)) +
+                                 '. Number of defined outputs must equal number of returned outputs.')
+
+            # make sure all returned values are output expressions
+            # reorder output io_index according to return order instead of declaration order
+            output_types = []
+            prev_index = []
+            for index, expr in enumerate(output_exprs):
+                if type(expr) is not OutputTensor:
+                    raise TypeError('User functions must only return outputs. Instead got:\n' + str(expr))
+                prev_index.append(ExpressionDAG.expr_index(expr))
+                expr.proto_expr.io_index = index
+                output_types.append(TensorType.like(expr))
+
+            # reorder declaration of outputs in expression dag
+            prev_index.sort()
+            for index, expr in zip(prev_index, output_exprs):
+                ExpressionDAG.exprs[index] = expr
+                ExpressionDAG.expr_ids[index] = id(expr)
+
+            expression_dag = ExpressionDAG.as_proto()
+            ExpressionDAG.clear()
+
+            return expression_dag
+
+        return create_op
+    return wrapper
+
+
 class Operator(object):
     """
     Class which is extended to define a new operator and its gradient.
     """
-
-    # @staticmethod
-    # def _register_gradient():
-    #     if not Operator._gradient_registered:
-    #         Operator._gradient_registered = True
-    #
-    #         from tensorflow.python.framework import ops as tf_ops
-    #
-    #         @tf_ops.RegisterGradient("DynamicLib")
-    #         def _dynamic_lib_grad(op, *grads_above):
-    #             num_inputs = len(op.inputs)
-    #
-    #             gpu_grad_name = op.get_attr('gpu_grad_func_name')
-    #             gpu_grad_lib = op.get_attr('gpu_grad_lib_path')
-    #             cpu_grad_name = op.get_attr('cpu_grad_func_name')
-    #             cpu_grad_lib = op.get_attr('cpu_grad_lib_path')
-    #             cuda_threads_per_block = op.get_attr('cuda_threads_per_block')
-    #
-    #             if cpu_grad_name == '':
-    #                 grads = []
-    #                 for i in range(num_inputs):
-    #                     grads.append(None)
-    #
-    #                 return grads
-    #             else:
-    #                 out_shapes = []
-    #                 out_types = []
-    #                 for cur_input in op.inputs:
-    #                     cur_type = TensorType.like(cur_input)
-    #                     if cur_type.dtype == float32:
-    #                         tf_type = 'float'
-    #                     elif cur_type.dtype == float64:
-    #                         tf_type = 'double'
-    #                     else:
-    #                         raise NotImplementedError('Only floats and doubles currently supported.')
-    #
-    #                     out_types.append(tf_type)
-    #                     out_shapes.append(cur_type.shape)
-    #
-    #                 inputs = []
-    #                 for inp in op.inputs:
-    #                     inputs.append(inp)
-    #
-    #                 try:
-    #                     len(grads_above)
-    #                 except TypeError:
-    #                     inputs.append(grads_above)
-    #                 else:
-    #                     for grad_above in list(grads_above):
-    #                         inputs.append(grad_above)
-    #
-    #                 grads = Operator._dynamiclibop_module.dynamic_lib(inputs=inputs,
-    #                                                                   out_shapes=out_shapes,
-    #                                                                   out_types=out_types,
-    #                                                                   cpu_lib_path=cpu_grad_lib,
-    #                                                                   cpu_func_name=cpu_grad_name,
-    #                                                                   gpu_lib_path=gpu_grad_lib,
-    #                                                                   gpu_func_name=gpu_grad_name,
-    #                                                                   gpu_grad_func_name='',
-    #                                                                   gpu_grad_lib_path='',
-    #                                                                   cpu_grad_func_name='',
-    #                                                                   cpu_grad_lib_path='',
-    #                                                                   cuda_threads_per_block=cuda_threads_per_block)
-    #                 return grads
 
     @staticmethod
     def _unwrap_single(x):
@@ -323,6 +363,34 @@ class Operator(object):
 
         self.expression_dag = ExpressionDAG.as_proto()
         ExpressionDAG.clear()
+
+        #
+        # try:
+        #     self.grad()
+        # except UndefinedGradientError:
+        #     # gradient is not defined, do not parse
+        #     pass
+        # except TypeError:
+        #     grad_arg_spec = inspect.getargspec(self.grad).args[1:]
+        #
+        #     # make sure initial part of gradient function signature matches op function signature
+        #     for arg_n, op_arg in enumerate(inspect.getargspec(self.op).args[1:]):
+        #         if op_arg != grad_arg_spec[arg_n]:
+        #             raise TypeError('Gradient function must have same initial argument names as the op function. ' +
+        #                             'Expected arg "' + str(op_arg) + '", but got "' + str(grad_arg_spec[arg_n]) + '".')
+        #
+        #     grad_input_types = []
+        #     for t in self._input_types:
+        #         grad_input_types.append(TensorType.like(t))
+        #     for t in self.output_types:
+        #         grad_input_types.append(TensorType.like(t))
+        #
+            # grad_types, self.grad_expression_dag = interpret_function(grad_input_types, self.grad)
+            #
+            # for grad_n, grad_type in enumerate(grad_types):
+            #     if grad_type != self._input_types[grad_n]:
+            #         raise TypeError('Gradient function must output tensor list with a types identical '
+            #                         'to the op functions inputs.')
 
     def __getitem__(self, item):
         return _OperatorOutput(self, item)
@@ -823,6 +891,70 @@ def as_tensorflow(tensor_list):
     outputs = []
     for out_ref in dag.dag_outputs:
         outputs.append(output_tensors[out_ref.op_index][out_ref.op_output_index])
+
+    # @staticmethod
+    # def _register_gradient():
+    #     if not Operator._gradient_registered:
+    #         Operator._gradient_registered = True
+    #
+    #         from tensorflow.python.framework import ops as tf_ops
+    #
+    #         @tf_ops.RegisterGradient("DynamicLib")
+    #         def _dynamic_lib_grad(op, *grads_above):
+    #             num_inputs = len(op.inputs)
+    #
+    #             gpu_grad_name = op.get_attr('gpu_grad_func_name')
+    #             gpu_grad_lib = op.get_attr('gpu_grad_lib_path')
+    #             cpu_grad_name = op.get_attr('cpu_grad_func_name')
+    #             cpu_grad_lib = op.get_attr('cpu_grad_lib_path')
+    #             cuda_threads_per_block = op.get_attr('cuda_threads_per_block')
+    #
+    #             if cpu_grad_name == '':
+    #                 grads = []
+    #                 for i in range(num_inputs):
+    #                     grads.append(None)
+    #
+    #                 return grads
+    #             else:
+    #                 out_shapes = []
+    #                 out_types = []
+    #                 for cur_input in op.inputs:
+    #                     cur_type = TensorType.like(cur_input)
+    #                     if cur_type.dtype == float32:
+    #                         tf_type = 'float'
+    #                     elif cur_type.dtype == float64:
+    #                         tf_type = 'double'
+    #                     else:
+    #                         raise NotImplementedError('Only floats and doubles currently supported.')
+    #
+    #                     out_types.append(tf_type)
+    #                     out_shapes.append(cur_type.shape)
+    #
+    #                 inputs = []
+    #                 for inp in op.inputs:
+    #                     inputs.append(inp)
+    #
+    #                 try:
+    #                     len(grads_above)
+    #                 except TypeError:
+    #                     inputs.append(grads_above)
+    #                 else:
+    #                     for grad_above in list(grads_above):
+    #                         inputs.append(grad_above)
+    #
+    #                 grads = Operator._dynamiclibop_module.dynamic_lib(inputs=inputs,
+    #                                                                   out_shapes=out_shapes,
+    #                                                                   out_types=out_types,
+    #                                                                   cpu_lib_path=cpu_grad_lib,
+    #                                                                   cpu_func_name=cpu_grad_name,
+    #                                                                   gpu_lib_path=gpu_grad_lib,
+    #                                                                   gpu_func_name=gpu_grad_name,
+    #                                                                   gpu_grad_func_name='',
+    #                                                                   gpu_grad_lib_path='',
+    #                                                                   cpu_grad_func_name='',
+    #                                                                   cpu_grad_lib_path='',
+    #                                                                   cuda_threads_per_block=cuda_threads_per_block)
+    #                 return grads
 
     if len(outputs) == 1:
         return outputs[0]
