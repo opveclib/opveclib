@@ -31,6 +31,7 @@ _default_cuda_threads_per_block = 32
 class _DynamicLibOp(object):
     _loaded_module = None
     _shape_infernence_registered = False
+    _gradient_registered = False
 
     @staticmethod
     def module():
@@ -77,7 +78,72 @@ class _DynamicLibOp(object):
             def get_out_shapes(op):
                 return op.get_attr('out_shapes')
 
+        if not _DynamicLibOp._gradient_registered:
+            from tensorflow.python.framework import ops as tf_ops
+
+            @tf_ops.RegisterGradient("DynamicLib")
+            def _dynamic_lib_grad(op, *grads_above):
+                raise NotImplementedError()
+
+            _DynamicLibOp._gradient_registered = True
+
         return _DynamicLibOp._loaded_module
+
+
+# num_inputs = len(op.inputs)
+#
+# gpu_grad_name = op.get_attr('gpu_grad_func_name')
+# gpu_grad_lib = op.get_attr('gpu_grad_lib_path')
+# cpu_grad_name = op.get_attr('cpu_grad_func_name')
+# cpu_grad_lib = op.get_attr('cpu_grad_lib_path')
+# cuda_threads_per_block = op.get_attr('cuda_threads_per_block')
+#
+# if cpu_grad_name == '':
+#     grads = []
+#     for i in range(num_inputs):
+#         grads.append(None)
+#
+#     return grads
+# else:
+#     out_shapes = []
+#     out_types = []
+#     for cur_input in op.inputs:
+#         cur_type = TensorType.like(cur_input)
+#         if cur_type.dtype == float32:
+#             tf_type = 'float'
+#         elif cur_type.dtype == float64:
+#             tf_type = 'double'
+#         else:
+#             raise NotImplementedError('Only floats and doubles currently supported.')
+#
+#         out_types.append(tf_type)
+#         out_shapes.append(cur_type.shape)
+#
+#     inputs = []
+#     for inp in op.inputs:
+#         inputs.append(inp)
+#
+#     try:
+#         len(grads_above)
+#     except TypeError:
+#         inputs.append(grads_above)
+#     else:
+#         for grad_above in list(grads_above):
+#             inputs.append(grad_above)
+#
+#     grads = Operator._dynamiclibop_module.dynamic_lib(inputs=inputs,
+#                                                       out_shapes=out_shapes,
+#                                                       out_types=out_types,
+#                                                       cpu_lib_path=cpu_grad_lib,
+#                                                       cpu_func_name=cpu_grad_name,
+#                                                       gpu_lib_path=gpu_grad_lib,
+#                                                       gpu_func_name=gpu_grad_name,
+#                                                       gpu_grad_func_name='',
+#                                                       gpu_grad_lib_path='',
+#                                                       cpu_grad_func_name='',
+#                                                       cpu_grad_lib_path='',
+#                                                       cuda_threads_per_block=cuda_threads_per_block)
+#     return grads
 
 
 class _TensorParam(ctypes.Structure):
@@ -112,13 +178,12 @@ class _Operator(object):
     """
     Class which is extended to define a new operator and its gradient.
     """
-    def __init__(self, dag, output_types, inputs):
+    def __init__(self, dag, output_types, inputs, grad_dag):
         self.inputs = inputs
         self.expression_dag = dag
         self.output_types = output_types
 
-        self.gradient_op_dag = None
-        self.gradient_differentials = None
+        self.grad_dag = grad_dag
 
     def __getitem__(self, item):
         return _OperatorOutput(self, item)
@@ -799,70 +864,6 @@ def as_tensorflow(tensor_list):
     outputs = []
     for out_ref in dag.dag_outputs:
         outputs.append(output_tensors[out_ref.op_index][out_ref.op_output_index])
-
-    # @staticmethod
-    # def _register_gradient():
-    #     if not Operator._gradient_registered:
-    #         Operator._gradient_registered = True
-    #
-    #         from tensorflow.python.framework import ops as tf_ops
-    #
-    #         @tf_ops.RegisterGradient("DynamicLib")
-    #         def _dynamic_lib_grad(op, *grads_above):
-    #             num_inputs = len(op.inputs)
-    #
-    #             gpu_grad_name = op.get_attr('gpu_grad_func_name')
-    #             gpu_grad_lib = op.get_attr('gpu_grad_lib_path')
-    #             cpu_grad_name = op.get_attr('cpu_grad_func_name')
-    #             cpu_grad_lib = op.get_attr('cpu_grad_lib_path')
-    #             cuda_threads_per_block = op.get_attr('cuda_threads_per_block')
-    #
-    #             if cpu_grad_name == '':
-    #                 grads = []
-    #                 for i in range(num_inputs):
-    #                     grads.append(None)
-    #
-    #                 return grads
-    #             else:
-    #                 out_shapes = []
-    #                 out_types = []
-    #                 for cur_input in op.inputs:
-    #                     cur_type = TensorType.like(cur_input)
-    #                     if cur_type.dtype == float32:
-    #                         tf_type = 'float'
-    #                     elif cur_type.dtype == float64:
-    #                         tf_type = 'double'
-    #                     else:
-    #                         raise NotImplementedError('Only floats and doubles currently supported.')
-    #
-    #                     out_types.append(tf_type)
-    #                     out_shapes.append(cur_type.shape)
-    #
-    #                 inputs = []
-    #                 for inp in op.inputs:
-    #                     inputs.append(inp)
-    #
-    #                 try:
-    #                     len(grads_above)
-    #                 except TypeError:
-    #                     inputs.append(grads_above)
-    #                 else:
-    #                     for grad_above in list(grads_above):
-    #                         inputs.append(grad_above)
-    #
-    #                 grads = Operator._dynamiclibop_module.dynamic_lib(inputs=inputs,
-    #                                                                   out_shapes=out_shapes,
-    #                                                                   out_types=out_types,
-    #                                                                   cpu_lib_path=cpu_grad_lib,
-    #                                                                   cpu_func_name=cpu_grad_name,
-    #                                                                   gpu_lib_path=gpu_grad_lib,
-    #                                                                   gpu_func_name=gpu_grad_name,
-    #                                                                   gpu_grad_func_name='',
-    #                                                                   gpu_grad_lib_path='',
-    #                                                                   cpu_grad_func_name='',
-    #                                                                   cpu_grad_lib_path='',
-    #                                                                   cuda_threads_per_block=cuda_threads_per_block)
-    #                 return grads
 
     if len(outputs) == 1:
         return outputs[0]
