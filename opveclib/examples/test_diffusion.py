@@ -898,6 +898,15 @@ class TestAddBoundary(unittest.TestCase):
                 if ops.local.cuda_enabled:
                     dataGPU = ops.evaluate(op, target_language='cuda')
                     assert np.allclose(dataGPU, dataNPY)
+                    # Don't perform optimizations for tests so we don't inadvertently run
+                    # gpu ops on cpu
+                    test_config = tf.ConfigProto(allow_soft_placement=False)
+                    test_config.graph_options.optimizer_options.opt_level = -1
+                    with tf.Session(config=test_config) as sess:
+                        addTF = ops.as_tensorflow(AddBoundaryOp(dataIn))
+                    dataTF = sess.run(addTF)
+                    assert np.allclose(dataGPU, dataTF)
+
     test.regression = 0
 
 
@@ -924,6 +933,14 @@ class TestDelBoundary(unittest.TestCase):
                 if ops.local.cuda_enabled:
                     dataGPU = ops.evaluate(op, target_language='cuda')
                     assert np.allclose(dataGPU, dataNPY)
+                    # Don't perform optimizations for tests so we don't inadvertently run
+                    # gpu ops on cpu
+                    test_config = tf.ConfigProto(allow_soft_placement=False)
+                    test_config.graph_options.optimizer_options.opt_level = -1
+                    with tf.Session(config=test_config) as sess:
+                        delTF = ops.as_tensorflow(DelBoundaryOp(dataIn))
+                    dataTF = sess.run(delTF)
+                    assert np.allclose(dataGPU, dataTF)
     test.regression = 1
 
 class TestCopyBoundary(unittest.TestCase):
@@ -949,6 +966,14 @@ class TestCopyBoundary(unittest.TestCase):
                 if ops.local.cuda_enabled:
                     dataGPU = ops.evaluate(op, target_language='cuda')
                     assert np.allclose(dataGPU, dataNPY)
+                    # Don't perform optimizations for tests so we don't inadvertently run
+                    # gpu ops on cpu
+                    test_config = tf.ConfigProto(allow_soft_placement=False)
+                    test_config.graph_options.optimizer_options.opt_level = -1
+                    with tf.Session(config=test_config) as sess:
+                        cpyTF = ops.as_tensorflow(CopyBoundaryOp(dataIn))
+                    dataTF = sess.run(cpyTF)
+                    assert np.allclose(dataGPU, dataTF)
     test.regression = 1
 
 class TestGauss2DOp(unittest.TestCase):
@@ -976,6 +1001,14 @@ class TestGauss2DOp(unittest.TestCase):
                 if ops.local.cuda_enabled:
                     dataGPU = ops.evaluate(op, target_language='cuda')
                     assert np.allclose(dataGPU, dataNPY)
+                    # Don't perform optimizations for tests so we don't inadvertently run
+                    # gpu ops on cpu
+                    test_config = tf.ConfigProto(allow_soft_placement=False)
+                    test_config.graph_options.optimizer_options.opt_level = -1
+                    with tf.Session(config=test_config) as sess:
+                        gaussTF = ops.as_tensorflow(Gauss2DOp(dimOut=[mY,mX]))
+                    dataTF = sess.run(gaussTF)
+                    assert np.allclose(dataGPU, dataTF)
     test.regression = 1
 
 class TestFilter2D(unittest.TestCase):
@@ -1008,6 +1041,14 @@ class TestFilter2D(unittest.TestCase):
                         if ops.local.cuda_enabled:
                             dataGPU = ops.evaluate(op, target_language='cuda')
                             assert np.allclose(dataGPU, dataNPY)
+                            # Don't perform optimizations for tests so we don't inadvertently run
+                            # gpu ops on cpu
+                            test_config = tf.ConfigProto(allow_soft_placement=False)
+                            test_config.graph_options.optimizer_options.opt_level = -1
+                            with tf.Session(config=test_config) as sess:
+                                filterTF = ops.as_tensorflow(Filter2DOp(dataIn, kernelIn))
+                            dataTF = sess.run(filterTF)
+                            assert np.allclose(dataGPU, dataTF)
     test.regression = 1
 
 class TestDiffusionGradient(unittest.TestCase):
@@ -1040,6 +1081,17 @@ class TestDiffusionGradient(unittest.TestCase):
                     assert np.allclose(gradRowMinusGPU, gradRowMinusNPY)
                     assert np.allclose(gradColPlusGPU, gradColPlusNPY)
                     assert np.allclose(gradColMinusGPU, gradColMinusNPY)
+                    # Don't perform optimizations for tests so we don't inadvertently run
+                    # gpu ops on cpu
+                    test_config = tf.ConfigProto(allow_soft_placement=False)
+                    test_config.graph_options.optimizer_options.opt_level = -1
+                    with tf.Session(config=test_config) as sess:
+                        gradTF = ops.as_tensorflow(DiffusionGradient2DOp(image, l2=l2))
+                    [gradRowPlusTF, gradRowMinusTF, gradColPlusTF, gradColMinusTF] = sess.run(gradTF)
+                    assert np.allclose(gradRowPlusGPU, gradRowPlusTF)
+                    assert np.allclose(gradRowMinusGPU, gradRowMinusTF)
+                    assert np.allclose(gradColPlusGPU, gradColPlusTF)
+                    assert np.allclose(gradColMinusGPU, gradColMinusTF)
     test.regression = 0
 
 class TestSolveDiag2DOp(unittest.TestCase):
@@ -1078,6 +1130,16 @@ class TestSolveDiag2DOp(unittest.TestCase):
                     xColGPU = ops.evaluate(opCol, target_language='cuda')
                     assert np.allclose(xColGPU, xColNPY)
                     assert np.allclose(xRowGPU, xRowNPY)
+                    # Don't perform optimizations for tests so we don't inadvertently run
+                    # gpu ops on cpu
+                    test_config = tf.ConfigProto(allow_soft_placement=False)
+                    test_config.graph_options.optimizer_options.opt_level = -1
+                    with tf.Session(config=test_config) as sess:
+                        diagRowTF = ops.as_tensorflow(SolveDiagRow2DOp(alpha, beta, gamma, y))
+                        diagColTF = ops.as_tensorflow(SolveDiagCol2DOp(alpha, beta, gamma, y))
+                    [xRowTF, xColTF] = sess.run([diagRowTF,diagColTF])
+                    assert np.allclose(xColGPU, xColTF)
+                    assert np.allclose(xRowGPU, xRowTF)
     test.regression = 1
 
 if __name__ == '__main__':
