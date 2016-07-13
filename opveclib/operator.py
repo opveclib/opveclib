@@ -86,10 +86,6 @@ class _TensorParam(ctypes.Structure):
                 ("len", ctypes.c_size_t)]
 
 
-class UndefinedGradientError(NotImplementedError):
-    pass
-
-
 class _OperatorOutput(object):
     """
     Class which represents an un-evaluated output tensor, used for building lazily evaluated DAGs of operators
@@ -104,6 +100,28 @@ class _OperatorOutput(object):
         self.index = index
         self.shape = parent.output_types[index].shape
         self.dtype = parent.output_types[index].dtype
+
+
+class _GradientPlaceholder(object):
+    def __init__(self, shape, dtype):
+        self.shape = shape
+        self.dtype = dtype
+
+
+class _Operator(object):
+    """
+    Class which is extended to define a new operator and its gradient.
+    """
+    def __init__(self, dag, output_types, inputs):
+        self.inputs = inputs
+        self.expression_dag = dag
+        self.output_types = output_types
+
+        self.gradient_op_dag = None
+        self.gradient_differentials = None
+
+    def __getitem__(self, item):
+        return _OperatorOutput(self, item)
 
 
 def _resolve_output(x):
@@ -134,6 +152,8 @@ class _OpGenerator(object):
     def __init__(self, op_function, forbid_none_valued_constants):
         self.op_function = op_function
         self.forbid_none_valued_constants = forbid_none_valued_constants
+
+        self.grad_function = None
 
     def __call__(self, *inputs, **defined_constants):
         func_args, func_varargs, func_keywords, func_defaults = inspect.getargspec(self.op_function)
@@ -222,7 +242,47 @@ class _OpGenerator(object):
         expression_dag = ExpressionDAG.as_proto()
         ExpressionDAG.clear()
 
-        return _Operator(expression_dag, output_types, inputs)
+        if self.grad_function is None:
+            grad_dag = None
+            grad_dag_inputs = None
+        else:
+            grad_args, grad_varargs, grad_keywords, grad_defaults = inspect.getargspec(self.grad_function)
+            if len(output_types) + len(input_names) != len(grad_args[:-len(grad_defaults)]):
+                raise SyntaxError('Gradient function must have inputs equal to the sum of the number of '
+                                  'inputs and outputs of the operator function.')
+
+            grad_inputs = []
+            grad_inputs.extend(inputs)
+            for t in output_types:
+                grad_inputs.append(_GradientPlaceholder(t.shape, t.dtype))
+
+            # interpret gradient function
+            grad_outputs = self.grad_function(*grad_inputs, **constants)
+
+            # wrap as list if only one output
+            try:
+                len(grad_outputs)
+            except TypeError:
+                grad_outputs = [grad_outputs]
+
+            # make sure grad outputs are the same type as op inputs
+            for grad_output_index, grad_output in enumerate(grad_outputs):
+                cur_input_type = input_types[grad_output_index]
+                cur_grad_output_type = TensorType.like(_resolve_output(grad_output))
+                if cur_input_type != cur_grad_output_type:
+                    raise TypeError('Gradient output index ' + str(grad_output_index) + ', with TensorType: ' +
+                                    str(cur_grad_output_type) + ' is inconsistent with operator input index ' +
+                                    str(grad_output_index) + ', with TensorType: ' + str(cur_input_type))
+
+            grad_dag, grad_dag_inputs = _build_op_dag(*grad_outputs)
+
+        return _Operator(expression_dag, output_types, inputs, grad_dag)
+
+    def add_grad(self, grad_function):
+        if self.grad_function is None:
+            self.grad_function = grad_function
+        else:
+            raise ValueError('Gradient function is already defined.')
 
 
 def operator(forbid_none_valued_constants=True):
@@ -233,53 +293,36 @@ def operator(forbid_none_valued_constants=True):
         # TODO: implement vararg input parsing
         if inspect.getargspec(op_function).varargs is not None:
             raise NotImplementedError('Operator functions cannot accept varags. '
-                                      'This functionality will be enabled in the future.')
-
-        # @wraps(op_function)
-        # def create_op(*inputs, **defined_constants):
+                                      'This functionality may be enabled in the future.')
 
         return _OpGenerator(op_function, forbid_none_valued_constants)
     return wrapper
 
 
-def gradient(op):
-    def wrapper(grad_function):
-        # print(op.create_op)
-        # print(op.op_function)
-        pass
-        # func_args, func_varargs, func_keywords, func_defaults = inspect.getargspec(grad_function)
+def gradient(op_function):
+    if not isinstance(op_function, _OpGenerator):
+        raise TypeError('gradient decorator argument must be a function decorated as an operator')
 
-        # # make sure initial part of gradient function signature matches op function signature
-        # for arg_n, op_arg in enumerate(inspect.getargspec(self.op).args[1:]):
-        #     if op_arg != grad_arg_spec[arg_n]:
-        #         raise TypeError('Gradient function must have same initial argument names as the op function. ' +
-        #                         'Expected arg "' + str(op_arg) + '", but got "' + str(grad_arg_spec[arg_n]) + '".')
-        # grad_input_types = []
-        # for t in self._input_types:
-        #     grad_input_types.append(TensorType.like(t))
-        # for t in self.output_types:
-        #     grad_input_types.append(TensorType.like(t))
+    def wrapper(grad_function):
+        func_args, func_varargs, func_keywords, func_defaults = inspect.getargspec(op_function.op_function)
+        grad_args, grad_varargs, grad_keywords, grad_defaults = inspect.getargspec(grad_function)
+
+        func_input_names = func_args[:-len(func_defaults)]
+        func_constants = dict(zip(func_args[-len(func_defaults):], func_defaults))
+
+        grad_input_names = grad_args[:-len(grad_defaults)]
+        grad_constants = dict(zip(grad_args[-len(func_defaults):], grad_defaults))
+
+        if func_constants != grad_constants:
+            raise SyntaxError('Constant argument names and default values must be identical for '
+                              'the op function and its gradient.')
+
+        if func_input_names != grad_input_names[:len(func_input_names)]:
+            raise SyntaxError('Gradient function must have same initial argument names as the op function.')
+
+        op_function.add_grad(grad_function)
 
     return wrapper
-
-
-class _Operator(object):
-    """
-    Class which is extended to define a new operator and its gradient.
-    """
-    def __init__(self, dag, output_types, inputs):
-        self.inputs = inputs
-        self.expression_dag = dag
-        self.output_types = output_types
-
-        self.gradient_op_dag = None
-        self.gradient_differentials = None
-
-    def __getitem__(self, item):
-        return _OperatorOutput(self, item)
-
-    def register_grad(self):
-        pass
 
 
 def _build_op_dag(*outputs):
