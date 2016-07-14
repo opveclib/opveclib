@@ -82,7 +82,35 @@ class _DynamicLibOp(object):
             from tensorflow.python.framework import ops as tf_ops
 
             @tf_ops.RegisterGradient("DynamicLib")
-            def _dynamic_lib_grad(op, *grads_above):
+            def _dynamic_lib_grad(op, *grads):
+                grad_dag = lang.OperatorDAG()
+                grad_dag.ParseFromString(op.get_attr('gpu_grad_func_name'))
+                # for op in grad_dag.operators:
+                #     print(op.name)
+
+                try:
+                    len(grads)
+                except TypeError:
+                    grad_list = [grads]
+                else:
+                    grad_list = list(grads)
+
+                grad_inputs = []
+                for op_input in op.inputs:
+                    grad_inputs.append(op_input)
+                for grad in grad_list:
+                    grad_inputs.append(grad)
+
+                for grad_input_index, grad_input in enumerate(grad_inputs):
+                    received_type = TensorType.like(grad_input).as_proto()
+                    expected_type = grad_dag.dag_input_types[grad_input_index]
+
+                    if received_type != expected_type:
+                        raise TypeError('Received a tensor of type: ' + str(received_type) +
+                                        ', but expected a type: ' + str(expected_type) +
+                                        ' at gradient input index: ' + str(grad_input_index))
+                # print(grad_dag.dag_input_types)
+                # print(len(grad_dag.operators))
                 raise NotImplementedError()
 
             _DynamicLibOp._gradient_registered = True
@@ -178,10 +206,11 @@ class _Operator(object):
     """
     Class which is extended to define a new operator and its gradient.
     """
-    def __init__(self, dag, output_types, inputs, grad_dag):
+    def __init__(self, dag, output_types, inputs, grad_dag, name):
         self.inputs = inputs
         self.expression_dag = dag
         self.output_types = output_types
+        self.name = name
 
         self.grad_dag = grad_dag
 
@@ -306,6 +335,7 @@ class _OpGenerator(object):
 
         expression_dag = ExpressionDAG.as_proto()
         ExpressionDAG.clear()
+        expression_dag.name = f_name
 
         if self.grad_function is None:
             grad_dag = None
@@ -317,7 +347,8 @@ class _OpGenerator(object):
                                   'inputs and outputs of the operator function.')
 
             grad_inputs = []
-            grad_inputs.extend(inputs)
+            for t in input_types:
+                grad_inputs.append(_GradientPlaceholder(t.shape, t.dtype))
             for t in output_types:
                 grad_inputs.append(_GradientPlaceholder(t.shape, t.dtype))
 
@@ -339,9 +370,9 @@ class _OpGenerator(object):
                                     str(cur_grad_output_type) + ' is inconsistent with operator input index ' +
                                     str(grad_output_index) + ', with TensorType: ' + str(cur_input_type))
 
-            grad_dag, grad_dag_inputs = _build_op_dag(*grad_outputs)
+            grad_dag, grad_dag_inputs, grad_of_grad_dags = _build_op_dag(*grad_outputs)
 
-        return _Operator(expression_dag, output_types, inputs, grad_dag)
+        return _Operator(expression_dag, output_types, inputs, grad_dag, f_name)
 
     def add_grad(self, grad_function):
         if self.grad_function is None:
@@ -512,7 +543,11 @@ def _build_op_dag(*outputs):
         proto_ref.op_output_index = int(output_index['output_index'])
         op_dag.dag_outputs.add().CopyFrom(proto_ref)
 
-    return op_dag, dag_inputs
+    grad_dags = []
+    for op in sorted_ops:
+        grad_dags.append(op.grad_dag)
+
+    return op_dag, dag_inputs, grad_dags
 
 
 def _make_generic_c(src, name):
@@ -726,7 +761,7 @@ def profile(output_list, target_language='cpp', profiling_iterations=1):
     else:
         raise ValueError(invalid_language)
 
-    dag, inputs = _build_op_dag(*output_list)
+    dag, inputs, grad_dags = _build_op_dag(*output_list)
 
     output_buffers = []
     profiling_times = {}
@@ -813,8 +848,12 @@ def as_tensorflow(tensor_list):
 
     :return: A TensorFlow operator.
     """
-    dag, inputs = _build_op_dag(*tensor_list)
+    dag, inputs, grad_dags = _build_op_dag(*tensor_list)
 
+    return _dag_to_tf(dag, inputs, grad_dags)
+
+
+def _dag_to_tf(dag, inputs, grad_dags):
     output_tensors = []
     # compile all ops in the dag
     for op_index, op in enumerate(dag.operators):
@@ -847,6 +886,10 @@ def as_tensorflow(tensor_list):
             else:
                 cur_inputs.append(output_tensors[ref.op_index][ref.op_output_index])
 
+        # grad_dags_serialized = []
+        # for grad_dag in grad_dags:
+        #     grad_dags_serialized.append()
+
         tf_op = _DynamicLibOp.module().dynamic_lib(inputs=cur_inputs,
                                                    out_shapes=out_shapes,
                                                    out_types=out_tf_types,
@@ -854,7 +897,7 @@ def as_tensorflow(tensor_list):
                                                    cpu_func_name=name + '_generic_cpp',
                                                    gpu_lib_path=cuda_op_lib,
                                                    gpu_func_name=name + '_generic_cuda',
-                                                   gpu_grad_func_name='',
+                                                   gpu_grad_func_name=grad_dags[op_index].SerializeToString(),
                                                    gpu_grad_lib_path='',
                                                    cpu_grad_func_name='',
                                                    cpu_grad_lib_path='',

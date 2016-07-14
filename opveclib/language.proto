@@ -377,6 +377,7 @@ message ExpressionDAG {
     repeated OperandList references = 2;
 
     repeated uint32 workgroup_shape = 3;
+    string name = 4;
 }
 
 message OperatorDAG {
