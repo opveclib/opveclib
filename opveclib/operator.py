@@ -83,10 +83,11 @@ class _DynamicLibOp(object):
 
             @tf_ops.RegisterGradient("DynamicLib")
             def _dynamic_lib_grad(op, *grads):
+                if op.get_attr('serialized_grad_dag') == '':
+                    return [None]*len(op.inputs)
+
                 grad_dag = lang.OperatorDAG()
-                grad_dag.ParseFromString(op.get_attr('gpu_grad_func_name'))
-                # for op in grad_dag.operators:
-                #     print(op.name)
+                grad_dag.ParseFromString(op.get_attr('serialized_grad_dag'))
 
                 try:
                     len(grads)
@@ -96,11 +97,15 @@ class _DynamicLibOp(object):
                     grad_list = list(grads)
 
                 grad_inputs = []
+                grad_of_grad_dags = []
                 for op_input in op.inputs:
                     grad_inputs.append(op_input)
+                    grad_of_grad_dags.append(None)
                 for grad in grad_list:
                     grad_inputs.append(grad)
+                    grad_of_grad_dags.append(None)
 
+                # make sure that the input types and expected types are consistent
                 for grad_input_index, grad_input in enumerate(grad_inputs):
                     received_type = TensorType.like(grad_input).as_proto()
                     expected_type = grad_dag.dag_input_types[grad_input_index]
@@ -109,69 +114,12 @@ class _DynamicLibOp(object):
                         raise TypeError('Received a tensor of type: ' + str(received_type) +
                                         ', but expected a type: ' + str(expected_type) +
                                         ' at gradient input index: ' + str(grad_input_index))
-                # print(grad_dag.dag_input_types)
-                # print(len(grad_dag.operators))
-                raise NotImplementedError()
+
+                return _dag_to_tf(grad_dag, grad_inputs, grad_of_grad_dags)
 
             _DynamicLibOp._gradient_registered = True
 
         return _DynamicLibOp._loaded_module
-
-
-# num_inputs = len(op.inputs)
-#
-# gpu_grad_name = op.get_attr('gpu_grad_func_name')
-# gpu_grad_lib = op.get_attr('gpu_grad_lib_path')
-# cpu_grad_name = op.get_attr('cpu_grad_func_name')
-# cpu_grad_lib = op.get_attr('cpu_grad_lib_path')
-# cuda_threads_per_block = op.get_attr('cuda_threads_per_block')
-#
-# if cpu_grad_name == '':
-#     grads = []
-#     for i in range(num_inputs):
-#         grads.append(None)
-#
-#     return grads
-# else:
-#     out_shapes = []
-#     out_types = []
-#     for cur_input in op.inputs:
-#         cur_type = TensorType.like(cur_input)
-#         if cur_type.dtype == float32:
-#             tf_type = 'float'
-#         elif cur_type.dtype == float64:
-#             tf_type = 'double'
-#         else:
-#             raise NotImplementedError('Only floats and doubles currently supported.')
-#
-#         out_types.append(tf_type)
-#         out_shapes.append(cur_type.shape)
-#
-#     inputs = []
-#     for inp in op.inputs:
-#         inputs.append(inp)
-#
-#     try:
-#         len(grads_above)
-#     except TypeError:
-#         inputs.append(grads_above)
-#     else:
-#         for grad_above in list(grads_above):
-#             inputs.append(grad_above)
-#
-#     grads = Operator._dynamiclibop_module.dynamic_lib(inputs=inputs,
-#                                                       out_shapes=out_shapes,
-#                                                       out_types=out_types,
-#                                                       cpu_lib_path=cpu_grad_lib,
-#                                                       cpu_func_name=cpu_grad_name,
-#                                                       gpu_lib_path=gpu_grad_lib,
-#                                                       gpu_func_name=gpu_grad_name,
-#                                                       gpu_grad_func_name='',
-#                                                       gpu_grad_lib_path='',
-#                                                       cpu_grad_func_name='',
-#                                                       cpu_grad_lib_path='',
-#                                                       cuda_threads_per_block=cuda_threads_per_block)
-#     return grads
 
 
 class _TensorParam(ctypes.Structure):
@@ -886,9 +834,10 @@ def _dag_to_tf(dag, inputs, grad_dags):
             else:
                 cur_inputs.append(output_tensors[ref.op_index][ref.op_output_index])
 
-        # grad_dags_serialized = []
-        # for grad_dag in grad_dags:
-        #     grad_dags_serialized.append()
+        if grad_dags[op_index] is None:
+            serialized_grad_dag = ''
+        else:
+            serialized_grad_dag = grad_dags[op_index].SerializeToString()
 
         tf_op = _DynamicLibOp.module().dynamic_lib(inputs=cur_inputs,
                                                    out_shapes=out_shapes,
@@ -897,10 +846,7 @@ def _dag_to_tf(dag, inputs, grad_dags):
                                                    cpu_func_name=name + '_generic_cpp',
                                                    gpu_lib_path=cuda_op_lib,
                                                    gpu_func_name=name + '_generic_cuda',
-                                                   gpu_grad_func_name=grad_dags[op_index].SerializeToString(),
-                                                   gpu_grad_lib_path='',
-                                                   cpu_grad_func_name='',
-                                                   cpu_grad_lib_path='',
+                                                   serialized_grad_dag=serialized_grad_dag,
                                                    cuda_threads_per_block=_default_cuda_threads_per_block)
         output_tensors.append(tf_op)
 
