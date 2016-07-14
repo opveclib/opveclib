@@ -45,10 +45,12 @@ def diffusion2DGPU(image, dt, l, s, nIter):
 
 
     :Description:
+
     Weickert, Haar Romeny, Viergever (1993). Efficient and reliable schemes for nonlinear diffusion filtering. In IEEE
-        Transactions on Image Processing 7(3):398--410.
+    Transactions on Image Processing 7(3):398--410.
+
     Weickert, Zuiderveld, Haar Romeny, Nissen (1997). Parallel implementations of AOS schemes: a fast way of nonlinear
-        diffusion filtering. In Proc. of Int. Conf. on Image Processing 3:396--399.
+    diffusion filtering. In Proc. of Int. Conf. on Image Processing 3:396--399.
 
     :Examples:
 

@@ -18,16 +18,18 @@ import time
 class Convolution1D(ops.Operator):
     def op(self, x, v, kernel_orientation='as-is', stride=1, mode='same', data_format='NCE'):
         """
+        Define the operator function.
+
         :param x: An input tensor of shape [num_batches, num_channels, num_elements].
         :param v: A filter/kernel of shape [num_filters, num_channels, kernel_size].
         :param kernel_orientation: The orientation of the kernel to use: 'as-is' or 'flipped'. This language is used
-        rather than 'convolution' or 'cross-correlation' since the terms have become overloaded and ambiguous across
-        some fields. As defined in https://en.wikipedia.org/wiki/Cross-correlation#Properties, 'as-is' yields the
-        cross-correlation and 'flipped' yields the convolution.
+            rather than 'convolution' or 'cross-correlation' since the terms have become overloaded and ambiguous across
+            some fields. As defined in https://en.wikipedia.org/wiki/Cross-correlation#Properties, 'as-is' yields the
+            cross-correlation and 'flipped' yields the convolution.
         :param stride: kernel stride to use.
-        :param mode: border mode
-        :param data_format: order of the dimensions in the input.
-        :return:
+        :param mode: border mode: 'same', 'valid', or 'full'
+        :param data_format: order of the dimensions in the input: 'NCE', 'NEC' etc.
+        :return: an output tensor of shape [num_batches, num_filters, num_elements]
         """
 
         if kernel_orientation != 'as-is' and kernel_orientation != 'flipped':
