@@ -16,12 +16,11 @@ import inspect
 import subprocess
 import string
 import re
-from functools import wraps
 import tensorflow as tf
 import numpy as np
 from numpy.ctypeslib import ndpointer
 
-from .expression import TensorType, ExpressionDAG, input, float32, float64, OutputTensor
+from .expression import TensorType, ExpressionDAG, input, OutputTensor
 from .local import version, cache_directory, cuda_enabled, cuda_directory
 from . import language_pb2 as lang
 
@@ -287,7 +286,6 @@ class _OpGenerator(object):
 
         if self.grad_function is None:
             grad_dag = None
-            grad_dag_inputs = None
         else:
             grad_args, grad_varargs, grad_keywords, grad_defaults = inspect.getargspec(self.grad_function)
             if len(output_types) + len(input_names) != len(grad_args[:-len(grad_defaults)]):
@@ -395,38 +393,38 @@ def _build_op_dag(*outputs):
             ops.append(cur_node)
             op_depth.append(None)
             input_indices.append(None)
-            cur_index = len(op_ids) - 1
+            traverse_cur_index = len(op_ids) - 1
 
             # tabulate each input tensor (edge) for this op. visit parent ops if inputs come from other ops.
-            cur_input_indices = []
+            traverse_cur_input_indices = []
             max_depth = -1
             for cur_input in cur_node.inputs:
                 try:
                     resolved = _resolve_output(cur_input)
                     parent = resolved.parent
-                    parent_id, parent_depth = traverse(parent)
-                    max_depth = max(max_depth, parent_depth)
-                    parent_index = op_ids.index(parent_id)
-                    output_index = resolved.index
-                    dag_input_index = None
+                    traverse_parent_id, traverse_parent_depth = traverse(parent)
+                    max_depth = max(max_depth, traverse_parent_depth)
+                    traverse_parent_index = op_ids.index(traverse_parent_id)
+                    traverse_output_index = resolved.index
+                    traverse_dag_input_index = None
                 except TypeError:
                     if id(cur_input) not in dag_input_ids:
                         dag_inputs.append(cur_input)
                         dag_input_ids.append(id(cur_input))
-                    parent_index = None
-                    output_index = None
-                    dag_input_index = dag_input_ids.index(id(cur_input))
+                    traverse_parent_index = None
+                    traverse_output_index = None
+                    traverse_dag_input_index = dag_input_ids.index(id(cur_input))
 
-                cur_input_indices.append({'parent_index': parent_index,
-                                          'output_index': output_index,
-                                          'dag_input_index': dag_input_index})
+                traverse_cur_input_indices.append({'parent_index': traverse_parent_index,
+                                                   'output_index': traverse_output_index,
+                                                   'dag_input_index': traverse_dag_input_index})
 
-            input_indices[cur_index] = cur_input_indices
+            input_indices[traverse_cur_index] = traverse_cur_input_indices
             cur_depth = max_depth + 1
-            op_depth[cur_index] = cur_depth
+            op_depth[traverse_cur_index] = cur_depth
         else:
-            cur_index = op_ids.index(cur_id)
-            cur_depth = op_depth[cur_index]
+            traverse_cur_index = op_ids.index(cur_id)
+            cur_depth = op_depth[traverse_cur_index]
 
         return cur_id, cur_depth
 
@@ -597,10 +595,8 @@ def profile(output_list, target_language='cpp', profiling_iterations=1):
     proto_header = os.path.join(cache_directory, 'language_dtype.h')
     if not os.path.exists(proto_header):
         enum_src = ''
-        enum_val = 0
-        for enum_name in lang._DTYPE.values:
-            enum_src += '    ' + enum_name.name + ' = ' + str(enum_val) + ',\n'
-            enum_val += 1
+        for enum_name, enum_val in lang.DType.items():
+            enum_src += '    ' + enum_name + ' = ' + str(enum_val) + ',\n'
 
         # generate header enum
         h_src = """
@@ -653,7 +649,7 @@ def profile(output_list, target_language='cpp', profiling_iterations=1):
              ndpointer(dtype=_TensorParam, flags="C_CONTIGUOUS"), ctypes.c_size_t,
              ndpointer(dtype=_TensorParam, flags="C_CONTIGUOUS"), ctypes.c_size_t,
              ndpointer(dtype=ctypes.c_double, flags="C_CONTIGUOUS"), ctypes.c_size_t]
-
+        test_cuda_op = None
     elif target_language == 'cuda':
         testlib_path = os.path.join(cache_directory, 'libtestcudaop.so.'+version)
         try:
@@ -706,6 +702,7 @@ def profile(output_list, target_language='cpp', profiling_iterations=1):
              ndpointer(dtype=_TensorParam, flags="C_CONTIGUOUS"), ctypes.c_size_t,
              ctypes.c_uint16,
              ndpointer(dtype=ctypes.c_double, flags="C_CONTIGUOUS"), ctypes.c_size_t]
+        test_c_op = None
     else:
         raise ValueError(invalid_language)
 
@@ -789,7 +786,7 @@ def profile(output_list, target_language='cpp', profiling_iterations=1):
 
 def as_tensorflow(tensor_list):
     """
-    Create a DAG of TensorFlow operators based on a DAG OVL operators and register it with the current
+    Create a DAG of TensorFlow operators based on a DAG of OVL operators and register it with the current
     TensorFlow Graph. The inputs to the DAG must be numpy arrays or TensorFlow tensors.
 
     :param tensor_list: operator outputs to convert to TensorFlow tensors
