@@ -10,13 +10,16 @@
 
 import numpy as np
 import opveclib as ops
+import tensorflow as tf
+import itertools
+import time
 
 
 class Convolution1D(ops._Operator):
     def op(self, x, v, kernel_orientation='as-is', stride=1, mode='same', data_format='NCE'):
         """
         :param x: An input tensor of shape [num_batches, num_channels, num_elements].
-        :param v: A filter/kernel of shape [num_channels, kernel_size].
+        :param v: A filter/kernel of shape [num_filters, num_channels, kernel_size].
         :param kernel_orientation: The orientation of the kernel to use: 'as-is' or 'flipped'. This language is used
         rather than 'convolution' or 'cross-correlation' since the terms have become overloaded and ambiguous across
         some fields. As defined in https://en.wikipedia.org/wiki/Cross-correlation#Properties, 'as-is' yields the
@@ -95,12 +98,13 @@ class Convolution1D(ops._Operator):
         if batch_remainder > 0:
             batch_workers += 1
 
-        elements_per_worker = 1000
+        elements_per_worker = 10
         element_workers, element_remainder = divmod(output_elements, elements_per_worker)
         if element_remainder > 0:
             element_workers += 1
 
         workgroup_shape = [batch_workers, filter_workers, element_workers]
+        print('    workgroup_shape: ' + str(workgroup_shape))
         pos = ops.position_in(workgroup_shape)
         cur_batch_block = pos[0]
         cur_filter_block = pos[1]
@@ -219,7 +223,9 @@ def reference(x, v, mode, orientation, data_format):
 
         assert len(v.shape) == 3
         if num_channels != v.shape[c_axis]:
-            raise ValueError('Channel axis size of input must match that of the filter.')
+            raise ValueError('Channel axis size ' + str(num_channels) +
+                             ' of input must match that of the filter - ' +
+                             str(v.shape[c_axis]))
 
         num_filters = v.shape[n_axis]
         filter_size = v.shape[e_axis]
@@ -239,7 +245,7 @@ def reference(x, v, mode, orientation, data_format):
             raise ValueError
         output_shape[e_axis] = output_elements
 
-        output = np.empty(output_shape)
+        output = np.empty(output_shape, dtype=float)
 
         for cur_batch in range(num_batches):
             for cur_filter in range(num_filters):
@@ -268,38 +274,146 @@ def reference(x, v, mode, orientation, data_format):
 
         return output
 
-bb = 1
-cc = 1
-ee = 100
-k_num = 5
+def run_tf(tensor_in_sizes, filter_in_sizes):
+    # test TF  2D convolution operator in 1D vs. OVL
+    total_size_1 = 1
+    total_size_2 = 1
+    for s in tensor_in_sizes:
+      total_size_1 *= s
+    for s in filter_in_sizes:
+      total_size_2 *= s
+    # Initializes the input tensor with array containing incrementing
+    # numbers from 1.
+    x1 = [f * 1.0 for f in range(1, total_size_1 + 1)]
+    x2 = [f * 1.0 for f in range(1, total_size_2 + 1)]
+    tin1 = tf.constant(x1, shape=tensor_in_sizes, dtype=tf.float32)
+    tin2 = tf.constant(x2, shape=filter_in_sizes, dtype=tf.float32)
+    conv = tf.nn.conv2d(tin1, tin2,
+                      strides=[1, 1, 1, 1],
+                      padding="SAME",
+                      data_format='NHWC')
+    # print('conv shape: ' + str(conv.get_shape().as_list()))
 
-a1 = np.random.random((bb, cc, ee))
-a2 = np.random.random((bb, cc, ee))
-for k_ee in range(13, 14):
-    b = np.random.random((k_num, cc, k_ee))
-    for md in ['valid', 'same', 'full']:
-        for orientation in ['as-is', 'flipped']:
-            import time
+    # compare to OVL - need to convert input to 1-D - ie. input_rows = filter_rows = 1
+    # also transpose initial data since filter index is last in TF and first in OVL
+    # TF input = batch, input_row, input_col, channels
+    # TF filter = filter_row, filter_col, channels, num_filters
+    # OVL NEC input = batches, num_elements, channels
+    # OVL NEC filter = num_filters, kernel_size, channels
+    assert(tensor_in_sizes[1] == 1)
+    assert(filter_in_sizes[0] == 1)
+    ovl_tensor_in_sizes = [tensor_in_sizes[0], tensor_in_sizes[2], tensor_in_sizes[3]]
+    num_filter = filter_in_sizes[3]
+    num_elem = filter_in_sizes[1]
+    num_chan = filter_in_sizes[2]
+    ovl_filter_in_sizes = [num_filter, num_elem, num_chan]
+    print('input and filter sizes: ' + str(ovl_tensor_in_sizes) + ', ' + str(ovl_filter_in_sizes))
+    ar1 = np.array(x1, dtype=np.float).reshape(ovl_tensor_in_sizes)
+    # does not produce the correct results
+    # ar2 = np.array(x2, dtype=np.float).reshape(ovl_filter_in_sizes, order='F')
+    ar2 = np.zeros(ovl_filter_in_sizes, dtype=np.float)
+    for col in range(0, num_elem):
+        for chan in range(0, num_chan):
+            for num in range(0, num_filter):
+                index = col * num_chan * num_filter + chan * num_filter + num
+                # print('ar2 ' + str(num) + ',' + str(col) + ',' + str(chan) + ' is index ' + str(index) + ' val: ' + str(x2[index]))
+                ar2[num,col,chan] = x2[index]
+
+    t0 = time.time()
+    ref = reference(ar1, ar2, mode='same', orientation='as-is', data_format= 'NEC')
+    t1 = time.time()
+    np_time = (t1-t0)*1000
+
+    iters = 100
+    ovl_cpp_time = 0
+    ovlOp = Convolution1D(ar1, ar2, mode='same', kernel_orientation='as-is', data_format= 'NEC')
+    ovlResult, prof = ops.profile(ovlOp, target_language='cuda', profiling_iterations=iters)
+    ovl_cuda_time = np.min(prof.values()[0])
+    assert np.allclose(ovlResult, ref)
+    #TODO - cpp is really slow...
+    # ovlcppResult, profcpp = ops.profile(ovlOp, target_language='cpp', profiling_iterations=iters)
+    # ovl_cpp_time = np.min(profcpp.values()[0])
+    # assert np.allclose(ovlcppResult, ref)
+
+    # ensure TF runs on GPU
+    test_config=tf.ConfigProto(allow_soft_placement=False)
+    test_config.graph_options.optimizer_options.opt_level = -1
+
+    # OVL-TF integration
+    ovl_tf_time = 0
+    with tf.Session(config=test_config) as sess:
+        with tf.device('/gpu:0'):
+            ovlOp_tf = ops.as_tensorflow(ovlOp)
+            init = tf.initialize_all_variables()
+            sess.run(init)
+            ovlOp_tf_result = sess.run(ovlOp_tf)
+            t0 = time.time()
+            for dummy in itertools.repeat(None, iters):
+                sess.run(ovlOp_tf.op)
             t1 = time.time()
-            y1 = reference(a1, b, md, orientation, 'NCE')
-            t2 = time.time()
-            y2 = reference(a2, b, md, orientation, 'NCE')
-            op = Convolution1D(a1, b, mode=md, kernel_orientation=orientation)
+            ovl_tf_time = (t1-t0)/float(iters) * 1000.00
+            assert np.allclose(ovlOp_tf_result, ref)
+    sess.close()
 
-            # result1 =
-            assert np.allclose(ops.evaluate(op, target_language='cuda'), y1)
-            # for d in range(1):
-            a1[:] = a2[:]
-            assert np.allclose(ops.evaluate(op, target_language='cuda'), y2)
+    # run TF 2D conv alone
+    tf_time = 0
+    with tf.Session(config=test_config) as sess:
+        with tf.device('/gpu:0'):
+            result = sess.run([conv])
+            t0 = time.time()
+            for dummy in itertools.repeat(None, iters):
+                sess.run([conv.op])
+            t1 = time.time()
+            tf_time = (t1-t0)/float(iters) * 1000.00
+            # TF result is 4D - have to convert to 3D to match OVL
+            tf_shape = result[0].shape
+            assert(tf_shape[1] == 1)
+            ovl_shape = [tf_shape[0], tf_shape[2], tf_shape[3]]
+            tf_result = np.array(result[0], dtype=np.float).reshape(ovl_shape)
+            #TODO - if number of filter elements is even, TF result does not match reference - first element "wraps" to end
+            assert np.allclose(tf_result, ref)
+    sess.close()
+    times = [np_time, ovl_cuda_time, ovl_cpp_time, ovl_tf_time, tf_time]
+    print('    time [np, OVL_cuda, OVL_cpp, OVL_TF, TF]: ' + str(times))
 
-            res, prof = ops.profile(op, target_language='cpp', profiling_iterations=100)
 
-            print(prof)
-            # print(debug)
-            # print(op[0, 0, :])
-            print(k_ee, md, orientation, (t2-t1)*1000, np.min(prof.values()[0]))
-            # assert np.allclose(result1, y1)
-            # assert np.allclose(result2, y2)
+def run_tests():
+    bb = 1
+    cc = 1
+    ee = 1000
+    k_num = 10
+    a1 = np.random.random((bb, ee, cc))
+    a2 = np.random.random((bb, ee, cc))
+    for k_ee in range(13, 14):
+        b = np.random.random((k_num, k_ee, cc))
+        for md in ['valid', 'same', 'full']:
+            for orientation in ['as-is', 'flipped']:
+                import time
+                t1 = time.time()
+                y1 = reference(a1, b, md, orientation, 'NEC')
+                t2 = time.time()
+                y2 = reference(a2, b, md, orientation, 'NEC')
+                op = Convolution1D(a1, b, mode=md, kernel_orientation=orientation, data_format='NEC')
+
+                # result1 =
+                assert np.allclose(ops.evaluate(op, target_language='cuda'), y1)
+                # for d in range(1):
+                a1[:] = a2[:]
+                assert np.allclose(ops.evaluate(op, target_language='cuda'), y2)
+
+                res, prof = ops.profile(op, target_language='cuda', profiling_iterations=100)
+
+                # print(prof)
+                # print(debug)
+                # print(op[0, 0, :])
+                print(k_ee, md, orientation, (t2-t1)*1000, np.min(prof.values()[0]))
+                # assert np.allclose(result1, y1)
+                # assert np.allclose(result2, y2)
+
+
+#TODO - OVL evaluate fails if it is run after a TF session
+run_tf([5, 1, 1000, 3], [1, 13, 3, 10])
+# run_tests()
 
 # op = Convolution1D(np.reshape(a, (batches, chans, elems)), np.reshape(v, (chans, kern_elems)))
 
