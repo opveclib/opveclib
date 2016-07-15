@@ -192,16 +192,16 @@ class TestAccumulate(unittest.TestCase):
         ref = np.cumsum(X, axis=0)
         # timeit returns seconds for 'number' iterations. For 10 iterations, multiply by 100 to get time in ms
         np_time = 100 * timeit.timeit('np.cumsum(X, axis=0)', setup='import numpy as np; X = np.random.uniform(0, 1, size=(10000, 1000))', number=iters)
-        logger.debug(u'Best numpy timeit (ms): ' + str(np_time))
+        logger.debug(u'Best numpy time (ms): ' + str(np_time))
         cumsumOp = cumsum(X, axis=0)
         ovl_cpp, prof_cpp = ops.profile(cumsumOp, target_language='cpp', profiling_iterations=iters)
         assert np.allclose(ref, ovl_cpp)
-        ovl_cpp_time = np.min(prof_cpp.values()[0])
+        ovl_cpp_time = np.min(list(prof_cpp.values())[0])
         logger.debug(u'Best ovl cpp time (ms): ' + str(ovl_cpp_time))
         if ops.cuda_enabled:
             ovl_cuda, prof_cuda = ops.profile(cumsumOp, target_language='cuda', profiling_iterations=iters)
             assert np.allclose(ref, ovl_cuda)
-            ovl_cuda_time = np.min(prof_cuda.values()[0])
+            ovl_cuda_time = np.min(list(prof_cuda.values())[0])
             logger.debug(u'Best ovl cuda time  (ms): ' + str(ovl_cuda_time))
 
         # OVL-TF integration

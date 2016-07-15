@@ -330,11 +330,11 @@ def run_tf(tensor_in_sizes, filter_in_sizes):
     ovl_cpp_time = 0
     ovlOp = Convolution1D(ar1, ar2, mode='same', kernel_orientation='as-is', data_format= 'NEC')
     ovlResult, prof = ops.profile(ovlOp, target_language='cuda', profiling_iterations=iters)
-    ovl_cuda_time = np.min(prof.values()[0])
+    ovl_cuda_time = np.min(list(prof.values())[0])
     assert np.allclose(ovlResult, ref)
     #TODO - cpp is really slow...
     # ovlcppResult, profcpp = ops.profile(ovlOp, target_language='cpp', profiling_iterations=iters)
-    # ovl_cpp_time = np.min(profcpp.values()[0])
+    # ovl_cpp_time = np.min(list(profcpp.values())[0])
     # assert np.allclose(ovlcppResult, ref)
 
     # ensure TF runs on GPU
@@ -408,7 +408,7 @@ def run_tests():
                 # print(prof)
                 # print(debug)
                 # print(op[0, 0, :])
-                print(k_ee, md, orientation, (t2-t1)*1000, np.min(prof.values()[0]))
+                print(k_ee, md, orientation, (t2-t1)*1000, np.min(list(prof.values())[0]))
                 # assert np.allclose(result1, y1)
                 # assert np.allclose(result2, y2)
 
