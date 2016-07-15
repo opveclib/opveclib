@@ -156,7 +156,7 @@ class TestAccumulate(unittest.TestCase):
         """
 
         a = np.random.random((5, 5, 5))
-        logging.log(logging.INFO, u'Testing C')
+        logging.log(logging.DEBUG, u'Testing C')
         assert np.allclose(np.cumsum(a, axis=0), ops.evaluate(cumsum(a, axis=0), target_language='cpp'))
         assert np.allclose(np.cumsum(a, axis=1), ops.evaluate(cumsum(a, axis=1), target_language='cpp'))
         assert np.allclose(np.cumsum(a, axis=2), ops.evaluate(cumsum(a, axis=2), target_language='cpp'))
@@ -166,7 +166,7 @@ class TestAccumulate(unittest.TestCase):
         assert np.allclose(np.cumprod(a, axis=2), ops.evaluate(cumprod(a, axis=2), target_language='cpp'))
 
         if ops.cuda_enabled:
-            logging.log(logging.INFO, u'Testing CUDA')
+            logging.log(logging.DEBUG, u'Testing CUDA')
             assert np.allclose(np.cumsum(a, axis=0), ops.evaluate(cumsum(a, axis=0), target_language='cuda'))
             assert np.allclose(np.cumsum(a, axis=1), ops.evaluate(cumsum(a, axis=1), target_language='cuda'))
             assert np.allclose(np.cumsum(a, axis=2), ops.evaluate(cumsum(a, axis=2), target_language='cuda'))
@@ -174,6 +174,54 @@ class TestAccumulate(unittest.TestCase):
             assert np.allclose(np.cumprod(a, axis=0), ops.evaluate(cumprod(a, axis=0), target_language='cuda'))
             assert np.allclose(np.cumprod(a, axis=1), ops.evaluate(cumprod(a, axis=1), target_language='cuda'))
             assert np.allclose(np.cumprod(a, axis=2), ops.evaluate(cumprod(a, axis=2), target_language='cuda'))
+
+    def test_performance(self):
+        """
+        test the performance vs. numpy running standalone and from tensorflow
+        based on tensorflow issue 813
+        https://github.com/tensorflow/tensorflow/issues/813
+        """
+        import tensorflow as tf
+        import timeit
+        import time
+        logger = logging.getLogger('cumsum')
+        logger.setLevel(logging.DEBUG)
+        iters = 10
+        X = np.random.uniform(0, 1, size=(10000, 1000))
+        # note, np.cumsum fails with memory error at input size 10 ^^ 6
+        ref = np.cumsum(X, axis=0)
+        # timeit returns seconds for 'number' iterations. For 10 iterations, multiply by 100 to get time in ms
+        np_time = 100 * timeit.timeit('np.cumsum(X, axis=0)', setup='import numpy as np; X = np.random.uniform(0, 1, size=(10000, 1000))', number=iters)
+        logger.debug(u'Best numpy timeit (ms): ' + str(np_time))
+        cumsumOp = cumsum(X, axis=0)
+        ovl_cpp, prof_cpp = ops.profile(cumsumOp, target_language='cpp', profiling_iterations=iters)
+        assert np.allclose(ref, ovl_cpp)
+        ovl_cpp_time = np.min(prof_cpp.values()[0])
+        logger.debug(u'Best ovl cpp time (ms): ' + str(ovl_cpp_time))
+        if ops.cuda_enabled:
+            ovl_cuda, prof_cuda = ops.profile(cumsumOp, target_language='cuda', profiling_iterations=iters)
+            assert np.allclose(ref, ovl_cuda)
+            ovl_cuda_time = np.min(prof_cuda.values()[0])
+            logger.debug(u'Best ovl cuda time  (ms): ' + str(ovl_cuda_time))
+
+        # OVL-TF integration
+        # ensure TF runs on GPU
+        test_config=tf.ConfigProto(allow_soft_placement=False)
+        test_config.graph_options.optimizer_options.opt_level = -1
+        with tf.Session(config=test_config) as sess:
+            cumsum_tf = ops.as_tensorflow(cumsumOp)
+            sess.run(tf.initialize_all_variables())
+            cumsum_tf_result = sess.run(cumsum_tf)
+            assert np.allclose(ref, cumsum_tf_result)
+            prof_tf = np.zeros(iters)
+            for i in range(iters):
+                t0 = time.time()
+                sess.run(cumsum_tf.op)
+                t1 = time.time()
+                prof_tf[i] = t1 - t0
+            tf_time = np.min(prof_tf) * 1000.00
+            logger.debug(u'Best tf + ovl cumsum time  (ms): ' + str(tf_time))
+        sess.close()
 
 
 if __name__ == '__main__':
