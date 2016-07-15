@@ -15,7 +15,7 @@ from sys import _getframe
 import numpy as np
 import tensorflow as tf
 from opveclib.expression import position_in, output_like
-from opveclib.operator import Operator, as_tensorflow, evaluate
+from opveclib.operator import operator, as_tensorflow, evaluate
 from opveclib.local import cuda_enabled, clear_op_cache
 
 
@@ -23,12 +23,12 @@ class TestIntegration(unittest.TestCase):
     def test_single_output(self):
         print('*** Running Test: ' + self.__class__.__name__ + ' function: ' + _getframe().f_code.co_name)
 
-        class AddOp(Operator):
-            def op(self, x, y):
-                pos = position_in(x.shape)
-                out = output_like(x)
-                out[pos] = x[pos] + y[pos]
-                return out
+        @operator()
+        def add(x, y):
+            pos = position_in(x.shape)
+            out = output_like(x)
+            out[pos] = x[pos] + y[pos]
+            return out
 
         in0 = np.random.random(5).astype(np.float32)
         in1 = np.random.random(5).astype(np.float32)
@@ -42,13 +42,13 @@ class TestIntegration(unittest.TestCase):
             with tf.device('/cpu:0'):
                 a = in0*2
                 b = in1*2
-                c = as_tensorflow(AddOp(a, b))
+                c = as_tensorflow(add(a, b))
                 squared = tf.square(c)
             if cuda_enabled:
                 with tf.device('/gpu:0'):
                     a_gpu = in0*2
                     b_gpu = in1*2
-                    c_gpu = as_tensorflow(AddOp(a_gpu, b_gpu))
+                    c_gpu = as_tensorflow(add(a_gpu, b_gpu))
                     squared_gpu = tf.square(c_gpu)
                 result, result_gpu = sess.run([squared, squared_gpu])
                 assert np.allclose(reference, result_gpu)
@@ -60,25 +60,22 @@ class TestIntegration(unittest.TestCase):
     def test_multiple_outputs(self):
         print('*** Running Test: ' + self.__class__.__name__ + ' function: ' + _getframe().f_code.co_name)
 
-        class MultiOp(Operator):
-            # first output is the sum of first two inputs
-            # second output is the sum of the first two multiplied by the third
-            # third output is sum of all three inputs
-            def op(self, input0, input1, input2):
-                pos = position_in(input0.shape)
-                output0 = output_like(input0)
-                output1 = output_like(input0)
-                output2 = output_like(input0)
+        @operator()
+        def multi_op(input0, input1, input2):
+            pos = position_in(input0.shape)
+            output0 = output_like(input0)
+            output1 = output_like(input0)
+            output2 = output_like(input0)
 
-                a = input0[pos]
-                b = input1[pos]
-                c = input2[pos]
-                d = a + b
-                output0[pos] = d
-                output1[pos] = d*c
-                output2[pos] = d+c
+            a = input0[pos]
+            b = input1[pos]
+            c = input2[pos]
+            d = a + b
+            output0[pos] = d
+            output1[pos] = d*c
+            output2[pos] = d+c
 
-                return output0, output1, output2
+            return output0, output1, output2
 
         rng = np.random.RandomState()
         in0 = rng.uniform(-1, 1, 5).astype(np.float32)
@@ -98,12 +95,12 @@ class TestIntegration(unittest.TestCase):
             sq1 = tf.square(in1)
 
             with tf.device('/cpu:0'):
-                op = MultiOp(sq0, sq1, in2)
+                op = multi_op(sq0, sq1, in2)
                 out0, out1, out2 = as_tensorflow(op)
 
             if cuda_enabled:
                 with tf.device('/gpu:0'):
-                    op_gpu = MultiOp(sq0, sq1, in2)
+                    op_gpu = multi_op(sq0, sq1, in2)
                     out0_gpu, out1_gpu, out2_gpu = as_tensorflow(op_gpu)
 
                 eval1, eval2, eval3, eval1_gpu, eval2_gpu, eval3_gpu = \
@@ -120,17 +117,16 @@ class TestIntegration(unittest.TestCase):
 
     def test_4D(self):
         print('*** Running Test: ' + self.__class__.__name__ + ' function: ' + _getframe().f_code.co_name)
-        class SumSqOp(Operator):
-            # output is the sum of the squares of each input
-            def op(self, input0, input1, input2):
-                pos = position_in(input0.shape)
-                out0 = output_like(input0)
-                a = input0[pos]
-                b = input1[pos]
-                c = input2[pos]
-                d = a*a + b*b + c*c
-                out0[pos] = d
-                return out0
+        @operator()
+        def sum_sq(input0, input1, input2):
+            pos = position_in(input0.shape)
+            out0 = output_like(input0)
+            a = input0[pos]
+            b = input1[pos]
+            c = input2[pos]
+            d = a*a + b*b + c*c
+            out0[pos] = d
+            return out0
 
         in0 = np.random.random((5, 4, 3, 2)).astype(np.float32)
         in1 = np.random.random((5, 4, 3, 2)).astype(np.float32)
@@ -141,7 +137,7 @@ class TestIntegration(unittest.TestCase):
         # Don't perform optimizations for tests so we don't inadvertently run
         # gpu ops on cpu
         test_config.graph_options.optimizer_options.opt_level = -1
-        op = SumSqOp(in0, in1, in2)
+        op = sum_sq(in0, in1, in2)
         with tf.Session(config=test_config) as sess:
             with tf.device('/cpu:0'):
                 out_cpu = as_tensorflow(op)
@@ -157,8 +153,6 @@ class TestIntegration(unittest.TestCase):
 
         assert np.allclose(reference, result)
         assert np.allclose(evaluate(op, target_language='cpp'), reference)
-
-
 
 
 if __name__ == '__main__':

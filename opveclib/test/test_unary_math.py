@@ -12,24 +12,24 @@ from __future__ import print_function
 import unittest
 import numpy as np
 from sys import _getframe
-from ..operator import _Operator, evaluate
+from ..operator import operator, evaluate
 from ..expression import output_like, position_in, absolute, logical_not, arctan, arccos, arcsin, \
     cos, cosh, sin, sinh, tan, tanh, exp, log, log10, sqrt, ceil, floor
 from ..local import cuda_enabled, clear_op_cache
 
 
 def gen(input_tensor, ops_func, np_func, cuda_tolerance=None):
-    class UnaryMath(_Operator):
-        def op(self, input0):
+    @operator()
+    def unary(input0):
 
-            output = output_like(input0)
-            pos = position_in(input0.shape)
+        output = output_like(input0)
+        pos = position_in(input0.shape)
 
-            output[pos] = ops_func(input0[pos])
+        output[pos] = ops_func(input0[pos])
 
-            return output
+        return output
 
-    op = UnaryMath(input_tensor)
+    op = unary(input_tensor)
     op_c = evaluate(op, target_language='cpp')
     assert np.allclose(op_c, np_func(input_tensor))
 

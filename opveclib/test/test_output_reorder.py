@@ -12,7 +12,7 @@ from __future__ import print_function
 import unittest
 import numpy as np
 from sys import _getframe
-from ..operator import _Operator, evaluate
+from ..operator import operator, evaluate
 from ..expression import position_in, output_like
 from ..local import clear_op_cache
 
@@ -23,28 +23,28 @@ class TestOutputReturn(unittest.TestCase):
     def test_return_reordering(self):
         print('*** Running Test: ' + self.__class__.__name__ + ' function: ' + _getframe().f_code.co_name)
 
-        class ReorderOp(_Operator):
-            def op(self, input0):
-                pos = position_in(input0.shape)
+        @operator()
+        def reorder(input0):
+            pos = position_in(input0.shape)
 
-                # declare out of order
-                output3 = output_like(input0)
-                output0 = output_like(input0)
-                output2 = output_like(input0)
-                output1 = output_like(input0)
+            # declare out of order
+            output3 = output_like(input0)
+            output0 = output_like(input0)
+            output2 = output_like(input0)
+            output1 = output_like(input0)
 
-                input = input0[pos]
+            input = input0[pos]
 
-                output0[pos] = 2*input
-                output1[pos] = 3*input
-                output2[pos] = 4*input
-                output3[pos] = 5*input
+            output0[pos] = 2*input
+            output1[pos] = 3*input
+            output2[pos] = 4*input
+            output3[pos] = 5*input
 
-                # return in order
-                return output0, output1, output2, output3
+            # return in order
+            return output0, output1, output2, output3
 
         a = np.random.random(5)
-        op = ReorderOp(a)
+        op = reorder(a)
         o0, o1, o2, o3 = evaluate(op, target_language='cpp')
 
         assert np.alltrue(np.equal(o0, 2*a))
@@ -56,61 +56,61 @@ class TestOutputReturn(unittest.TestCase):
     def test_output_error(self):
         print('*** Running Test: ' + self.__class__.__name__ + ' function: ' + _getframe().f_code.co_name)
 
-        class TooFew(_Operator):
-            def op(self, input0):
-                pos = position_in(input0.shape)
+        @operator()
+        def too_few(input0):
+            pos = position_in(input0.shape)
 
-                # declare out of order
-                output3 = output_like(input0)
-                output0 = output_like(input0)
-                output2 = output_like(input0)
-                output1 = output_like(input0)
+            # declare out of order
+            output3 = output_like(input0)
+            output0 = output_like(input0)
+            output2 = output_like(input0)
+            output1 = output_like(input0)
 
-                input_value = input0[pos]
+            input_value = input0[pos]
 
-                output0[pos] = 2*input_value
-                output1[pos] = 3*input_value
-                output2[pos] = 4*input_value
-                output3[pos] = 5*input_value
+            output0[pos] = 2*input_value
+            output1[pos] = 3*input_value
+            output2[pos] = 4*input_value
+            output3[pos] = 5*input_value
 
-                # return in order
-                return output0, output1
+            # return in order
+            return output0, output1
 
         a = np.random.random(5)
         try:
-            TooFew(a)
+            too_few(a)
         except ValueError:
             pass
         else:
             assert False
 
-        class NoOutputs(_Operator):
-            def op(self, input0):
-                pos = position_in(input0.shape)
+        @operator()
+        def no_outputs(input0):
+            pos = position_in(input0.shape)
 
-                input_value = input0[pos]
-                output0 = output_like(input0)
-                output0[pos] = 2*input_value
+            input_value = input0[pos]
+            output0 = output_like(input0)
+            output0[pos] = 2*input_value
 
         try:
-            NoOutputs(a)
+            no_outputs(a)
         except ValueError:
             pass
         else:
             assert False
 
-        class BadReturn(_Operator):
-            def op(self, input0):
-                pos = position_in(input0.shape)
+        @operator()
+        def bad_return(input0):
+            pos = position_in(input0.shape)
 
-                input_value = input0[pos]
-                output0 = output_like(input0)
-                output0[pos] = 2*input_value
+            input_value = input0[pos]
+            output0 = output_like(input0)
+            output0[pos] = 2*input_value
 
-                return input_value
+            return input_value
 
         try:
-            BadReturn(a)
+            bad_return(a)
         except TypeError:
             pass
         else:

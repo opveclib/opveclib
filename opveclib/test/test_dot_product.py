@@ -12,27 +12,27 @@ from __future__ import print_function
 import unittest
 import numpy as np
 from sys import _getframe
-from ..operator import _Operator, evaluate
+from ..operator import operator, evaluate
 from ..expression import output, position_in, variable, uint32, float64, arange
 from ..local import cuda_enabled, clear_op_cache
 
 
-class Dot(_Operator):
-    def op(self, input0, input1):
-        num_vectors = input0.shape[0]
+@operator()
+def dot(input0, input1):
+    num_vectors = input0.shape[0]
 
-        dot = output(num_vectors, input0.dtype)
+    dot_out = output(num_vectors, input0.dtype)
 
-        pos = position_in(num_vectors)[0]
+    pos = position_in(num_vectors)[0]
 
-        accum = variable(0.0, float64)
-        num_elements = variable(input0.shape[1], uint32)
-        for i in arange(num_elements):
-            accum <<= accum + input0[pos, i]*input1[pos, i]
+    accum = variable(0.0, float64)
+    num_elements = variable(input0.shape[1], uint32)
+    for i in arange(num_elements):
+        accum <<= accum + input0[pos, i]*input1[pos, i]
 
-        dot[pos] = accum
+    dot_out[pos] = accum
 
-        return dot
+    return dot_out
 
 
 class TestDot(unittest.TestCase):
@@ -41,7 +41,7 @@ class TestDot(unittest.TestCase):
         rng = np.random.RandomState(1)
         x = rng.uniform(-1, 1, (100, 10))
         y = rng.uniform(-1, 1, (100, 10))
-        op = Dot(x, y)
+        op = dot(x, y)
 
         op_np = np.sum(x*y, axis=1)
         op_c = evaluate(op, target_language='cpp')

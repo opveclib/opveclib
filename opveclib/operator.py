@@ -196,11 +196,18 @@ class _OpGenerator(object):
 
         self.grad_function = None
 
+    def __str__(self):
+        return self.op_function.__name__
+
     def __call__(self, *inputs, **defined_constants):
         func_args, func_varargs, func_keywords, func_defaults = inspect.getargspec(self.op_function)
-        input_names = func_args[:-len(func_defaults)]
-        constants = dict(zip(func_args[-len(func_defaults):], func_defaults))
-        constants.update(defined_constants)
+        if func_defaults is None:
+            input_names = func_args
+            constants = {}
+        else:
+            input_names = func_args[:-len(func_defaults)]
+            constants = dict(zip(func_args[-len(func_defaults):], func_defaults))
+            constants.update(defined_constants)
 
         f_name = self.op_function.__name__
 

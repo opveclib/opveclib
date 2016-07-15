@@ -75,10 +75,7 @@ class DynamicLibAddGPUTest(unittest.TestCase):
                                                                        cpu_func_name="add2float",
                                                                        gpu_lib_path=gpulib,
                                                                        gpu_func_name="add2float",
-                                                                       gpu_grad_func_name='',
-                                                                       gpu_grad_lib_path='',
-                                                                       cpu_grad_func_name='',
-                                                                       cpu_grad_lib_path='',
+                                                                       serialized_grad_dag='',
                                                                        cuda_threads_per_block=_default_cuda_threads_per_block)
 
                     ref = np.add(in0,in1)
@@ -95,10 +92,7 @@ class DynamicLibAddGPUTest(unittest.TestCase):
                                                                        cpu_func_name="addFloatDoubleFloat",
                                                                        gpu_lib_path= gpulib,
                                                                        gpu_func_name="addFloatDoubleFloat",
-                                                                       gpu_grad_func_name='',
-                                                                       gpu_grad_lib_path='',
-                                                                       cpu_grad_func_name='',
-                                                                       cpu_grad_lib_path='',
+                                                                       serialized_grad_dag='',
                                                                        cuda_threads_per_block=_default_cuda_threads_per_block)
                     ref = (in0 + in2 + in1).astype(np.float32)
                     if (dev_string is '/gpu:0'):
@@ -113,10 +107,7 @@ class DynamicLibAddGPUTest(unittest.TestCase):
                                                                        cpu_func_name="sumAndSq",
                                                                        gpu_lib_path= gpulib,
                                                                        gpu_func_name="sumAndSq",
-                                                                       gpu_grad_func_name='',
-                                                                       gpu_grad_lib_path='',
-                                                                       cpu_grad_func_name='',
-                                                                       cpu_grad_lib_path='',
+                                                                       serialized_grad_dag='',
                                                                        cuda_threads_per_block=_default_cuda_threads_per_block)
 
                     out0 = (in0 + in2).astype(np.float32)

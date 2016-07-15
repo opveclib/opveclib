@@ -11,23 +11,26 @@
 from __future__ import print_function
 import unittest
 import numpy as np
-from ..operator import _Operator, _build_op_dag
+from ..operator import operator, _build_op_dag
 from ..expression import position_in, output_like
 
 
-class AddOne(_Operator):
-    def op(self, x, y):
-        assert x.shape == y.shape
+#TODO: merge with test_output_reorder
+#TODO: expand tests to make sure intelligible errors are thrown for bad syntax
 
-        a = output_like(x)
-        b = output_like(y)
+@operator()
+def add_one(x, y):
+    assert x.shape == y.shape
 
-        pos = position_in(a.shape)
+    a = output_like(x)
+    b = output_like(y)
 
-        a[pos] = x[pos] + 1
-        b[pos] = y[pos] + 1
+    pos = position_in(a.shape)
 
-        return a, b
+    a[pos] = x[pos] + 1
+    b[pos] = y[pos] + 1
+
+    return a, b
 
 
 class TestOperator(unittest.TestCase):
@@ -35,11 +38,12 @@ class TestOperator(unittest.TestCase):
         in1 = np.random.random(10)
         in2 = np.random.random(10)
 
-        a1, b1 = AddOne(in1, in2)
+        a1, b1 = add_one(in1, in2)
 
-        a2, b2 = AddOne(a1, b1)
+        a2, b2 = add_one(a1, b1)
 
         _build_op_dag(a2, b2)
+        # TODO: test that _build_op_dag is getting the correct dag structure, and test some more complicated dags
         pass
 
 

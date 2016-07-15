@@ -12,31 +12,35 @@ from __future__ import print_function
 import unittest
 import numpy as np
 from sys import _getframe
-from ..operator import _Operator, evaluate
+from ..operator import operator, evaluate
 from ..expression import position_in, output_like
 from ..local import cuda_enabled, clear_op_cache
 
 
-class MultiOp(_Operator):
+@operator()
+def multi_op(input0, input1, input2):
+    """
+    :param input0:
+    :param input1:
+    :param input2:
+    :return: first output is the sum of first two inputs
+        second output is the sum of the first two multiplied by the third
+        third output is sum of all three inputs
+    """
+    pos = position_in(input0.shape)
+    output0 = output_like(input0)
+    output1 = output_like(input0)
+    output2 = output_like(input0)
 
-    # first output is the sum of first two inputs
-    # second output is the sum of the first two multiplied by the third
-    # third output is sum of all three inputs
-    def op(self, input0, input1, input2):
-        pos = position_in(input0.shape)
-        output0 = output_like(input0)
-        output1 = output_like(input0)
-        output2 = output_like(input0)
+    a = input0[pos]
+    b = input1[pos]
+    c = input2[pos]
+    d = a + b
+    output0[pos] = d
+    output1[pos] = d*c
+    output2[pos] = d+c
 
-        a = input0[pos]
-        b = input1[pos]
-        c = input2[pos]
-        d = a + b
-        output0[pos] = d
-        output1[pos] = d*c
-        output2[pos] = d+c
-
-        return output0, output1, output2
+    return output0, output1, output2
 
 
 class TestMultipleOutputs(unittest.TestCase):
@@ -45,7 +49,7 @@ class TestMultipleOutputs(unittest.TestCase):
         a = np.random.random(5)
         b = np.random.random(5)
         c = np.random.random(5)
-        op = MultiOp(a, b, c)
+        op = multi_op(a, b, c)
         op_c = evaluate(op, target_language='cpp')
 
         assert np.allclose(op_c[0], a+b)

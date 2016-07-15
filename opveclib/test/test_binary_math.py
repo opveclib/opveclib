@@ -12,23 +12,23 @@ from __future__ import print_function
 import unittest
 import numpy as np
 from sys import _getframe
-from ..operator import _Operator, evaluate
+from ..operator import operator, evaluate
 from ..expression import output_like, position_in, minimum, maximum, power, arctan2, logical_and, logical_or
 from ..local import cuda_enabled, clear_op_cache
 
 
 def gen(input0, input1, ops_func, np_func):
-    class BinaryMath(_Operator):
-        def op(self, input0, input1):
+    @operator()
+    def binary_math(op_input0, op_input1):
 
-            output = output_like(input0)
-            pos = position_in(input0.shape)
+        output = output_like(op_input0)
+        pos = position_in(op_input0.shape)
 
-            output[pos] = ops_func(input0[pos], input1[pos])
+        output[pos] = ops_func(op_input0[pos], op_input1[pos])
 
-            return output
+        return output
 
-    op = BinaryMath(input0, input1)
+    op = binary_math(input0, input1)
     op_c = evaluate(op, target_language='cpp')
     assert np.allclose(op_c, np_func(input0, input1))
 
