@@ -18,16 +18,18 @@ import time
 class Convolution1D(ops._Operator):
     def op(self, x, v, kernel_orientation='as-is', stride=1, mode='same', data_format='NCE'):
         """
+        Define the operator function.
+
         :param x: An input tensor of shape [num_batches, num_channels, num_elements].
         :param v: A filter/kernel of shape [num_filters, num_channels, kernel_size].
         :param kernel_orientation: The orientation of the kernel to use: 'as-is' or 'flipped'. This language is used
-        rather than 'convolution' or 'cross-correlation' since the terms have become overloaded and ambiguous across
-        some fields. As defined in https://en.wikipedia.org/wiki/Cross-correlation#Properties, 'as-is' yields the
-        cross-correlation and 'flipped' yields the convolution.
+            rather than 'convolution' or 'cross-correlation' since the terms have become overloaded and ambiguous across
+            some fields. As defined in https://en.wikipedia.org/wiki/Cross-correlation#Properties, 'as-is' yields the
+            cross-correlation and 'flipped' yields the convolution.
         :param stride: kernel stride to use.
-        :param mode: border mode
-        :param data_format: order of the dimensions in the input.
-        :return:
+        :param mode: border mode: 'same', 'valid', or 'full'
+        :param data_format: order of the dimensions in the input: 'NCE', 'NEC' etc.
+        :return: an output tensor of shape [num_batches, num_filters, num_elements]
         """
 
         if kernel_orientation != 'as-is' and kernel_orientation != 'flipped':
@@ -328,11 +330,11 @@ def run_tf(tensor_in_sizes, filter_in_sizes):
     ovl_cpp_time = 0
     ovlOp = Convolution1D(ar1, ar2, mode='same', kernel_orientation='as-is', data_format= 'NEC')
     ovlResult, prof = ops.profile(ovlOp, target_language='cuda', profiling_iterations=iters)
-    ovl_cuda_time = np.min(prof.values()[0])
+    ovl_cuda_time = np.min(list(prof.values())[0])
     assert np.allclose(ovlResult, ref)
     #TODO - cpp is really slow...
     # ovlcppResult, profcpp = ops.profile(ovlOp, target_language='cpp', profiling_iterations=iters)
-    # ovl_cpp_time = np.min(profcpp.values()[0])
+    # ovl_cpp_time = np.min(list(profcpp.values())[0])
     # assert np.allclose(ovlcppResult, ref)
 
     # ensure TF runs on GPU
@@ -406,7 +408,7 @@ def run_tests():
                 # print(prof)
                 # print(debug)
                 # print(op[0, 0, :])
-                print(k_ee, md, orientation, (t2-t1)*1000, np.min(prof.values()[0]))
+                print(k_ee, md, orientation, (t2-t1)*1000, np.min(list(prof.values())[0]))
                 # assert np.allclose(result1, y1)
                 # assert np.allclose(result2, y2)
 
