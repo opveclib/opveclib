@@ -57,7 +57,7 @@ def diffusion2DGPU(image, dt, l, s, nIter):
     .. doctest::
 
         >>> from opveclib import evaluate
-        >>> from opveclib.examples.test_diffusion import TensorToFloat64, diffusion2DGPU
+        >>> from opveclib.examples.test_diffusion import tensor_to_float64, diffusion2DGPU
         >>> from six.moves import urllib
         >>> import matplotlib.image as mpimg
         >>> fileURL     = "https://upload.wikimedia.org/wikipedia/commons/6/68/"
@@ -66,7 +66,7 @@ def diffusion2DGPU(image, dt, l, s, nIter):
         >>> f = urllib.request.urlopen(fileURL + fileName)
         >>> with open(fileTmp, 'wb') as fHandle:
         ...         fHandle.write(f.read())
-        >>> imageIn = evaluate(TensorToFloat64(mpimg.imread(fileTmp)))
+        >>> imageIn = evaluate(tensor_to_float64(mpimg.imread(fileTmp)))
         >>> imageOut = diffusion2DGPU(imageIn, dt=5, l=3.5/255, s=3, nIter=3)
 
     """
@@ -79,13 +79,13 @@ def diffusion2DGPU(image, dt, l, s, nIter):
     test_config=tf.ConfigProto(allow_soft_placement=False)
     test_config.graph_options.optimizer_options.opt_level = -1
     with tf.Session(config=test_config) as sess:
-        I = ops.as_tensorflow(AddBoundaryOp(image))
-        Gauss = ops.as_tensorflow(Gauss2DOp(dimOut=[nGauss, nGauss]))
+        I = ops.as_tensorflow(add_boundary_op(image))
+        Gauss = ops.as_tensorflow(gauss_2d(dimOut=[nGauss, nGauss]))
 
         for iter in range(nIter):
-            G =  ops.as_tensorflow(Filter2DOp(I, Gauss))
+            G =  ops.as_tensorflow(filter_2d(I, Gauss))
 
-            GRowPlus, GRowMinus, GColPlus, GColMinus = ops.as_tensorflow(DiffusionGradient2DOp(G, l2=l2))
+            GRowPlus, GRowMinus, GColPlus, GColMinus = ops.as_tensorflow(diffusion_gradient(G, l2=l2))
 
             AlphaRow    = 1 - (- (GRowPlus + GRowMinus)) * nDim * dt
             BetaRow     = - GRowMinus * nDim * dt
@@ -95,12 +95,12 @@ def diffusion2DGPU(image, dt, l, s, nIter):
             BetaCol     = - GColMinus * nDim * dt
             GammaCol    = - GColPlus * nDim * dt
 
-            I = ops.as_tensorflow(SolveDiagRow2DOp(AlphaRow, BetaRow, GammaRow, I)) \
-              + ops.as_tensorflow(SolveDiagCol2DOp(AlphaCol, BetaCol, GammaCol, I))
+            I = ops.as_tensorflow(solve_diag_row_2d(AlphaRow, BetaRow, GammaRow, I)) \
+              + ops.as_tensorflow(solve_diag_col_2d(AlphaCol, BetaCol, GammaCol, I))
             I = I / nDim
-            I = ops.as_tensorflow(CopyBoundaryOp(I))
+            I = ops.as_tensorflow(copy_boundary(I))
 
-        I = ops.as_tensorflow(DelBoundaryOp(I))
+        I = ops.as_tensorflow(del_boundary(I))
 
     return sess.run(I)
 
@@ -160,24 +160,23 @@ def diffusion2DNp(image, dt, l, s, nIter):
     return delBoundaryNp(I)
 
 
-class TensorToFloat64(ops._Operator):
+@ops.operator()
+def tensor_to_float64(dataIn):
+    """Convert a tensor from any type into a float64 type using the ops.cast function.
+
+    :param dataIn: Input tensor.
+    :type dataIn: numpy array.
+    :return The converted input tensor.
     """
-    Convert a tensor from any type into a float64 type using the ops.cast function.
-    """
-    def op(self, dataIn):
-        """The definition of the operator.
+    pos             = ops.position_in(dataIn.shape)
+    dataOut         = ops.output(dataIn.shape, ops.float64)
+    dataOut[pos]    = ops.cast(dataIn[pos], ops.float64)
 
-        :param dataIn: Input tensor.
-        :type dataIn: numpy array.
-        :return The converted input tensor.
-        """
-        pos             = ops.position_in(dataIn.shape)
-        dataOut         = ops.output(dataIn.shape, ops.float64)
-        dataOut[pos]    = ops.cast(dataIn[pos], ops.float64)
+    return dataOut
 
-        return dataOut
 
-class AddBoundaryOp(ops._Operator):
+@ops.operator()
+def add_boundary_op(dataIn):
     """Adds a one pixel boundary to a 2D field.
 
     This class defines an operator to add a boundary to a 2D field.
@@ -191,49 +190,46 @@ class AddBoundaryOp(ops._Operator):
         dataOut = | 3 3 4 4 4 |
                   | 2 2 1 0 0 |
                   \ 2 2 1 0 0 /
+
+    :param dataIn: 2D data input.
+    :type dataIn: numpy array.
+    :return: a 2D data output with added boundary.
     """
-    def op(self, dataIn):
-        """The definition of the operator function.
+    assert len(dataIn.shape)==2 , "Only 2D data is supported but found %d dimensions." \
+                                  % (len(dataIn.shape))
+    nYIn    = dataIn.shape[0]
+    nXIn    = dataIn.shape[1]
+    assert nYIn>1, "2D data has %d rows, but must have more than %d rows." % (nYIn, 2)
+    assert nXIn>1, "2D data has %d columns, but must have more than %d columns" % (nXIn, 2)
+    nYOut   = nYIn + 2
+    nXOut   = nXIn + 2
+    dataOut = ops.output([nYOut, nXOut], dataIn.dtype)
+    pos     = ops.position_in(4)[0] # Work in stripes of 4 threads for a better memory access pattern.
+    nY0     = nYIn*pos/4
+    nY1     = nYIn*(pos+1)/4
 
-        :param dataIn: 2D data input.
-        :type dataIn: numpy array.
-        :return: a 2D data output with added boundary.
-        """
-        assert len(dataIn.shape)==2 , "Only 2D data is supported but found %d dimensions." \
-                                      % (len(dataIn.shape))
-        nYIn    = dataIn.shape[0]
-        nXIn    = dataIn.shape[1]
-        assert nYIn>1, "2D data has %d rows, but must have more than %d rows." % (nYIn, 2)
-        assert nXIn>1, "2D data has %d columns, but must have more than %d columns" % (nXIn, 2)
-        nYOut   = nYIn + 2
-        nXOut   = nXIn + 2
-        dataOut = ops.output([nYOut, nXOut], dataIn.dtype)
-        pos     = ops.position_in(4)[0] # Work in stripes of 4 threads for a better memory access pattern.
-        nY0     = nYIn*pos/4
-        nY1     = nYIn*(pos+1)/4
+    # Copy the stripe in a row including the boundary values.
+    for iY in ops.arange(nY0,nY1):
+        dataOut[iY+1, 0] = dataIn[iY, 0]              # left boundary
+        for iX in ops.arange(0,nXIn):
+            dataOut[iY+1, iX+1] = dataIn[iY, iX]
+        dataOut[iY+1, nXOut-1] = dataIn[iY, nXIn-1]   # right boundary
 
-        # Copy the stripe in a row including the boundary values.
-        for iY in ops.arange(nY0,nY1):
-            dataOut[iY+1, 0] = dataIn[iY, 0]              # left boundary
-            for iX in ops.arange(0,nXIn):
-                dataOut[iY+1, iX+1] = dataIn[iY, iX]
-            dataOut[iY+1, nXOut-1] = dataIn[iY, nXIn-1]   # right boundary
+    # The first thread works on the top boundary.
+    with ops.if_(pos==0):
+        dataOut[0, 0] = dataIn[0, 0]            # top,left corner
+        for iX in ops.arange(0, nXIn):
+            dataOut[0, iX+1] = dataIn[0, iX]      # top boundary
+        dataOut[0, nXOut-1] = dataIn[0, nXIn-1] # top, right corner
 
-        # The first thread works on the top boundary.
-        with ops.if_(pos==0):
-            dataOut[0, 0] = dataIn[0, 0]            # top,left corner
-            for iX in ops.arange(0, nXIn):
-                dataOut[0, iX+1] = dataIn[0, iX]      # top boundary
-            dataOut[0, nXOut-1] = dataIn[0, nXIn-1] # top, right corner
+    # The last thread works on the bottom boundary.
+    with ops.elif_(pos==3):
+        dataOut[nYOut-1, 0] = dataIn[nYIn-1, 0]             # bottom left corner
+        for iX in ops.arange(0, nXIn):
+            dataOut[nYOut-1, iX+1] = dataIn[nYIn-1, iX]       # bottom boundary
+        dataOut[nYOut-1, nXOut-1] = dataIn[nYIn-1, nXIn-1]  # bottom right corner
 
-        # The last thread works on the bottom boundary.
-        with ops.elif_(pos==3):
-            dataOut[nYOut-1, 0] = dataIn[nYIn-1, 0]             # bottom left corner
-            for iX in ops.arange(0, nXIn):
-                dataOut[nYOut-1, iX+1] = dataIn[nYIn-1, iX]       # bottom boundary
-            dataOut[nYOut-1, nXOut-1] = dataIn[nYIn-1, nXIn-1]  # bottom right corner
-
-        return dataOut
+    return dataOut
 
 
 def addBoundaryNp(dataIn):
@@ -270,7 +266,8 @@ def addBoundaryNp(dataIn):
     return dataOut
 
 
-class DelBoundaryOp(ops._Operator):
+@ops.operator()
+def del_boundary(dataIn):
     """Deletes values from a one pixel wide boundary for a 2D field.
 
     This class defines an operator to delete the boundary values of a 2D field.
@@ -283,33 +280,30 @@ class DelBoundaryOp(ops._Operator):
 
                   / 3 4 4 \
         dataOut = \ 2 1 0 /
+
+    :param dataIn: 2D data input.
+    :return 2D data output with deleted boundary.
     """
-    def op(self, dataIn):
-        """The definition of the operator function.
+    assert len(dataIn.shape)==2 , "Only 2D data is supported but found %d dimensions." % (len(dataIn.shape))
 
-        :param dataIn: 2D data input.
-        :return 2D data output with deleted boundary.
-        """
-        assert len(dataIn.shape)==2 , "Only 2D data is supported but found %d dimensions." % (len(dataIn.shape))
+    nYIn    = dataIn.shape[0]
+    nXIn    = dataIn.shape[1]
 
-        nYIn    = dataIn.shape[0]
-        nXIn    = dataIn.shape[1]
+    assert nYIn>2, "Data must have at least %d rows but has %d rows." %(3, nYIn)
+    assert nXIn>2, "Data must have at least %d columns but has %d columns." %(3, nXIn)
 
-        assert nYIn>2, "Data must have at least %d rows but has %d rows." %(3, nYIn)
-        assert nXIn>2, "Data must have at least %d columns but has %d columns." %(3, nXIn)
+    nYOut   = nYIn-2
+    nXOut   = nXIn-2
+    dataOut = ops.output([nYOut, nXOut], dataIn.dtype)
+    pos     = ops.position_in(4)[0] # Work in stripes for a better memory access pattern.
+    nY0     = nYOut*pos/4
+    nY1     = nYOut*(pos+1)/4
+    # Copy the stripe in a row, excluding boundary values.
+    for iY in ops.arange(nY0,nY1):
+        for iX in ops.arange(0,nXOut):
+            dataOut[iY, iX] = dataIn[1+iY, 1+iX]
 
-        nYOut   = nYIn-2
-        nXOut   = nXIn-2
-        dataOut = ops.output([nYOut, nXOut], dataIn.dtype)
-        pos     = ops.position_in(4)[0] # Work in stripes for a better memory access pattern.
-        nY0     = nYOut*pos/4
-        nY1     = nYOut*(pos+1)/4
-        # Copy the stripe in a row, excluding boundary values.
-        for iY in ops.arange(nY0,nY1):
-            for iX in ops.arange(0,nXOut):
-                dataOut[iY, iX] = dataIn[1+iY, 1+iX]
-
-        return dataOut
+    return dataOut
 
 def delBoundaryNp(dataIn):
     """Deletes a one pixel boundary in the input field.
@@ -332,7 +326,8 @@ def delBoundaryNp(dataIn):
     return dataOut
 
 
-class CopyBoundaryOp(ops._Operator):
+@ops.operator()
+def copy_boundary(dataIn):
     """Copies values from inside the boundary to the one pixel boundary for 2D field.
 
     This class defines an operator to copy the boundary values of a 2D field.
@@ -347,49 +342,46 @@ class CopyBoundaryOp(ops._Operator):
         dataOut = | 3 3 4 4 4 |
                   | 2 2 1 0 0 |
                   \ 2 2 1 0 0 /
+
+    :param dataIn: 2D data input.
+    :type dataIn: numpy array.
+    :return 2D data output with copied boundary.
     """
-    def op(self, dataIn):
-        """The definition of the operator function.
+    assert len(dataIn.shape)==2 , "Only 2D data is supported but found %d dimensions." % (len(dataIn.shape))
 
-        :param dataIn: 2D data input.
-        :type dataIn: numpy array.
-        :return 2D data output with copied boundary.
-        """
-        assert len(dataIn.shape)==2 , "Only 2D data is supported but found %d dimensions." % (len(dataIn.shape))
+    nY  = dataIn.shape[0]
+    nX  = dataIn.shape[1]
 
-        nY  = dataIn.shape[0]
-        nX  = dataIn.shape[1]
+    assert nY>1, "2D data has %d rows, but must have more than %d rows." % (nY, 2)
+    assert nX>1, "2D data has %d columns, but must have more than %d columns" % (nX, 2)
 
-        assert nY>1, "2D data has %d rows, but must have more than %d rows." % (nY, 2)
-        assert nX>1, "2D data has %d columns, but must have more than %d columns" % (nX, 2)
+    dataOut = ops.output(dataIn.shape, dataIn.dtype)
+    pos     = ops.position_in(4)[0] # Work in stripes for a better memory access pattern.
+    nY0     = 1+(nY-2)*pos/4
+    nY1     = 1+(nY-1)*(pos+1)/4
 
-        dataOut = ops.output(dataIn.shape, dataIn.dtype)
-        pos     = ops.position_in(4)[0] # Work in stripes for a better memory access pattern.
-        nY0     = 1+(nY-2)*pos/4
-        nY1     = 1+(nY-1)*(pos+1)/4
+    # Copy the stripe in a row including the boundary values.
+    for iY in ops.arange(nY0,nY1):
+        dataOut[iY, 0] = dataIn[iY, 1]          # left boundary
+        for iX in ops.arange(1,nX-1):
+            dataOut[iY, iX] = dataIn[iY, iX]
+        dataOut[iY, nX-1] = dataIn[iY, nX-2]    # right boundary
 
-        # Copy the stripe in a row including the boundary values.
-        for iY in ops.arange(nY0,nY1):
-            dataOut[iY, 0] = dataIn[iY, 1]          # left boundary
-            for iX in ops.arange(1,nX-1):
-                dataOut[iY, iX] = dataIn[iY, iX]
-            dataOut[iY, nX-1] = dataIn[iY, nX-2]    # right boundary
+    # The first thread will work on the top boundary.
+    with ops.if_(pos==0):
+        dataOut[0, 0] = dataIn[1, 1]        # top,left corner
+        for iX in ops.arange(1, nX-1):
+            dataOut[0, iX] = dataIn[1, iX]  # top boundary
+        dataOut[0, nX-1] = dataIn[1, nX-2]  # top, right corner
 
-        # The first thread will work on the top boundary.
-        with ops.if_(pos==0):
-            dataOut[0, 0] = dataIn[1, 1]        # top,left corner
-            for iX in ops.arange(1, nX-1):
-                dataOut[0, iX] = dataIn[1, iX]  # top boundary
-            dataOut[0, nX-1] = dataIn[1, nX-2]  # top, right corner
+    # The last thread will work on the bottom boundary.
+    with ops.elif_(pos==3):
+        dataOut[nY-1, 0] = dataIn[nY-2, 1]          # bottom left corner
+        for iX in ops.arange(1, nX-1):
+            dataOut[nY-1, iX] = dataIn[nY-2, iX]    # bottom boundary
+        dataOut[nY-1, nX-1] = dataIn[nY-2, nX-2]    # bottom right corner
 
-        # The last thread will work on the bottom boundary.
-        with ops.elif_(pos==3):
-            dataOut[nY-1, 0] = dataIn[nY-2, 1]          # bottom left corner
-            for iX in ops.arange(1, nX-1):
-                dataOut[nY-1, iX] = dataIn[nY-2, iX]    # bottom boundary
-            dataOut[nY-1, nX-1] = dataIn[nY-2, nX-2]    # bottom right corner
-
-        return dataOut
+    return dataOut
 
 
 def copyBoundaryNp(dataIn):
@@ -423,7 +415,8 @@ def copyBoundaryNp(dataIn):
     return dataOut
 
 
-class Gauss2DOp(ops._Operator):
+@ops.operator()
+def gauss_2d(dimOut=None):
     """Gaussian 2D kernel.
 
     Define a 2D Gaussian kernel.
@@ -432,40 +425,38 @@ class Gauss2DOp(ops._Operator):
 
     In the implementation we normalize each entry in the filter kernel by the sum of all entries, rather than using the
     analytical form of 1/(2 pi sigmaY sigmaX).
+
+
+    :param dimOut: Output dimensions [nY, nX].
+    :type dimOut: list.
+    :return 2D Gaussian kernel with numeric normalization.
     """
-    def op(self, dimOut):
-        """The definition of the operator function.
+    dataOut = ops.output(dimOut, ops.float64)
+    n0      = dimOut[0]
+    n1      = dimOut[1]
+    ops.position_in(1) # Workgroup size of 1.
+    accum   = ops.variable(0, ops.float64)
+    nHalf0  = ops.variable(n0/2.0, ops.float64)
+    sigma0  = ops.variable(n0/4.0, ops.float64)
+    nHalf1  = ops.variable(n1/2.0, ops.float64)
+    sigma1  = ops.variable(n1/4.0, ops.float64)
+    data    = ops.zeros(dimOut, ops.float64)
 
-        :param dimOut: Output dimensions [nY, nX].
-        :type dimOut: list.
-        :return 2D Gaussian kernel with numeric normalization.
-        """
-        dataOut = ops.output(dimOut, ops.float64)
-        n0      = dimOut[0]
-        n1      = dimOut[1]
-        ops.position_in(1) # Workgroup size of 1.
-        accum   = ops.variable(0, ops.float64)
-        nHalf0  = ops.variable(n0/2.0, ops.float64)
-        sigma0  = ops.variable(n0/4.0, ops.float64)
-        nHalf1  = ops.variable(n1/2.0, ops.float64)
-        sigma1  = ops.variable(n1/4.0, ops.float64)
-        data    = ops.zeros(dimOut, ops.float64)
+    # A single thread does all the work.
+    for iElem0 in ops.arange(n0):
+        for iElem1 in ops.arange(n1):
+            x = ops.cast(iElem0, ops.float64) - nHalf0
+            y = ops.cast(iElem1, ops.float64) - nHalf1
+            value = ops.exp(- x*x/(2*sigma0*sigma0) - y*y/(2*sigma1*sigma1))
+            accum <<= accum + value
+            data[iElem0,iElem1] = value
 
-        # A single thread does all the work.
-        for iElem0 in ops.arange(n0):
-            for iElem1 in ops.arange(n1):
-                x = ops.cast(iElem0, ops.float64) - nHalf0
-                y = ops.cast(iElem1, ops.float64) - nHalf1
-                value = ops.exp(- x*x/(2*sigma0*sigma0) - y*y/(2*sigma1*sigma1))
-                accum <<= accum + value
-                data[iElem0,iElem1] = value
+    # Normalize the 2D Gaussian.
+    for iElem0 in ops.arange(n0):
+        for iElem1 in ops.arange(n1):
+            dataOut[iElem0,iElem1] = data[iElem0,iElem1]/accum
 
-        # Normalize the 2D Gaussian.
-        for iElem0 in ops.arange(n0):
-            for iElem1 in ops.arange(n1):
-                dataOut[iElem0,iElem1] = data[iElem0,iElem1]/accum
-
-        return dataOut
+    return dataOut
 
 
 def gauss2DNp(dimOut):
@@ -501,52 +492,52 @@ def gauss2DNp(dimOut):
 
     return dataOut
 
-class Filter2DOp(ops._Operator):
+
+@ops.operator()
+def filter_2d(dataIn, kernelIn):
     """Filtering for 2D input data and kernels using the circular boundary condition.
 
     The filtering function is not an efficient implementation for large kernels, typically larger than 7 x 7 pixels.
+
+
+    :param dataIn: 2D data input.
+    :type dataIn: numpy array.
+    :param kernelIn: 2D filtering kernel.
+    :type kernelIn: numpy array.
+    :return: a filtered 2D data.
     """
-    def op(self, dataIn, kernelIn):
-        """The definition of the operator function.
+    assert(len(dataIn.shape) == 2)
+    assert(dataIn.shape[0] >= kernelIn.shape[0]) # data input must be larger than kernel
+    assert(dataIn.shape[1] >= kernelIn.shape[1])
 
-        :param dataIn: 2D data input.
-        :type dataIn: numpy array.
-        :param kernelIn: 2D filtering kernel.
-        :type kernelIn: numpy array.
-        :return: a filtered 2D data.
-        """
-        assert(len(dataIn.shape) == 2)
-        assert(dataIn.shape[0] >= kernelIn.shape[0]) # data input must be larger than kernel
-        assert(dataIn.shape[1] >= kernelIn.shape[1])
+    dataOut = ops.output(dataIn.shape, dataIn.dtype)
 
-        dataOut = ops.output(dataIn.shape, dataIn.dtype)
+    nYIn = dataIn.shape[0]
+    nXIn = dataIn.shape[1]
+    nYKl = kernelIn.shape[0]
+    nXKl = kernelIn.shape[1]
 
-        nYIn = dataIn.shape[0]
-        nXIn = dataIn.shape[1]
-        nYKl = kernelIn.shape[0]
-        nXKl = kernelIn.shape[1]
+    pos = ops.position_in(dataIn.shape) # Each position within the input image.
 
-        pos = ops.position_in(dataIn.shape) # Each position within the input image.
+    iY = ops.cast(pos[0] - (nYKl-1)/2 + nYKl*nYIn, ops.int64) # Add offset for proper wrapping if nYH > nYIn.
+    iX = ops.cast(pos[1] - (nXKl-1)/2 + nXKl*nXIn, ops.int64)
 
-        iY = ops.cast(pos[0] - (nYKl-1)/2 + nYKl*nYIn, ops.int64) # Add offset for proper wrapping if nYH > nYIn.
-        iX = ops.cast(pos[1] - (nXKl-1)/2 + nXKl*nXIn, ops.int64)
+    accum = ops.variable(0, ops.float64)
 
-        accum = ops.variable(0, ops.float64)
+    # Sum all values for this position of the filter kernel in the input image.
+    for iYKl in ops.arange(nYKl):
+        for iXKl in ops.arange(nXKl):
+            # Casted iY and iX as int64 above since iYKl and iXKl are dynamic int64s in this loop.
+            iiY = (iY + iYKl) % nYIn
+            iiX = (iX + iXKl) % nXIn
 
-        # Sum all values for this position of the filter kernel in the input image.
-        for iYKl in ops.arange(nYKl):
-            for iXKl in ops.arange(nXKl):
-                # Casted iY and iX as int64 above since iYKl and iXKl are dynamic int64s in this loop.
-                iiY = (iY + iYKl) % nYIn
-                iiX = (iX + iXKl) % nXIn
+            # Assign to a scalar with the <<= operator.
+            accum <<= accum + dataIn[iiY, iiX]*kernelIn[iYKl, iXKl]
 
-                # Assign to a scalar with the <<= operator.
-                accum <<= accum + dataIn[iiY, iiX]*kernelIn[iYKl, iXKl]
+    # Assign to an output field [] with the '=' operator.
+    dataOut[pos] = accum
 
-        # Assign to an output field [] with the '=' operator.
-        dataOut[pos] = accum
-
-        return dataOut
+    return dataOut
 
 def filter2DNp(dataIn, kernelIn):
     """Filtering for 2D input data and kernels using the circular boundary condition.
@@ -580,44 +571,41 @@ def filter2DNp(dataIn, kernelIn):
     return dataOut
 
 
-
-class DiffusionGradient2DOp(ops._Operator):
+@ops.operator()
+def diffusion_gradient(image, l2=None):
     """Computes the gradient for image diffusion.
 
     The method uses a forward (plus) and backward (minus) difference to compute the gradient of the provided image.
+
+    :param image: An 2D gray-value input image.
+    :type image: numpy array.
+    :param l2: The lambda x lambda parameter.
+    :type l2: float.
     """
-    def op(self, image, l2):
-        """The definition of the operator function.
+    assert len(image.shape)==2 , "Only 2D data is supported but found %d dimensions." % (len(image.shape))
+    nY = image.shape[0]
+    nX = image.shape[1]
 
-        :param image: An 2D gray-value input image.
-        :type image: numpy array.
-        :param l2: The lambda x lambda parameter.
-        :type l2: float.
-        """
-        assert len(image.shape)==2 , "Only 2D data is supported but found %d dimensions." % (len(image.shape))
-        nY = image.shape[0]
-        nX = image.shape[1]
+    gradRowPlus     = ops.output_like(image)
+    gradRowMinus    = ops.output_like(image)
+    gradColPlus     = ops.output_like(image)
+    gradColMinus    = ops.output_like(image)
 
-        gradRowPlus     = ops.output_like(image)
-        gradRowMinus    = ops.output_like(image)
-        gradColPlus     = ops.output_like(image)
-        gradColMinus    = ops.output_like(image)
+    pos     = ops.position_in(image.shape)
+    iY      = pos[0]
+    iX      = pos[1]
 
-        pos     = ops.position_in(image.shape)
-        iY      = pos[0]
-        iX      = pos[1]
+    dyPlus  = ops.variable(image[(iY+1)%nY, iX] - image[iY, iX], image.dtype)
+    dxPlus  = ops.variable(image[iY, (iX+1)%nX] - image[iY, iX], image.dtype)
+    dyMinus = ops.variable(image[iY,iX] - image[(iY-1+nY)%nY, iX], image.dtype)
+    dxMinus = ops.variable(image[iY,iX] - image[iY, (iX-1+nX)%nX], image.dtype)
 
-        dyPlus  = ops.variable(image[(iY+1)%nY, iX] - image[iY, iX], image.dtype)
-        dxPlus  = ops.variable(image[iY, (iX+1)%nX] - image[iY, iX], image.dtype)
-        dyMinus = ops.variable(image[iY,iX] - image[(iY-1+nY)%nY, iX], image.dtype)
-        dxMinus = ops.variable(image[iY,iX] - image[iY, (iX-1+nX)%nX], image.dtype)
+    gradRowPlus[iY,iX]  = 1.0/(1.0 + dyPlus*dyPlus/l2)
+    gradRowMinus[iY,iX] = 1.0/(1.0 + dyMinus*dyMinus/l2)
+    gradColPlus[iY,iX]  = 1.0/(1.0 + dxPlus*dxPlus/l2)
+    gradColMinus[iY,iX] = 1.0/(1.0 + dxMinus*dxMinus/l2)
 
-        gradRowPlus[iY,iX]  = 1.0/(1.0 + dyPlus*dyPlus/l2)
-        gradRowMinus[iY,iX] = 1.0/(1.0 + dyMinus*dyMinus/l2)
-        gradColPlus[iY,iX]  = 1.0/(1.0 + dxPlus*dxPlus/l2)
-        gradColMinus[iY,iX] = 1.0/(1.0 + dxMinus*dxMinus/l2)
-
-        return gradRowPlus, gradRowMinus, gradColPlus, gradColMinus
+    return gradRowPlus, gradRowMinus, gradColPlus, gradColMinus
 
 def diffusionGradient2DNp(image, l2):
     """Computes the gradient for image diffusion.
@@ -652,57 +640,55 @@ def diffusionGradient2DNp(image, l2):
     return gradRowPlus, gradRowMinus, gradColPlus, gradColMinus
 
 
-
-class SolveDiagRow2DOp(ops._Operator):
+@ops.operator()
+def solve_diag_row_2d(alpha, beta, gamma, y):
     """Solves a sparse linear equation system of the form: gamma(i-1) x(i-1) + alpha(i) x(i) + beta(i+1) x(i+1) = Y(i).
     The solution is computed for ROWS.
 
     In this case the solution for the rows is computed while parallelizing the computation over columns.
+
+
+    :param alpha: Coefficient of the sparse linear equations system.
+    :type alpha: numpy array.
+    :param beta: Coefficient.
+    :type beta: numpy array.
+    :param gamma: Coefficient.
+    :type gamma: numpy array.
+    :param y: Input values.
+    :type y: numpy array.
+    :return Solution x of gamma(i-1) x(i-1) + alpha(i) x(i) + beta(i+1) x(i+1) = Y(i).
     """
-    def op(self, alpha, beta, gamma, y):
-        """Solving the linear equation systems for rows in the 2D matrix.
+    assert len(y.shape)==2 , "Only 2D data is supported but found %d dimensions." % (len(y.shape))
+    nY  = y.shape[0]
+    nX  = y.shape[1]
+    m   = ops.zeros(nY, y.dtype)
+    l   = ops.zeros(nY, y.dtype)
+    w   = ops.zeros(nY, y.dtype)
+    x   = ops.zeros(nY, y.dtype)
+    z   = ops.output([nY, nX], y.dtype)
+    iX  = ops.position_in(nX)[0]
 
-        :param alpha: Coefficient of the sparse linear equations system.
-        :type alpha: numpy array.
-        :param beta: Coefficient.
-        :type beta: numpy array.
-        :param gamma: Coefficient.
-        :type gamma: numpy array.
-        :param y: Input values.
-        :type y: numpy array.
-        :return Solution x of gamma(i-1) x(i-1) + alpha(i) x(i) + beta(i+1) x(i+1) = Y(i).
-        """
-        assert len(y.shape)==2 , "Only 2D data is supported but found %d dimensions." % (len(y.shape))
-        nY  = y.shape[0]
-        nX  = y.shape[1]
-        m   = ops.zeros(nY, y.dtype)
-        l   = ops.zeros(nY, y.dtype)
-        w   = ops.zeros(nY, y.dtype)
-        x   = ops.zeros(nY, y.dtype)
-        z   = ops.output([nY, nX], y.dtype)
-        iX  = ops.position_in(nX)[0]
+    # Initialize the 0th row.
+    m[0] = alpha[0,iX]
+    for iY in ops.arange(0,nY-1):
+        l[iY]    = gamma[iY,iX]/(m[iY]+sys.float_info.epsilon)
+        m[iY+1]  = alpha[iY+1,iX] - l[iY]*beta[iY+1,iX]
 
-        # Initialize the 0th row.
-        m[0] = alpha[0,iX]
-        for iY in ops.arange(0,nY-1):
-            l[iY]    = gamma[iY,iX]/(m[iY]+sys.float_info.epsilon)
-            m[iY+1]  = alpha[iY+1,iX] - l[iY]*beta[iY+1,iX]
+    # Forward substitution (L W = Y)
+    w[0] = y[0,iX]
+    for iY in ops.arange(1,nY):
+        w[iY] = y[iY,iX] - l[iY-1]*w[iY-1]
 
-        # Forward substitution (L W = Y)
-        w[0] = y[0,iX]
-        for iY in ops.arange(1,nY):
-            w[iY] = y[iY,iX] - l[iY-1]*w[iY-1]
+    # Backward substitution (R X = W)
+    x[nY-1] = w[nY-1]/m[nY-1]
+    for iY in ops.arange(nY-2, -1, -1):
+        x[iY] = (w[iY] - beta[iY+1,iX]*x[iY+1])/(m[iY]+sys.float_info.epsilon)
 
-        # Backward substitution (R X = W)
-        x[nY-1] = w[nY-1]/m[nY-1]
-        for iY in ops.arange(nY-2, -1, -1):
-            x[iY] = (w[iY] - beta[iY+1,iX]*x[iY+1])/(m[iY]+sys.float_info.epsilon)
+    # Copy to the output z.
+    for iY in ops.arange(0,nY):
+        z[iY,iX] = x[iY]
 
-        # Copy to the output z.
-        for iY in ops.arange(0,nY):
-            z[iY,iX] = x[iY]
-
-        return z
+    return z
 
 def solveDiagRow2DNp(alpha, beta, gamma, y):
     """Solves a sparse linear equation system of the form: gamma(i-1) x(i-1) + alpha(i) x(i) + beta(i+1) x(i+1) = Y(i).
@@ -758,55 +744,53 @@ def solveDiagRow2DNp(alpha, beta, gamma, y):
     return x
 
 
-class SolveDiagCol2DOp(ops._Operator):
+@ops.operator()
+def solve_diag_col_2d(alpha, beta, gamma, y):
     """Solves a sparse linear equation system of the form: gamma(i-1) x(i-1) + alpha(i) x(i) + beta(i+1) x(i+1) = Y(i).
     The solution is computed for COLUMNS.
 
     In this case the solution for the columns is computed while parallelizing the computation over rows.
+
+    :param alpha: Coefficient of the sparse linear equations system.
+    :type alpha: numpy array.
+    :param beta: Coefficient.
+    :type beta: numpy array.
+    :param gamma: Coefficient.
+    :type gamma: numpy array.
+    :param y: Input values.
+    :type y: numpy array.
+    :return: a solution x of gamma(i-1) x(i-1) + alpha(i) x(i) + beta(i+1) x(i+1) = Y(i).
     """
-    def op(self, alpha, beta, gamma, y):
-        """Solving the linear equation systems for columns in the 2D matrix.
+    assert len(y.shape) == 2, "Only 2D data is supported but found %d dimensions." % (len(y.shape))
+    nY  = y.shape[0]
+    nX  = y.shape[1]
+    m   = ops.zeros(nX, y.dtype)
+    l   = ops.zeros(nX, y.dtype)
+    w   = ops.zeros(nX, y.dtype)
+    x   = ops.zeros(nX, y.dtype)
+    z   = ops.output([nY, nX], y.dtype)
+    iY  = ops.position_in(nY)[0]
 
-        :param alpha: Coefficient of the sparse linear equations system.
-        :type alpha: numpy array.
-        :param beta: Coefficient.
-        :type beta: numpy array.
-        :param gamma: Coefficient.
-        :type gamma: numpy array.
-        :param y: Input values.
-        :type y: numpy array.
-        :return: a solution x of gamma(i-1) x(i-1) + alpha(i) x(i) + beta(i+1) x(i+1) = Y(i).
-        """
-        assert len(y.shape)==2 , "Only 2D data is supported but found %d dimensions." % (len(y.shape))
-        nY  = y.shape[0]
-        nX  = y.shape[1]
-        m   = ops.zeros(nX, y.dtype)
-        l   = ops.zeros(nX, y.dtype)
-        w   = ops.zeros(nX, y.dtype)
-        x   = ops.zeros(nX, y.dtype)
-        z   = ops.output([nY, nX], y.dtype)
-        iY  = ops.position_in(nY)[0]
+    m[0] = alpha[iY,0]
+    for iX in ops.arange(0,nX-1):
+        l[iX]    = gamma[iY,iX]/(m[iX]+sys.float_info.epsilon)
+        m[iX+1]  = alpha[iY,iX+1] - l[iX]*beta[iY,iX+1]
 
-        m[0] = alpha[iY,0]
-        for iX in ops.arange(0,nX-1):
-            l[iX]    = gamma[iY,iX]/(m[iX]+sys.float_info.epsilon)
-            m[iX+1]  = alpha[iY,iX+1] - l[iX]*beta[iY,iX+1]
+    # Forward substitution (L W = Y)
+    w[0] = y[iY,0]
+    for iX in ops.arange(1,nX):
+        w[iX] = y[iY,iX] - l[iX-1]*w[iX-1]
 
-        # Forward substitution (L W = Y)
-        w[0] = y[iY,0]
-        for iX in ops.arange(1,nX):
-            w[iX] = y[iY,iX] - l[iX-1]*w[iX-1]
+    # Backward substitution (R X = W)
+    x[nX-1] = w[nX-1]/m[nX-1]
+    for iX in ops.arange(nX-2, -1, -1):
+        x[iX] = (w[iX] - beta[iY,iX+1]*x[iX+1])/(m[iX]+sys.float_info.epsilon)
 
-        # Backward substitution (R X = W)
-        x[nX-1] = w[nX-1]/m[nX-1]
-        for iX in ops.arange(nX-2, -1, -1):
-            x[iX] = (w[iX] - beta[iY,iX+1]*x[iX+1])/(m[iX]+sys.float_info.epsilon)
+    # Copy to the output z.
+    for iX in ops.arange(0,nX):
+        z[iY,iX] = x[iX]
 
-        # Copy to the output z.
-        for iX in ops.arange(0,nX):
-            z[iY,iX] = x[iX]
-
-        return z
+    return z
 
 
 def solveDiagCol2DNp(alpha, beta, gamma, y):
@@ -890,7 +874,7 @@ class TestAddBoundary(unittest.TestCase):
                 print("Test case nX = %d and nY = %d." % (nX, nY)) # Print parameters of the test case.
                 rng     = np.random.RandomState(1)
                 dataIn  = rng.uniform(0, 255, [nY, nX])
-                op      = AddBoundaryOp(dataIn)
+                op      = add_boundary_op(dataIn)
 
                 dataCPU = ops.evaluate(op, target_language='cpp')
                 dataNPY = addBoundaryNp(dataIn)
@@ -905,7 +889,7 @@ class TestAddBoundary(unittest.TestCase):
                     test_config = tf.ConfigProto(allow_soft_placement=False)
                     test_config.graph_options.optimizer_options.opt_level = -1
                     with tf.Session(config=test_config) as sess:
-                        addTF = ops.as_tensorflow(AddBoundaryOp(dataIn))
+                        addTF = ops.as_tensorflow(add_boundary_op(dataIn))
                     dataTF = sess.run(addTF)
                     assert np.allclose(dataGPU, dataTF)
 
@@ -927,7 +911,7 @@ class TestDelBoundary(unittest.TestCase):
 
                 rng     = np.random.RandomState(1)
                 dataIn  = rng.uniform(0, 255, [nY, nX])
-                op      = DelBoundaryOp(dataIn)
+                op      = del_boundary(dataIn)
                 dataCPU = ops.evaluate(op, target_language='cpp')
                 dataNPY = delBoundaryNp(dataIn)
                 assert np.allclose(dataCPU, dataNPY)
@@ -940,7 +924,7 @@ class TestDelBoundary(unittest.TestCase):
                     test_config = tf.ConfigProto(allow_soft_placement=False)
                     test_config.graph_options.optimizer_options.opt_level = -1
                     with tf.Session(config=test_config) as sess:
-                        delTF = ops.as_tensorflow(DelBoundaryOp(dataIn))
+                        delTF = ops.as_tensorflow(del_boundary(dataIn))
                     dataTF = sess.run(delTF)
                     assert np.allclose(dataGPU, dataTF)
     test.regression = 1
@@ -960,7 +944,7 @@ class TestCopyBoundary(unittest.TestCase):
 
                 rng     = np.random.RandomState(1)
                 dataIn  = rng.uniform(0, 255, [nY, nX])
-                op      = CopyBoundaryOp(dataIn)
+                op      = copy_boundary(dataIn)
                 dataCPU = ops.evaluate(op, target_language='cpp')
                 dataNPY = copyBoundaryNp(dataIn)
                 assert np.allclose(dataCPU, dataNPY)
@@ -973,7 +957,7 @@ class TestCopyBoundary(unittest.TestCase):
                     test_config = tf.ConfigProto(allow_soft_placement=False)
                     test_config.graph_options.optimizer_options.opt_level = -1
                     with tf.Session(config=test_config) as sess:
-                        cpyTF = ops.as_tensorflow(CopyBoundaryOp(dataIn))
+                        cpyTF = ops.as_tensorflow(copy_boundary(dataIn))
                     dataTF = sess.run(cpyTF)
                     assert np.allclose(dataGPU, dataTF)
     test.regression = 1
@@ -994,7 +978,7 @@ class TestGauss2DOp(unittest.TestCase):
         for mY in [1, 2, 3, 9]:
             for mX in [1, 2, 3, 8]:
                 print("Test case mX = %d and mY = %d." % (mX, mY)) # Print parameters of the test case.
-                op = Gauss2DOp(dimOut=[mY,mX])
+                op = gauss_2d(dimOut=[mY, mX])
 
                 dataCPU = ops.evaluate(op, target_language='cpp')
                 dataNPY = gauss2DNp([mY,mX])
@@ -1008,7 +992,7 @@ class TestGauss2DOp(unittest.TestCase):
                     test_config = tf.ConfigProto(allow_soft_placement=False)
                     test_config.graph_options.optimizer_options.opt_level = -1
                     with tf.Session(config=test_config) as sess:
-                        gaussTF = ops.as_tensorflow(Gauss2DOp(dimOut=[mY,mX]))
+                        gaussTF = ops.as_tensorflow(gauss_2d(dimOut=[mY, mX]))
                     dataTF = sess.run(gaussTF)
                     assert np.allclose(dataGPU, dataTF)
     test.regression = 1
@@ -1034,7 +1018,7 @@ class TestFilter2D(unittest.TestCase):
                         rng         = np.random.RandomState(1)
                         dataIn      = rng.uniform(0, 255, [nY, nX])
                         kernelIn    = rng.uniform(0, 255, [mY, mX])
-                        op          = Filter2DOp(dataIn, kernelIn)
+                        op          = filter_2d(dataIn, kernelIn)
                         dataCPU     = ops.evaluate(op, target_language='cpp')
                         dataNPY     = filter2DNp(dataIn, kernelIn)
 
@@ -1048,7 +1032,7 @@ class TestFilter2D(unittest.TestCase):
                             test_config = tf.ConfigProto(allow_soft_placement=False)
                             test_config.graph_options.optimizer_options.opt_level = -1
                             with tf.Session(config=test_config) as sess:
-                                filterTF = ops.as_tensorflow(Filter2DOp(dataIn, kernelIn))
+                                filterTF = ops.as_tensorflow(filter_2d(dataIn, kernelIn))
                             dataTF = sess.run(filterTF)
                             assert np.allclose(dataGPU, dataTF)
     test.regression = 1
@@ -1068,7 +1052,7 @@ class TestDiffusionGradient(unittest.TestCase):
                 image = rng.uniform(0, 255, [nY, nX])
                 l = 3.5/255
                 l2 = l*l
-                op = DiffusionGradient2DOp(image, l2=l2)
+                op = diffusion_gradient(image, l2=l2)
                 gradRowPlusCPU, gradRowMinusCPU, gradColPlusCPU, gradColMinusCPU = ops.evaluate(op, target_language='cpp')
                 gradRowPlusNPY, gradRowMinusNPY, gradColPlusNPY, gradColMinusNPY = diffusionGradient2DNp(image, l2)
 
@@ -1088,7 +1072,7 @@ class TestDiffusionGradient(unittest.TestCase):
                     test_config = tf.ConfigProto(allow_soft_placement=False)
                     test_config.graph_options.optimizer_options.opt_level = -1
                     with tf.Session(config=test_config) as sess:
-                        gradTF = ops.as_tensorflow(DiffusionGradient2DOp(image, l2=l2))
+                        gradTF = ops.as_tensorflow(diffusion_gradient(image, l2=l2))
                     [gradRowPlusTF, gradRowMinusTF, gradColPlusTF, gradColMinusTF] = sess.run(gradTF)
                     assert np.allclose(gradRowPlusGPU, gradRowPlusTF)
                     assert np.allclose(gradRowMinusGPU, gradRowMinusTF)
@@ -1116,11 +1100,11 @@ class TestSolveDiag2DOp(unittest.TestCase):
                 gamma   = rng.uniform(0, 1, [nY, nX])
                 y       = rng.uniform(0, 1, [nY, nX])
 
-                opRow   = SolveDiagRow2DOp(alpha, beta, gamma, y)
+                opRow   = solve_diag_row_2d(alpha, beta, gamma, y)
                 xRowCPU = ops.evaluate(opRow, target_language='cpp')
                 xRowNPY = solveDiagRow2DNp(alpha, beta, gamma, y)
 
-                opCol   = SolveDiagCol2DOp(alpha, beta, gamma, y)
+                opCol   = solve_diag_col_2d(alpha, beta, gamma, y)
                 xColCPU = ops.evaluate(opCol, target_language='cpp')
                 xColNPY = solveDiagCol2DNp(alpha, beta, gamma, y)
 
@@ -1137,8 +1121,8 @@ class TestSolveDiag2DOp(unittest.TestCase):
                     test_config = tf.ConfigProto(allow_soft_placement=False)
                     test_config.graph_options.optimizer_options.opt_level = -1
                     with tf.Session(config=test_config) as sess:
-                        diagRowTF = ops.as_tensorflow(SolveDiagRow2DOp(alpha, beta, gamma, y))
-                        diagColTF = ops.as_tensorflow(SolveDiagCol2DOp(alpha, beta, gamma, y))
+                        diagRowTF = ops.as_tensorflow(solve_diag_row_2d(alpha, beta, gamma, y))
+                        diagColTF = ops.as_tensorflow(solve_diag_col_2d(alpha, beta, gamma, y))
                     [xRowTF, xColTF] = sess.run([diagRowTF,diagColTF])
                     assert np.allclose(xColGPU, xColTF)
                     assert np.allclose(xRowGPU, xRowTF)

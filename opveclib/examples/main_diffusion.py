@@ -13,7 +13,7 @@ import os.path
 import matplotlib.image as mpimg
 import matplotlib.pyplot as plt
 import opveclib as ops
-from test_diffusion import TensorToFloat64, diffusion2DGPU
+from test_diffusion import tensor_to_float64, diffusion2DGPU
 
 
 def downloadImage(fileURL, fileName, fileTmp):
@@ -38,7 +38,7 @@ if __name__ == '__main__':
         downloadImage(fileURL, fileName, fileTmp)
 
     # Load the image and convert it into float64.
-    imageIn     = ops.evaluate(TensorToFloat64(mpimg.imread(fileTmp)), target_language='cpp')
+    imageIn     = ops.evaluate(tensor_to_float64(mpimg.imread(fileTmp)), target_language='cpp')
 
     # Apply the image diffusion with the step width dt = 5, lambda parameter 3.5/255, sigma parameter = 3 pixel,
     # and 3 iterations.

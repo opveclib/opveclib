@@ -15,7 +15,8 @@ import numpy as np
 import opveclib as ops
 
 
-class GraphTriangleCountOp(ops._Operator):
+@ops.operator()
+def graph_triangle_count(startEdge, fromVertex, toVertex):
     """Counts the triangles in an undirected graph.
 
     Notice that this method assumes that the graph is given as an adjacency list where all lists with vertex neighbors
@@ -34,65 +35,62 @@ class GraphTriangleCountOp(ops._Operator):
 
     Attributes: None.
 
+    The array toVertex is a flattened list of lists structure, where startEdge encodes the start indices of the
+    separate lists.
+
+    :param startEdge: Indices into toVertex where edges start.
+    :type startEdge: list.
+    :param fromVertex: The from-vertex of each edge.
+    :type fromVertex: list.
+    :param toVertex: The to-vertex of each edge.
+    :type toVertex: list.
+    :return: Counts of triangles per edge.
     """
-    def op(self, startEdge, fromVertex, toVertex):
-        """The definition of the operator function.
+    iEdge           = ops.position_in(toVertex.shape)[0]
+    count           = ops.output(toVertex.shape, ops.uint64)
+    nTriangle       = ops.variable(0, ops.uint64)
 
-        The array toVertex is a flattened list of lists structure, where startEdge encodes the start indices of the
-        separate lists.
+    iFromVertex     = ops.variable(fromVertex[iEdge], fromVertex.dtype)
+    iFromEdge       = ops.variable(startEdge[iFromVertex], startEdge.dtype)
+    iFromEdgeEnd    = ops.variable(startEdge[iFromVertex+1], startEdge.dtype)
+    iiFromVertex    = ops.variable(toVertex[iFromEdge], toVertex.dtype)
 
-        :param startEdge: Indices into toVertex where edges start.
-        :type startEdge: list.
-        :param fromVertex: The from-vertex of each edge.
-        :type fromVertex: list.
-        :param toVertex: The to-vertex of each edge.
-        :type toVertex: list.
-        :return: Counts of triangles per edge.
-        """
-        iEdge           = ops.position_in(toVertex.shape)[0]
-        count           = ops.output(toVertex.shape, ops.uint64)
-        nTriangle       = ops.variable(0, ops.uint64)
+    iToVertex       = ops.variable(toVertex[iEdge], toVertex.dtype)
+    iToEdge         = ops.variable(startEdge[iToVertex], startEdge.dtype)
+    iToEdgeEnd      = ops.variable(startEdge[iToVertex+1], startEdge.dtype)
+    iiToVertex      = ops.variable(toVertex[iToEdge], toVertex.dtype)
 
-        iFromVertex     = ops.variable(fromVertex[iEdge], fromVertex.dtype)
-        iFromEdge       = ops.variable(startEdge[iFromVertex], startEdge.dtype)
-        iFromEdgeEnd    = ops.variable(startEdge[iFromVertex+1], startEdge.dtype)
-        iiFromVertex    = ops.variable(toVertex[iFromEdge], toVertex.dtype)
+    nMerge          = iToEdgeEnd-iToEdge + iFromEdgeEnd-iFromEdge # Maximum number of merges.
 
-        iToVertex       = ops.variable(toVertex[iEdge], toVertex.dtype)
-        iToEdge         = ops.variable(startEdge[iToVertex], startEdge.dtype)
-        iToEdgeEnd      = ops.variable(startEdge[iToVertex+1], startEdge.dtype)
-        iiToVertex      = ops.variable(toVertex[iToEdge], toVertex.dtype)
+    # This construction is a work-around for simulating the function of a while loop.
+    #TODO(raudies@hpe.com): Replace this construct by a while loop once it is available in ovl.
+    for iMerge in ops.arange(nMerge):
+        doMerge = ops.logical_and(iFromEdge < iFromEdgeEnd, iToEdge < iToEdgeEnd)
+        doMerge = ops.logical_and(doMerge, iiFromVertex < iToVertex)
 
-        nMerge          = iToEdgeEnd-iToEdge + iFromEdgeEnd-iFromEdge # Maximum number of merges.
+        with ops.if_(doMerge):
 
-        # This construction is a work-around for simulating the function of a while loop.
-        #TODO(raudies@hpe.com): Replace this construct by a while loop once it is available in ovl.
-        for iMerge in ops.arange(nMerge):
-            doMerge = ops.logical_and(iFromEdge < iFromEdgeEnd, iToEdge < iToEdgeEnd)
-            doMerge = ops.logical_and(doMerge, iiFromVertex < iToVertex)
+            with ops.if_(iiFromVertex < iiToVertex):
+                iFromEdge <<= iFromEdge+1
+                iiFromVertex <<= toVertex[iFromEdge]
 
-            with ops.if_(doMerge):
+            with ops.elif_(iiFromVertex > iiToVertex):
+                iToEdge <<= iToEdge+1
+                iiToVertex <<= toVertex[iToEdge]
 
-                with ops.if_(iiFromVertex < iiToVertex):
-                    iFromEdge <<= iFromEdge+1
-                    iiFromVertex <<= toVertex[iFromEdge]
-
-                with ops.elif_(iiFromVertex > iiToVertex):
-                    iToEdge <<= iToEdge+1
-                    iiToVertex <<= toVertex[iToEdge]
-
-                with ops.else_():
-                    nTriangle <<= nTriangle+1
-                    iFromEdge <<= iFromEdge+1
-                    iToEdge <<= iToEdge+1
-                    iiFromVertex <<= toVertex[iFromEdge]
-                    iiToVertex <<= toVertex[iToEdge]
+            with ops.else_():
+                nTriangle <<= nTriangle+1
+                iFromEdge <<= iFromEdge+1
+                iToEdge <<= iToEdge+1
+                iiFromVertex <<= toVertex[iFromEdge]
+                iiToVertex <<= toVertex[iToEdge]
 
 
-        #TODO(raudies@hpe.com): Use a reduction function that computes a partial or complete sum.
-        count[iEdge] = nTriangle # Save the triangles for each edge.
+    #TODO(raudies@hpe.com): Use a reduction function that computes a partial or complete sum.
+    count[iEdge] = nTriangle # Save the triangles for each edge.
 
-        return count
+    return count
+
 
 def countTrianglesCPU(startEdge, fromVertex, toVertex):
     """Count the triangles on the CPU.
@@ -119,7 +117,7 @@ def countTrianglesCPU(startEdge, fromVertex, toVertex):
         >>> print(nTriangle)
         3
     """
-    count = ops.evaluate(GraphTriangleCountOp(startEdge, fromVertex, toVertex), target_language='cpp')
+    count = ops.evaluate(graph_triangle_count(startEdge, fromVertex, toVertex), target_language='cpp')
     return np.sum(count, axis=0, dtype=np.uint64)
 
 def countTrianglesGPU(startEdge, fromVertex, toVertex):
@@ -147,7 +145,7 @@ def countTrianglesGPU(startEdge, fromVertex, toVertex):
         >>> print(nTriangle)
         3
     """
-    count = ops.evaluate(GraphTriangleCountOp(startEdge, fromVertex, toVertex), target_language='cuda')
+    count = ops.evaluate(graph_triangle_count(startEdge, fromVertex, toVertex), target_language='cuda')
     return np.sum(count, axis=0, dtype=np.uint64)
 
 def countTrianglesNp(startEdge, fromVertex, toVertex):
