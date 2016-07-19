@@ -16,6 +16,7 @@ import inspect
 import subprocess
 import string
 import re
+from collections import namedtuple
 import tensorflow as tf
 import numpy as np
 from numpy.ctypeslib import ndpointer
@@ -323,7 +324,7 @@ class _OpGenerator(object):
                                     str(cur_grad_output_type) + ' is inconsistent with operator input index ' +
                                     str(grad_output_index) + ', with TensorType: ' + str(cur_input_type))
 
-            grad_dag, grad_dag_inputs, grad_of_grad_dags = _build_op_dag(*grad_outputs)
+            grad_dag = _build_op_dag(*grad_outputs).proto_dag
 
         return _Operator(expression_dag, output_types, inputs, grad_dag, f_name)
 
@@ -374,11 +375,14 @@ def gradient(op_function):
     return wrapper
 
 
+_OperatorDAG = namedtuple('_OperatorDAG', ['proto_dag', 'inputs', 'operators', 'grad_dags'])
+
+
 def _build_op_dag(*outputs):
     """
     Perform BFS on the op nodes
     :param outputs: a list of the operator outputs from which to build the dag
-    :return: a tuple containing the op DAG protobuf and a list of the tensor inputs to the DAG
+    :return: an _OpDAG
     """
 
     ops = []
@@ -500,7 +504,8 @@ def _build_op_dag(*outputs):
     for op in sorted_ops:
         grad_dags.append(op.grad_dag)
 
-    return op_dag, dag_inputs, grad_dags
+    dag = _OperatorDAG(proto_dag=op_dag, inputs=dag_inputs, operators=sorted_ops, grad_dags=grad_dags)
+    return dag
 
 
 def _make_generic_c(src, name):
@@ -713,7 +718,9 @@ def profile(output_list, target_language='cpp', profiling_iterations=1):
     else:
         raise ValueError(invalid_language)
 
-    dag, inputs, grad_dags = _build_op_dag(*output_list)
+    op_dag = _build_op_dag(*output_list)
+    dag = op_dag.proto_dag
+    inputs = op_dag.inputs
 
     output_buffers = []
     profiling_times = {}
@@ -800,9 +807,9 @@ def as_tensorflow(tensor_list):
 
     :return: A TensorFlow operator.
     """
-    dag, inputs, grad_dags = _build_op_dag(*tensor_list)
+    op_dag = _build_op_dag(*tensor_list)
 
-    return _dag_to_tf(dag, inputs, grad_dags)
+    return _dag_to_tf(op_dag.proto_dag, op_dag.inputs, op_dag.grad_dags)
 
 
 def _dag_to_tf(dag, inputs, grad_dags):
