@@ -181,7 +181,7 @@ def _resolve_output(x):
                              'Index a specific output from multi-output Operators.')
         return x[0]
     elif not isinstance(x, _OperatorOutput):
-        raise TypeError('Only operator outputs can be used to build an op dag.')
+        raise TypeError('Only operator outputs can be used to build an op dag. Received a ' + str(type(x)))
     else:
         return x
 

@@ -17,7 +17,7 @@ from ..local import clear_op_cache
 
 
 class TestOperator(unittest.TestCase):
-    def test_dag_builder(self):
+    def test_dag_builder_simple(self):
         in0 = np.random.random(10)
         in1 = np.random.random(10)
 
@@ -41,23 +41,22 @@ class TestOperator(unittest.TestCase):
         op_dag = _build_op_dag(a2, b2)
         dag = op_dag.proto_dag
         inputs = op_dag.inputs
-        ops = op_dag.operators
+        operators = op_dag.operators
 
         # assert correct dag structure
-        first_index = ops.index(a1.parent)
+        first_index = operators.index(a1.parent)
         assert dag.references[first_index].input_refs[0].is_leaf is True
         assert inputs[dag.references[first_index].input_refs[0].dag_input_index] is in0
         assert dag.references[first_index].input_refs[1].is_leaf is True
         assert inputs[dag.references[first_index].input_refs[1].dag_input_index] is in1
 
-        second_index = ops.index(a2.parent)
+        second_index = operators.index(a2.parent)
         assert second_index > first_index
         assert dag.references[second_index].input_refs[0].is_leaf is False
         assert dag.references[second_index].input_refs[0].op_index == first_index
         assert dag.references[second_index].input_refs[0].op_output_index == 0
         assert dag.references[second_index].input_refs[1].op_index == first_index
         assert dag.references[second_index].input_refs[1].op_output_index == 1
-        assert inputs[dag.references[0].input_refs[1].dag_input_index] is in1
 
         # assert correct evaluation
         a1, b1, a2, b2 = evaluate([a1, b1, a2, b2])
@@ -66,11 +65,74 @@ class TestOperator(unittest.TestCase):
         assert np.alltrue(a2 == in0+2)
         assert np.alltrue(b2 == in1+2)
 
-        # a, b = add_one(in0, in1)
-        # c, d = add_one(a, in1)
-        # d, e = add_one(in1, b)
-        # f, g = add_one(c, e)
-        # h, i = add_one(g, d)
+    def test_dag_builder_complex(self):
+
+        @operator()
+        def add_one(x, y):
+            assert x.shape == y.shape
+
+            a = output_like(x)
+            b = output_like(y)
+
+            pos = position_in(a.shape)
+
+            a[pos] = x[pos] + 1
+            b[pos] = y[pos] + 1
+
+            return a, b
+
+        in0 = np.random.random(10)
+        in1 = np.random.random(10)
+        a, b = add_one(in0, in1)
+        c, d = add_one(a, in1)
+        e, f = add_one(in1, b)
+        g, h = add_one(f, a)
+        in2 = np.random.random(10)
+        i, j = add_one(e, in2)
+
+        op_dag = _build_op_dag(i, h)
+        operators = op_dag.operators
+        dag = op_dag.proto_dag
+        inputs = op_dag.inputs
+        # neither i nor h are dependent on c or d, so their parent op should not be in op_dag
+        assert c.parent not in operators
+
+        # assert correct dag structure for output a's parent
+        first_index = operators.index(a.parent)
+        assert dag.references[first_index].input_refs[0].is_leaf is True
+        assert inputs[dag.references[first_index].input_refs[0].dag_input_index] is in0
+        assert dag.references[first_index].input_refs[1].is_leaf is True
+        assert inputs[dag.references[first_index].input_refs[1].dag_input_index] is in1
+
+        # assert correct dag structure for output e's parent
+        second_index = operators.index(e.parent)
+        assert second_index > first_index
+        assert dag.references[second_index].input_refs[0].is_leaf is True
+        assert inputs[dag.references[second_index].input_refs[0].dag_input_index] is in1
+        assert dag.references[second_index].input_refs[1].is_leaf is False
+        assert dag.references[second_index].input_refs[1].op_index == first_index
+        assert dag.references[second_index].input_refs[1].op_output_index == 1
+
+        # assert correct dag structure for output g's parent
+        third_index = operators.index(g.parent)
+        assert third_index > second_index
+        assert dag.references[third_index].input_refs[0].is_leaf is False
+        assert dag.references[third_index].input_refs[0].op_index == second_index
+        assert dag.references[third_index].input_refs[0].op_output_index == 1
+
+        assert dag.references[third_index].input_refs[1].is_leaf is False
+        assert dag.references[third_index].input_refs[1].op_index == first_index
+        assert dag.references[third_index].input_refs[1].op_output_index == 0
+
+        # assert correct dag structure for output i's parent
+        fourth_index = operators.index(i.parent)
+        assert fourth_index > second_index
+        assert dag.references[fourth_index].input_refs[0].is_leaf is False
+        assert dag.references[fourth_index].input_refs[0].op_index == second_index
+        assert dag.references[fourth_index].input_refs[0].op_output_index == 0
+
+        assert dag.references[fourth_index].input_refs[1].is_leaf is True
+        assert inputs[dag.references[fourth_index].input_refs[1].dag_input_index] is in2
 
     # Operation should reorder the output io_index to be in the order with which they are returned, not the order
     # in which they are declared
