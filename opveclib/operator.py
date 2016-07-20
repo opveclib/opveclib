@@ -869,3 +869,7 @@ def _dag_to_tf(dag, inputs, grad_dags):
         return outputs[0]
     else:
         return outputs
+
+
+def _merge(op_dag):
+    print(op_dag.proto_dag)
