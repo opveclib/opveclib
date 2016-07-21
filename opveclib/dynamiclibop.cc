@@ -18,6 +18,8 @@
 #include "tensorflow/core/platform/logging.h"
 #include "tensorflow/core/framework/op.h"
 #include "tensorflow/core/framework/op_kernel.h"
+#include "tensorflow/core/framework/device_base.h"
+#include "threadpool.h"
 
 #if GOOGLE_CUDA
 
@@ -75,7 +77,7 @@ class DynamicLibLaunch<CPUDevice>  {
  public:
     typedef uint16_t
         (*FUNPTR)(std::vector<std::shared_ptr<const InputParameter>> inputs,
-                  std::vector<std::shared_ptr<OutputParameter>> outputs);
+                  std::vector<std::shared_ptr<OutputParameter>> outputs, thread::ThreadPool*);
     DynamicLibLaunch(OpKernelConstruction* context,
                      const string& cpu_func_name, const string& cpu_lib_path,
                      const string&, const string&,
@@ -101,7 +103,9 @@ class DynamicLibLaunch<CPUDevice>  {
     void Run(OpKernelContext* context, const CPUDevice&,
              std::vector<std::shared_ptr<const InputParameter>> inputs,
              std::vector<std::shared_ptr<OutputParameter>> outputs) {
-        uint16_t err = func_(inputs, outputs);
+        thread::ThreadPool* thread_pool = context->device()->tensorflow_cpu_worker_threads()->workers;
+        LOG(INFO) << "** NumThreads: " + std::to_string(thread_pool->NumThreads());
+        uint16_t err = func_(inputs, outputs, thread_pool);
         OP_REQUIRES(context, err == 0,
             errors::InvalidArgument("External function execution error code: ",
                                     err));

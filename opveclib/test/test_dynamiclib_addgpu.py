@@ -31,10 +31,13 @@ class DynamicLibAddGPUTest(unittest.TestCase):
             this_directory = os.path.split(this_file_path)[0]
 
             cpp_path = os.path.join(this_directory, 'addcpu.cpp')
+            # get the tensorflow include directory to find threadpool.h include files
+            tf_include = tf.sysconfig.get_include()
             subprocess.call(['g++', '-fPIC', '-Wall',
                          '-std=c++11', '-Ofast', '-Wextra',
                          '-g', '-pedantic',
                          '-I'+this_directory+'/..',
+                         '-isystem', tf_include,
                          '-o', cpulib, '-shared',  cpp_path])
 
         if cuda_enabled:
@@ -65,11 +68,11 @@ class DynamicLibAddGPUTest(unittest.TestCase):
             with tf.Session(config=test_config):
                 tf.logging.log(tf.logging.INFO, '*** add2float')
                 with tf.device(dev_string):
-                    in0 = np.random.rand(3,5).astype(np.float32)
-                    in1 = np.random.rand(3,5).astype(np.float32)
-                    ones = np.ones((3,5), dtype=np.float32)
+                    in0 = np.random.rand(3,50).astype(np.float32)
+                    in1 = np.random.rand(3,50).astype(np.float32)
+                    ones = np.ones((3,50), dtype=np.float32)
                     output = _DynamicLibOp.module().dynamic_lib(inputs=[in0, in1],
-                                                                       out_shapes=[[3,5]],
+                                                                       out_shapes=[[3,50]],
                                                                        out_types=['float'],
                                                                        cpu_lib_path=cpulib,
                                                                        cpu_func_name="add2float",
@@ -84,9 +87,9 @@ class DynamicLibAddGPUTest(unittest.TestCase):
                     assert np.allclose(output[0].eval(), ref)
 
                     tf.logging.log(tf.logging.INFO, '*** addFloatDoubleFloat')
-                    in2 = np.random.rand(3,5).astype(np.float64)
+                    in2 = np.random.rand(3,50).astype(np.float64)
                     output = _DynamicLibOp.module().dynamic_lib(inputs=[in0, in2, in1],
-                                                                       out_shapes=[[3,5]],
+                                                                       out_shapes=[[3,50]],
                                                                        out_types=['float'],
                                                                        cpu_lib_path= cpulib,
                                                                        cpu_func_name="addFloatDoubleFloat",
@@ -101,7 +104,7 @@ class DynamicLibAddGPUTest(unittest.TestCase):
 
                     tf.logging.log(tf.logging.INFO, '*** sumAndSq')
                     output = _DynamicLibOp.module().dynamic_lib(inputs=[in0, in2],
-                                                                       out_shapes=[[3,5], [3,5]],
+                                                                       out_shapes=[[3,50], [3,50]],
                                                                        out_types=['float', 'float'],
                                                                        cpu_lib_path= cpulib,
                                                                        cpu_func_name="sumAndSq",
