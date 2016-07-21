@@ -41,4 +41,4 @@ from .expression import if_, elif_, else_
 from .operator import operator, gradient, evaluate, profile, as_tensorflow
 
 # @ Localization
-from .local import version, log, cuda_enabled, cache_directory, clear_op_cache
+from .local import version, logger, cuda_enabled, cache_directory, clear_op_cache

@@ -8,10 +8,8 @@
 # on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for
 # the specific language governing permissions and limitations under the License.
 
-from __future__ import print_function
 import unittest
 import numpy as np
-from sys import _getframe
 from ..operator import operator, evaluate
 from ..expression import output_like, position_in, minimum, maximum, power, arctan2, logical_and, logical_or
 from ..local import cuda_enabled, clear_op_cache
@@ -38,8 +36,9 @@ def gen(input0, input1, ops_func, np_func):
 
 
 class TestBinary(unittest.TestCase):
+    clear_op_cache()
+
     def test_binary(self):
-        print('*** Running Test: ' + self.__class__.__name__ + ' function: ' + _getframe().f_code.co_name)
         self.binary_math(np.float32)
         self.binary_math(np.float64)
 
@@ -104,8 +103,3 @@ class TestBinary(unittest.TestCase):
         if dtype in fp:
             gen(np.abs(x), y, lambda a, b: power(a, b), lambda a, b: np.power(a, b))
             gen(x, y, lambda a, b: arctan2(a, b), lambda a, b: np.arctan2(a, b))
-
-
-if __name__ == '__main__':
-    clear_op_cache()
-    unittest.main()

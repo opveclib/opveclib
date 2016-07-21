@@ -8,10 +8,8 @@
 # on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for
 # the specific language governing permissions and limitations under the License.
 
-from __future__ import print_function
 import unittest
 import numpy as np
-from sys import _getframe
 from ..operator import operator, evaluate
 from ..expression import position_in, output_like, if_, elif_, else_
 from ..local import cuda_enabled, clear_op_cache
@@ -37,8 +35,9 @@ def clip(arg, threshold1=None, threshold2=None):
 
 
 class TestClip(unittest.TestCase):
+    clear_op_cache()
+
     def test(self):
-        print('*** Running Test: ' + self.__class__.__name__ + ' function: ' + _getframe().f_code.co_name)
         a = np.random.random(1000)
 
         op = clip(a, threshold1=0.1, threshold2=0.9)
@@ -49,7 +48,3 @@ class TestClip(unittest.TestCase):
         if cuda_enabled:
             op_cuda = evaluate(op, target_language='cuda')
             assert np.all(np.equal(op_cuda, op_np))
-
-if __name__ == '__main__':
-    clear_op_cache()
-    unittest.main()

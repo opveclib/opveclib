@@ -1,4 +1,3 @@
-from __future__ import print_function
 # Copyright 2016 Hewlett Packard Enterprise Development LP
 #
 # Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with
@@ -150,13 +149,15 @@ def cumprod(x, axis=0):
 
 
 class TestAccumulate(unittest.TestCase):
+    ops.clear_op_cache()
+
     def test(self):
         """
         Test the outputs of the operators to make sure they are consistent with the numpy implementation
         """
 
         a = np.random.random((5, 5, 5))
-        logging.log(logging.DEBUG, u'Testing C')
+        ops.logger.debug(u'Testing C')
         assert np.allclose(np.cumsum(a, axis=0), ops.evaluate(cumsum(a, axis=0), target_language='cpp'))
         assert np.allclose(np.cumsum(a, axis=1), ops.evaluate(cumsum(a, axis=1), target_language='cpp'))
         assert np.allclose(np.cumsum(a, axis=2), ops.evaluate(cumsum(a, axis=2), target_language='cpp'))
@@ -166,7 +167,7 @@ class TestAccumulate(unittest.TestCase):
         assert np.allclose(np.cumprod(a, axis=2), ops.evaluate(cumprod(a, axis=2), target_language='cpp'))
 
         if ops.cuda_enabled:
-            logging.log(logging.DEBUG, u'Testing CUDA')
+            ops.logger.debug(u'Testing CUDA')
             assert np.allclose(np.cumsum(a, axis=0), ops.evaluate(cumsum(a, axis=0), target_language='cuda'))
             assert np.allclose(np.cumsum(a, axis=1), ops.evaluate(cumsum(a, axis=1), target_language='cuda'))
             assert np.allclose(np.cumsum(a, axis=2), ops.evaluate(cumsum(a, axis=2), target_language='cuda'))
@@ -184,7 +185,8 @@ class TestAccumulate(unittest.TestCase):
         import tensorflow as tf
         import timeit
         import time
-        logger = logging.getLogger('cumsum')
+        logger = ops.logger
+        # logger = logging.getLogger('cumsum')
         logger.setLevel(logging.DEBUG)
         iters = 10
         X = np.random.uniform(0, 1, size=(10000, 1000))
@@ -222,8 +224,3 @@ class TestAccumulate(unittest.TestCase):
             tf_time = np.min(prof_tf) * 1000.00
             logger.debug(u'Best tf + ovl cumsum time  (ms): ' + str(tf_time))
         sess.close()
-
-
-if __name__ == '__main__':
-    ops.clear_op_cache()
-    unittest.main()
