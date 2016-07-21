@@ -16,6 +16,9 @@
 #include "dynamiclibop.h"
 #include "language_dtype.h"
 
+#include "tensorflow/core/platform/env.h"
+#include "threadpool.h"
+
 typedef uint16_t
         (*C_FUNPTR)(std::vector<std::shared_ptr<const InputParameter>> inputs,
                   std::vector<std::shared_ptr<OutputParameter>> outputs);
@@ -157,6 +160,13 @@ int32_t testCOperator(const char *opLibPath, const char *opFuncName,
                 return 1;
          }
     }
+
+    // create the threadpool
+    // TODO - pass it to the test function
+    // TODO - figure out how many cores we actually have from the system
+    const int num_threads = 48;
+    tensorflow::thread::ThreadPool pool(tensorflow::Env::Default(), "test", num_threads);
+    std::cout << "*** threadpool threads:  " + std::to_string(pool.NumThreads()) << std::endl;
 
     // load the operator library
 //    std::cout << "loading function " <<  opFuncName << '\n';

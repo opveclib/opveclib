@@ -636,6 +636,7 @@ def profile(output_list, target_language='cpp', profiling_iterations=1):
         except OSError:
             this_file_path = os.path.abspath(__file__)
             this_directory = os.path.split(this_file_path)[0]
+            tf_include = tf.sysconfig.get_include()
 
             # build the test framework library
             cc_path = os.path.join(this_directory, 'testcop.cc')
@@ -645,6 +646,7 @@ def profile(output_list, target_language='cpp', profiling_iterations=1):
                                          '-std=c++11', '-Ofast', '-Wextra',
                                          '-I'+this_directory,
                                          '-I'+cache_directory,
+                                         '-isystem', tf_include,
                                          '-o', testlib_path, cc_path],
                                         stderr=subprocess.STDOUT,
                                         universal_newlines=True)
