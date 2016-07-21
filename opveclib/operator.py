@@ -508,6 +508,128 @@ def _build_op_dag(*outputs):
     return dag
 
 
+def _get_output_indices(exp_dag):
+    """
+    Find indices of expressions that are outputs in the expression dag.
+    :param exp_dag: expression dag
+    :return: a list of output indices
+    """
+    outs = []
+    io_last = -1
+    for iExpr, expr in zip(range(len(exp_dag.expressions._values)), exp_dag.expressions._values):
+        if expr.code == lang.OUTPUT:
+            outs.append(iExpr)
+            assert expr.io_index>io_last # Checks the ordering constraint!
+            io_last = expr.io_index
+    return outs
+
+def _get_output_shape(exp_dag, iOut):
+    """
+    Returns the shape of the iOut-th output in the expression dag.
+    :param exp_dag: expression dag
+    :param iOut: output index. Must be >=0 and < number of outputs.
+    :return: shape of the output.
+    """
+    outs = _get_output_indices(exp_dag)
+    assert iOut<len(outs)
+    return exp_dag.expressions._values[outs[iOut]].tensor_type.shape
+
+class _MergeRef(namedtuple('_MergeRef', ['to_op_index', 'to_in_arg_index', 'from_op_index', 'from_out_arg_index'])):
+    """
+    Merge reference referring to the indices in the operation dag to/from indices and the input/output argument index
+    as defined in the signature of the operation. This input/output argument index has a correspondence in the
+    expression dag of the operator.
+    :param to_op_index: As from the programmers view this is a to operation with arguments supplied by a from operation.
+    :param to_in_arg_index: The index of the input argument in the to operation.
+    :param from_op_index: The operation that arguments are supplied from.
+    :param from_out_arg_index: The index of the output argument of the from operation.
+    :return: A to merge reference.
+    """
+    __slots__ = () # empty slots
+    def same(self, ref):
+        """
+        Two merge reference are the same if all their indices match. This method does NOT measure object equality.
+        :param ref: The other merge reference.
+        :return: True if they are the same or False otherwise.
+        """
+        return self.to_op_index == ref.to_op_index \
+               and self.to_in_arg_index == ref.to_in_arg_index \
+               and self.from_op_index == ref.from_op_index \
+               and self.from_out_arg_index == ref.from_out_arg_index
+
+_MergeInfo = namedtuple('_MergeInfo', ['merge_refs','merge_names'])
+
+def _merge_refs_op_dag(op_dag):
+    """
+    Creates a list of operators with their arguments that can be merged into single operators. Notice that merge
+    information is given per argument.
+    :param op_dag: operator dag.
+    :return: merge information that contains a list of merge_refs for operators and their input/output arguments and it
+    contains a list of merge_names of operator names (ambiguous) together with argument indices as strings which is ONLY
+    useful for debugging.
+    """
+    dag     = op_dag.proto_dag          # get the dag
+    ops     = dag.operators._values     # get operators, each operator contains an expression dag
+    outs    = dag.dag_outputs._values   # get outputs of the operator dag
+    refs    = dag.references._values    # references of the operator dag
+
+    # Walk the dag from each output to inputs and compute information about merging of ops.
+    inputs      = []    # List (ab)used as queue.
+    staged      = set() # Set that holds ops staged for processing.
+    merge_refs  = []    # Holds the indices of ops in tuples.
+    merge_names = []    # For debugging hold the name of ops (those are not unique).
+
+    for output in outs:
+
+        iOutput = output.op_index   # operator index of this output
+        inputs.append(iOutput)      # add output index
+        staged.clear()              # remove all staged operator indices.
+        staged.add(iOutput)         # mark this operator index as staged.
+
+        while len(inputs) > 0:
+            to_op_index         = inputs.pop(0)
+            to_exp_dag          = ops[to_op_index]
+            to_ref              = refs[to_op_index]
+            to_workgroup_shape  = to_exp_dag.workgroup_shape
+
+            for to_in_arg_index, input in zip(range(len(to_ref.input_refs)), to_ref.input_refs):
+                if input.is_leaf: # Do not consider leafe nodes.
+                    continue
+
+                from_op_index           = input.op_index
+                expr                    = to_exp_dag.expressions._values[input.dag_input_index]
+                from_exp_dag            = ops[from_op_index]
+                from_workgroup_shape    = from_exp_dag.workgroup_shape
+                input_shape_of_out      = expr.tensor_type.shape
+                output_shape_of_in      = _get_output_shape(from_exp_dag, input.op_output_index)
+
+                match = to_workgroup_shape == from_workgroup_shape
+                assert input_shape_of_out == output_shape_of_in # Must always match in well defined dags.
+
+                # TODO: look at the indexing pattern and only merge if we have the same indexing pattern (otherwise RAW conflicts). Ensure the index appears in the same coordinate, e.g. always rows.
+                if match:
+                    merge_refs.append(_MergeRef(to_op_index=to_op_index,
+                                                to_in_arg_index=to_in_arg_index,
+                                                from_op_index=from_op_index,
+                                                from_out_arg_index=input.op_output_index))
+                    merge_names.append((to_exp_dag.name + ' in [%d]' % to_in_arg_index,
+                                        from_exp_dag.name + ' out [%d]' % input.op_output_index))
+
+                # Only append if not yet processed.
+                if from_op_index not in staged:
+                    staged.add(from_op_index)
+                    inputs.append(from_op_index)
+
+    return _MergeInfo(merge_refs=merge_refs, merge_names=merge_names)
+
+def _merge_op_dag(op_dag):
+    merge_refs = _merge_refs_op_dag(op_dag)
+    # TODO: Apply the merge_refs to the op_dag by fusing expression dags.
+    # TODO: When merging expression dags with loops/<<= insert a temporary for each output/input pair.
+    # TODO: Need to keep gradient dags in mind.
+    return op_dag
+
+
 def _make_generic_c(src, name):
     # look for generic c++ shared library in the operator cache
     generic_cpp_so_path = os.path.join(cache_directory, name + '_generic_cpp.so')
@@ -869,7 +991,3 @@ def _dag_to_tf(dag, inputs, grad_dags):
         return outputs[0]
     else:
         return outputs
-
-
-def _merge(op_dag):
-    print(op_dag.proto_dag)
