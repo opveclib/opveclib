@@ -17,6 +17,7 @@
 // turn off c++ name mangling
 #define ADDCPU_EXPORT extern "C"
 
+// does not help...
 //#define EIGEN_USE_NONBLOCKING_THREAD_POOL
 
 // worker functions
@@ -40,13 +41,17 @@ int add2float(std::vector<std::shared_ptr<const InputParameter>> inputs,
 	int64_t len = inputs[0]->length();
 
 	// Make ParallelFor use as many threads as possible.
+	// based on https://github.com/tensorflow/tensorflow/blob/r0.9/tensorflow/core/lib/core/threadpool_test.cc
 //    int64_t kHugeCost = 1 << 30;
 	std::cout << "*** Add2CPUWork - threads:  " + std::to_string(thread_pool->NumThreads()) << std::endl;
 
+	// bind the first 3 parameters to the input and output arrays. begin and end parameters are
+	// placeholders that come from the ParallelFor parameters when it gets called
 //	using namespace std::placeholders;    // adds visibility of _1, _2, _3,...
-	// bind the first 3 parameters to the input and output arrays
 //	auto fn_work = std::bind(Add2CPUWork, in0, in1, out, _1, _2);
 //	fn_work(0, len);
+    // this fails the assertion in https://github.com/tensorflow/tensorflow/blob/r0.9/tensorflow/core/lib/core/threadpool.cc
+    // at line 90 because it seems TF library was not compiled with EIGEN_USE_NONBLOCKING_THREAD_POOL
 //	thread_pool->ParallelFor(len, kHugeCost, fn_work);
     for (int64_t i = 0; i < len; i++ ) {
         auto fn_work = std::bind(Add2CPUWork, in0, in1, out, i);
