@@ -8,7 +8,6 @@
 # on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for
 # the specific language governing permissions and limitations under the License.
 
-from __future__ import print_function
 import unittest
 import numpy as np
 from ..operator import operator, _build_op_dag, evaluate
@@ -17,6 +16,8 @@ from ..local import clear_op_cache
 
 
 class TestOperator(unittest.TestCase):
+    clear_op_cache()
+
     def test_dag_builder_simple(self):
         in0 = np.random.random(10)
         in1 = np.random.random(10)
@@ -71,15 +72,15 @@ class TestOperator(unittest.TestCase):
         def add_one(x, y):
             assert x.shape == y.shape
 
-            a = output_like(x)
-            b = output_like(y)
+            aa = output_like(x)
+            bb = output_like(y)
 
-            pos = position_in(a.shape)
+            pos = position_in(aa.shape)
 
-            a[pos] = x[pos] + 1
-            b[pos] = y[pos] + 1
+            aa[pos] = x[pos] + 1
+            bb[pos] = y[pos] + 1
 
-            return a, b
+            return aa, bb
 
         in0 = np.random.random(10)
         in1 = np.random.random(10)
@@ -227,7 +228,3 @@ class TestOperator(unittest.TestCase):
             pass
         else:
             assert False
-
-if __name__ == '__main__':
-    clear_op_cache()
-    unittest.main()

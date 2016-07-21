@@ -8,9 +8,7 @@
 # on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for
 # the specific language governing permissions and limitations under the License.
 
-from __future__ import print_function
 import unittest
-from sys import _getframe
 from ..expression import *
 from ..expression import _Expression, InputTensor, OutputTensor, _ConstScalar, _ConstTensor, Variable, LocalTensor
 from ..expression import _AssignVariable, _AssignTensor, _ReadTensor, _UnaryMath, _Cast
@@ -28,7 +26,6 @@ def catch_error(f, x, err):
 
 class TestTensorExpression(unittest.TestCase):
     def test_dtype(self):
-        print('*** Running Test: ' + self.__class__.__name__ + ' function: ' + _getframe().f_code.co_name)
         catch_error(lambda x: DType(x), 'string', TypeError)
         catch_error(lambda x: DType(x), 1.0, TypeError)
         catch_error(lambda x: DType(x), np.float128, TypeError)
@@ -63,7 +60,6 @@ class TestTensorExpression(unittest.TestCase):
         assert uint64.as_numpy() == np.uint64
 
     def test_tensor_type(self):
-        print('*** Running Test: ' + self.__class__.__name__ + ' function: ' + _getframe().f_code.co_name)
         catch_error(lambda x: TensorType(x, float32), 'string', TypeError)
         catch_error(lambda x: TensorType(x, float32), (1, 2, 3.3), TypeError)
         catch_error(lambda x: TensorType(x, float32), np.array([1, 2, 3]), TypeError)
@@ -83,12 +79,10 @@ class TestTensorExpression(unittest.TestCase):
         assert TensorType.like(np.zeros((10, 10), dtype=np.float64)) == TensorType([10, 10], float64)
 
     def test_tensor_expression(self):
-        print('*** Running Test: ' + self.__class__.__name__ + ' function: ' + _getframe().f_code.co_name)
         ExpressionDAG.clear()
         catch_error(lambda x: _Expression(x), -1, ValueError)
 
     def test_input(self):
-        print('*** Running Test: ' + self.__class__.__name__ + ' function: ' + _getframe().f_code.co_name)
         ExpressionDAG.clear()
         a = np.empty((5, 5), dtype=np.uint64)
         a_type = TensorType.like(a)
@@ -108,7 +102,6 @@ class TestTensorExpression(unittest.TestCase):
         assert in0_recovered.proto_expr == in0.proto_expr
 
     def test_output(self):
-        print('*** Running Test: ' + self.__class__.__name__ + ' function: ' + _getframe().f_code.co_name)
         ExpressionDAG.clear()
         a = np.empty((5, 5), dtype=np.uint64)
         a_type = TensorType.like(a)
@@ -120,7 +113,7 @@ class TestTensorExpression(unittest.TestCase):
         in0[0, 0] = 0
 
         try:
-            b = in0[0, 0]
+            in0[0, 0]
         except TypeError:
             pass
         else:
@@ -137,7 +130,6 @@ class TestTensorExpression(unittest.TestCase):
         assert in0_recovered.proto_expr == in0.proto_expr
 
     def test_const_scalar(self):
-        print('*** Running Test: ' + self.__class__.__name__ + ' function: ' + _getframe().f_code.co_name)
         ExpressionDAG.clear()
         catch_error(lambda x: _ConstScalar(x), 'string', TypeError)
         catch_error(lambda x: _ConstScalar(x), np.arange(1), TypeError)
@@ -165,7 +157,6 @@ class TestTensorExpression(unittest.TestCase):
         catch_error(lambda x: _ConstScalar.from_proto(t.proto_expr, []), None, ValueError)
 
     def test_const_tensor(self):
-        print('*** Running Test: ' + self.__class__.__name__ + ' function: ' + _getframe().f_code.co_name)
         ExpressionDAG.clear()
         catch_error(lambda x: _ConstTensor(x), 'string', TypeError)
 
@@ -182,7 +173,6 @@ class TestTensorExpression(unittest.TestCase):
         assert a.proto_expr == a_fp.proto_expr
 
     def test_position(self):
-        print('*** Running Test: ' + self.__class__.__name__ + ' function: ' + _getframe().f_code.co_name)
         ExpressionDAG.clear()
         pos = PositionTensor((5, 5))
         ExpressionDAG.clear()
@@ -191,7 +181,6 @@ class TestTensorExpression(unittest.TestCase):
         assert pos.proto_expr == pos2.proto_expr
 
     def test_scalar(self):
-        print('*** Running Test: ' + self.__class__.__name__ + ' function: ' + _getframe().f_code.co_name)
         ExpressionDAG.clear()
         catch_error(lambda x: variable(x, float32), 'string', TypeError)
 
@@ -211,7 +200,6 @@ class TestTensorExpression(unittest.TestCase):
         assert b.proto_expr == Variable.from_proto(b.proto_expr, b.input_exprs).proto_expr
 
     def test_assign_scalar(self):
-        print('*** Running Test: ' + self.__class__.__name__ + ' function: ' + _getframe().f_code.co_name)
         ExpressionDAG.clear()
         catch_error(lambda x: _AssignVariable(variable(0, float32), x), 'string', TypeError)
         catch_error(lambda x: _AssignVariable(variable(0, float32), x), variable(0, float64), TypeError)
@@ -231,7 +219,6 @@ class TestTensorExpression(unittest.TestCase):
         assert c.proto_expr == _AssignVariable.from_proto(c.proto_expr, c.input_exprs).proto_expr
 
     def test_cast(self):
-        print('*** Running Test: ' + self.__class__.__name__ + ' function: ' + _getframe().f_code.co_name)
         ExpressionDAG.clear()
         catch_error(lambda x: cast(x, float32), 'string', TypeError)
         catch_error(lambda x: cast(x, float32), 1.0, TypeError)
@@ -245,7 +232,6 @@ class TestTensorExpression(unittest.TestCase):
         assert b.proto_expr == _Cast.from_proto(b.proto_expr, b.input_exprs).proto_expr
 
     def test_tensor(self):
-        print('*** Running Test: ' + self.__class__.__name__ + ' function: ' + _getframe().f_code.co_name)
         ExpressionDAG.clear()
         catch_error(lambda x: LocalTensor(x), 'string', TypeError)
 
@@ -268,7 +254,6 @@ class TestTensorExpression(unittest.TestCase):
         assert a.proto_expr == LocalTensor.from_proto(a.proto_expr, a.input_exprs).proto_expr
 
     def test_assign_tensor(self):
-        print('*** Running Test: ' + self.__class__.__name__ + ' function: ' + _getframe().f_code.co_name)
         ExpressionDAG.clear()
 
         a = zeros(5, dtype=float32)
@@ -306,7 +291,6 @@ class TestTensorExpression(unittest.TestCase):
         assert b.proto_expr == _AssignTensor.from_proto(b.proto_expr, b.input_exprs).proto_expr
 
     def test_index(self):
-        print('*** Running Test: ' + self.__class__.__name__ + ' function: ' + _getframe().f_code.co_name)
         ExpressionDAG.clear()
         a = zeros((5, 5), float32)
 
@@ -327,7 +311,6 @@ class TestTensorExpression(unittest.TestCase):
         assert e.proto_expr == _ReadTensor.from_proto(e.proto_expr, e.input_exprs).proto_expr
 
     def test_to_scalar_index(self):
-        print('*** Running Test: ' + self.__class__.__name__ + ' function: ' + _getframe().f_code.co_name)
         ExpressionDAG.clear()
         target_shape = (5, 5)
 
@@ -350,7 +333,6 @@ class TestTensorExpression(unittest.TestCase):
         catch_error(lambda x: _to_scalar_index(target_shape, x), _EndIf, TypeError)
 
     def test_unary_math(self):
-        print('*** Running Test: ' + self.__class__.__name__ + ' function: ' + _getframe().f_code.co_name)
         ExpressionDAG.clear()
         a = variable(1.1, float32)
         b = variable(1.1, float64)
@@ -400,7 +382,6 @@ class TestTensorExpression(unittest.TestCase):
         assert c.proto_expr == _UnaryMath.from_proto(c.proto_expr, c.input_exprs).proto_expr
 
     def test_binary_math(self):
-        print('*** Running Test: ' + self.__class__.__name__ + ' function: ' + _getframe().f_code.co_name)
         ExpressionDAG.clear()
 
         a = variable(1.1, float32)
@@ -483,7 +464,6 @@ class TestTensorExpression(unittest.TestCase):
         assert c.proto_expr == _BinaryMath.from_proto(c.proto_expr, c.input_exprs).proto_expr
 
     def test_arange(self):
-        print('*** Running Test: ' + self.__class__.__name__ + ' function: ' + _getframe().f_code.co_name)
         ExpressionDAG.clear()
 
         def f(x):
@@ -496,7 +476,6 @@ class TestTensorExpression(unittest.TestCase):
         assert a.proto_expr == _Range.from_proto(a.proto_expr, a.input_exprs).proto_expr
 
     def test_if(self):
-        print('*** Running Test: ' + self.__class__.__name__ + ' function: ' + _getframe().f_code.co_name)
         ExpressionDAG.clear()
         catch_error(lambda x: _If(x), zeros((5, 5), float32), TypeError)
         catch_error(lambda x: _ElseIf(x), zeros((5, 5), float32), TypeError)
@@ -509,6 +488,3 @@ class TestTensorExpression(unittest.TestCase):
         _Else()
         b <<= 0
         _EndIf()
-
-if __name__ == '__main__':
-    unittest.main()

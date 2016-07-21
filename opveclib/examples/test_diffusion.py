@@ -14,7 +14,6 @@ import tensorflow as tf
 import sys
 import numpy as np
 import unittest
-from sys import _getframe
 import opveclib as ops
 
 
@@ -846,11 +845,9 @@ class TestDiffusion2D(unittest.TestCase):
         These test cases use the numpy reference implementation of the operator to compare against the opveclib
         implementation.
         """
-        print('*** Running Test: ' + self.__class__.__name__ + ' function: ' + _getframe().f_code.co_name)
-
         for nX in [15, 20]:
             for nY in [15, 50]:
-                print("Test case nX = %d and nY = %d." % (nX, nY)) # Print parameters of the test case.
+                ops.logger.debug("Test case nX = %d and nY = %d." % (nX, nY))
                 rng     = np.random.RandomState(1)
                 imageIn = rng.uniform(0, 1, [nY, nX])
 
@@ -868,10 +865,9 @@ class TestAddBoundary(unittest.TestCase):
         """
         Compares the numpy reference implementation to the opveclib implementation for the add operator.
         """
-        print('*** Running Test: ' + self.__class__.__name__ + ' function: ' + _getframe().f_code.co_name)
         for nX in [2, 3, 10]:
             for nY in [2, 3, 5]:
-                print("Test case nX = %d and nY = %d." % (nX, nY)) # Print parameters of the test case.
+                ops.logger.debug("Test case nX = %d and nY = %d." % (nX, nY))
                 rng     = np.random.RandomState(1)
                 dataIn  = rng.uniform(0, 255, [nY, nX])
                 op      = add_boundary_op(dataIn)
@@ -904,10 +900,9 @@ class TestDelBoundary(unittest.TestCase):
         """
         Compare the numpy implementation to the opveclib implementation for the deletion boundary operator.
         """
-        print('*** Running Test: ' + self.__class__.__name__ + ' function: ' + _getframe().f_code.co_name)
         for nX in [3, 4, 10]:
             for nY in [3, 4, 5]:
-                print("Test case nX = %d and nY = %d." % (nX, nY)) # Print parameters of the test case.
+                ops.logger.debug("Test case nX = %d and nY = %d." % (nX, nY))
 
                 rng     = np.random.RandomState(1)
                 dataIn  = rng.uniform(0, 255, [nY, nX])
@@ -937,10 +932,9 @@ class TestCopyBoundary(unittest.TestCase):
         """
         Compare the numpy implementation with the opveclib implementation for the copy boundary operator.
         """
-        print('*** Running Test: ' + self.__class__.__name__ + ' function: ' + _getframe().f_code.co_name)
         for nX in [2, 3, 10]:
             for nY in [2, 3, 5]:
-                print("Test case nX = %d and nY = %d." % (nX, nY)) # Print parameters of the test case.
+                ops.logger.debug("Test case nX = %d and nY = %d." % (nX, nY))
 
                 rng     = np.random.RandomState(1)
                 dataIn  = rng.uniform(0, 255, [nY, nX])
@@ -970,14 +964,13 @@ class TestGauss2DOp(unittest.TestCase):
         """
         Creates Gauss kernels on the CPU/GPU and in numpy and compares these.
         """
-        print('*** Running Test: ' + self.__class__.__name__ + ' function: ' + _getframe().f_code.co_name)
         # this test fails with mX = 9 and mY = 8 due to a bug in nvcc that needs more investigation
         # for now, skip this test to the build can pass.
         # for mY in [1, 2, 3, 8]:
         #     for mX in [1, 2, 3, 9]:
         for mY in [1, 2, 3, 9]:
             for mX in [1, 2, 3, 8]:
-                print("Test case mX = %d and mY = %d." % (mX, mY)) # Print parameters of the test case.
+                ops.logger.debug("Test case mX = %d and mY = %d." % (mX, mY))
                 op = gauss_2d(dimOut=[mY, mX])
 
                 dataCPU = ops.evaluate(op, target_language='cpp')
@@ -1006,14 +999,13 @@ class TestFilter2D(unittest.TestCase):
         Compare the numpy implementation with the opveclib implementation for varying image size and varying kernel
         size.
         """
-        print('*** Running Test: ' + self.__class__.__name__ + ' function: ' + _getframe().f_code.co_name)
         for nY in [5, 8, 15]:
             for nX in [5, 9, 16]:
-                print("Image size nX = %d and nY = %d." % (nX, nY)) # Print parameters of the test case.
+                ops.logger.debug("Image size nX = %d and nY = %d." % (nX, nY))
 
                 for mY in [2, 3]:
                     for mX in [2, 3]:
-                        print("  Kernel size mX = %d and mY = %d." % (mX, mY)) # Print parameters of the test case.
+                        ops.logger.debug("  Kernel size mX = %d and mY = %d." % (mX, mY))
 
                         rng         = np.random.RandomState(1)
                         dataIn      = rng.uniform(0, 255, [nY, nX])
@@ -1045,7 +1037,6 @@ class TestDiffusionGradient(unittest.TestCase):
         """
         Compare the numpy implementation with the opveclib implementation for the diffusion gradient operator.
         """
-        print('*** Running Test: ' + self.__class__.__name__ + ' function: ' + _getframe().f_code.co_name)
         for nX in [3, 4, 10]:
             for nY in [3, 4, 5]:
                 rng = np.random.RandomState(1)
@@ -1089,10 +1080,9 @@ class TestSolveDiag2DOp(unittest.TestCase):
         Compare the numpy implementation with the opveclib implementation for the solve diag 2D operator for columns and
         for rows.
         """
-        print('*** Running Test: ' + self.__class__.__name__ + ' function: ' + _getframe().f_code.co_name)
         for nY in [1, 2, 3, 7]:
             for nX in [1, 2, 3, 4]:
-                print("Test case nX = %d and nY = %d." % (nX, nY))
+                ops.logger.debug("Test case nX = %d and nY = %d." % (nX, nY))
                 rng = np.random.RandomState(1)
 
                 alpha   = rng.uniform(0, 1, [nY, nX])

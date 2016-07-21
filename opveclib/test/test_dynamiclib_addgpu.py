@@ -13,14 +13,16 @@ import numpy as np
 import os
 import unittest
 import subprocess
-from opveclib.operator import _DynamicLibOp, _default_cuda_threads_per_block
-from opveclib.local import cuda_enabled, cuda_directory, cache_directory, clear_op_cache
+from ..operator import _DynamicLibOp, _default_cuda_threads_per_block
+from ..local import cuda_enabled, cuda_directory, cache_directory, clear_op_cache, logger
 
 
 # Test to ensure valid calculation on both CPU and GPU.
 # All GPU calculations have an extra 1.0 added to each element to verify that
 # code is actually running on GPU
 class DynamicLibAddGPUTest(unittest.TestCase):
+    clear_op_cache()
+
     def test1(self):
 
         # build the operator libs if needed
@@ -57,13 +59,13 @@ class DynamicLibAddGPUTest(unittest.TestCase):
         else:
             devices = ['/cpu:0']
         for dev_string in devices:
-            tf.logging.log(tf.logging.INFO, '*** device: {dev}'.format(dev= dev_string))
+            logger.debug('*** device: {dev}'.format(dev= dev_string))
             test_config=tf.ConfigProto(allow_soft_placement=False)
             # Don't perform optimizations for tests so we don't inadvertently run
             # gpu ops on cpu
             test_config.graph_options.optimizer_options.opt_level = -1
             with tf.Session(config=test_config):
-                tf.logging.log(tf.logging.INFO, '*** add2float')
+                logger.debug('*** add2float')
                 with tf.device(dev_string):
                     in0 = np.random.rand(3,5).astype(np.float32)
                     in1 = np.random.rand(3,5).astype(np.float32)
@@ -83,7 +85,7 @@ class DynamicLibAddGPUTest(unittest.TestCase):
                         ref = np.add(ref,ones)
                     assert np.allclose(output[0].eval(), ref)
 
-                    tf.logging.log(tf.logging.INFO, '*** addFloatDoubleFloat')
+                    logger.debug('*** addFloatDoubleFloat')
                     in2 = np.random.rand(3,5).astype(np.float64)
                     output = _DynamicLibOp.module().dynamic_lib(inputs=[in0, in2, in1],
                                                                        out_shapes=[[3,5]],
@@ -99,7 +101,7 @@ class DynamicLibAddGPUTest(unittest.TestCase):
                         ref = ref + ones
                     assert np.allclose(output[0].eval(), ref)
 
-                    tf.logging.log(tf.logging.INFO, '*** sumAndSq')
+                    logger.debug('*** sumAndSq')
                     output = _DynamicLibOp.module().dynamic_lib(inputs=[in0, in2],
                                                                        out_shapes=[[3,5], [3,5]],
                                                                        out_types=['float', 'float'],
@@ -120,13 +122,9 @@ class DynamicLibAddGPUTest(unittest.TestCase):
                     assert np.allclose(output[1].eval(), out1)
 
                     # make sure we can also use a standard TF gpu operator in the same session
-                    tf.logging.log(tf.logging.INFO, '*** TF numerics op')
+                    logger.debug('*** TF numerics op')
                     x_shape = [5, 4]
                     x = np.random.random_sample(x_shape).astype(np.float32)
                     t = tf.constant(x, shape=x_shape, dtype=tf.float32)
                     t_verified = tf.verify_tensor_all_finite(t, "Input is not a number.")
                     assert np.allclose(x, t_verified.eval())
-
-if __name__ == "__main__":
-    clear_op_cache()
-    unittest.main()

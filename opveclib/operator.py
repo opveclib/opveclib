@@ -17,12 +17,11 @@ import subprocess
 import string
 import re
 from collections import namedtuple
-import tensorflow as tf
 import numpy as np
 from numpy.ctypeslib import ndpointer
 
 from .expression import TensorType, ExpressionDAG, input, OutputTensor
-from .local import version, cache_directory, cuda_enabled, cuda_directory
+from .local import version, cache_directory, cuda_enabled, cuda_directory, logger
 from . import language_pb2 as lang
 
 _default_cuda_threads_per_block = 32
@@ -35,6 +34,7 @@ class _DynamicLibOp(object):
 
     @staticmethod
     def module():
+        import tensorflow as tf
         if _DynamicLibOp._loaded_module is None:
             libname = 'dynamiclibop.so.' + version
             dynamiclibop_path = os.path.join(cache_directory, libname)
@@ -47,7 +47,7 @@ class _DynamicLibOp(object):
                 this_directory = os.path.split(this_file_path)[0]
                 try:
                     if cuda_enabled:
-                        tf.logging.log(tf.logging.INFO, '*** building dynamiclibop for GPU')
+                        logger.debug('*** building dynamiclibop for GPU')
                         subprocess.check_output(['g++', '-fPIC', '-Wall', '-shared',
                                                  '-std=c++11', '-O2', '-Wextra', '-DGOOGLE_CUDA=1',
                                                  '-o', dynamiclibop_path,
@@ -57,7 +57,7 @@ class _DynamicLibOp(object):
                                                 stderr=subprocess.STDOUT,
                                                 universal_newlines=True)
                     else:
-                        tf.logging.log(tf.logging.INFO, '*** building dynamiclibop for CPU')
+                        logger.debug('*** building dynamiclibop for CPU')
                         subprocess.check_output(['g++', '-fPIC', '-Wall', '-shared',
                                                  '-std=c++11', '-O2', '-Wextra',
                                                  '-o', dynamiclibop_path,
@@ -66,7 +66,7 @@ class _DynamicLibOp(object):
                                                 stderr=subprocess.STDOUT,
                                                 universal_newlines=True)
                 except subprocess.CalledProcessError as exception:
-                    tf.logging.log(tf.logging.ERROR, 'g++ error: ' + exception.output)
+                    logger.debug('g++ error: ' + exception.output)
                     raise
 
             _DynamicLibOp._loaded_module = tf.load_op_library(dynamiclibop_path)
@@ -528,7 +528,7 @@ def _make_generic_c(src, name):
                                     stderr=subprocess.STDOUT,
                                     universal_newlines=True)
         except subprocess.CalledProcessError as exception:
-            tf.logging.log(tf.logging.ERROR, 'g++ error: ' + exception.output)
+            logger.debug('g++ error: ' + exception.output)
             raise
 
     return generic_cpp_so_path
@@ -558,7 +558,7 @@ def _make_generic_cuda(src, name):
                                     stderr=subprocess.STDOUT,
                                     universal_newlines=True)
         except subprocess.CalledProcessError as exception:
-            tf.logging.log(tf.logging.ERROR, 'nvcc error: ' + exception.output)
+            logger.debug('nvcc error: ' + exception.output)
             raise
 
         # clean up .o files
@@ -649,7 +649,7 @@ def profile(output_list, target_language='cpp', profiling_iterations=1):
                                         stderr=subprocess.STDOUT,
                                         universal_newlines=True)
             except subprocess.CalledProcessError as exception:
-                tf.logging.log(tf.logging.ERROR, 'g++ error: ' + exception.output)
+                logger.debug('g++ error: ' + exception.output)
                 raise
 
             libtest = ctypes.cdll.LoadLibrary(testlib_path)
@@ -698,7 +698,7 @@ def profile(output_list, target_language='cpp', profiling_iterations=1):
                                         stderr=subprocess.STDOUT,
                                         universal_newlines=True)
             except subprocess.CalledProcessError as exception:
-                tf.logging.log(tf.logging.ERROR, 'nvcc error: ' + exception.output)
+                logger.debug('nvcc error: ' + exception.output)
                 raise
 
             # clean up .o files
@@ -822,10 +822,10 @@ def _dag_to_tf(dag, inputs, grad_dags):
         op_c_src, op_cuda_src, op_cuda_launch_template, op_c_generic, op_cuda_generic = \
             ExpressionDAG.generate(op, name)
 
-        tf.logging.log(tf.logging.DEBUG, 'Compiling generic C++ for Op ' + name)
+        logger.debug('Compiling generic C++ for Op ' + name)
         cpu_op_lib = _make_generic_c(op_c_generic, name)
         if cuda_enabled:
-            tf.logging.log(tf.logging.DEBUG, 'Compiling generic CUDA for Op ' + name)
+            logger.debug('Compiling generic CUDA for Op ' + name)
             cuda_op_lib = _make_generic_cuda(op_cuda_generic, name)
         else:
             cuda_op_lib = ''

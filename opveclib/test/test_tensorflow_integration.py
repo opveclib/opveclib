@@ -8,10 +8,7 @@
 # on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for
 # the specific language governing permissions and limitations under the License.
 
-from __future__ import print_function
-
 import unittest
-from sys import _getframe
 import numpy as np
 import tensorflow as tf
 from opveclib.expression import position_in, output_like
@@ -20,8 +17,9 @@ from opveclib.local import cuda_enabled, clear_op_cache
 
 
 class TestIntegration(unittest.TestCase):
+    clear_op_cache()
+
     def test_single_output(self):
-        print('*** Running Test: ' + self.__class__.__name__ + ' function: ' + _getframe().f_code.co_name)
 
         @operator()
         def add(x, y):
@@ -58,7 +56,6 @@ class TestIntegration(unittest.TestCase):
         assert np.allclose(reference, result)
 
     def test_multiple_outputs(self):
-        print('*** Running Test: ' + self.__class__.__name__ + ' function: ' + _getframe().f_code.co_name)
 
         @operator()
         def multi_op(input0, input1, input2):
@@ -116,7 +113,7 @@ class TestIntegration(unittest.TestCase):
         assert np.allclose(eval3, np3)
 
     def test_4D(self):
-        print('*** Running Test: ' + self.__class__.__name__ + ' function: ' + _getframe().f_code.co_name)
+
         @operator()
         def sum_sq(input0, input1, input2):
             pos = position_in(input0.shape)
@@ -153,8 +150,3 @@ class TestIntegration(unittest.TestCase):
 
         assert np.allclose(reference, result)
         assert np.allclose(evaluate(op, target_language='cpp'), reference)
-
-
-if __name__ == '__main__':
-    clear_op_cache()
-    unittest.main()

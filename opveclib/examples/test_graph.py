@@ -10,7 +10,6 @@
 
 
 import unittest
-from sys import _getframe
 import numpy as np
 import opveclib as ops
 
@@ -113,12 +112,12 @@ def countTrianglesCPU(startEdge, fromVertex, toVertex):
         >>> tmpName = "/tmp/v7e20.txt"
         >>> writeExampleGraphToTextFile(tmpName)
         >>> startEdge, fromVertex, toVertex = loadGraphFromTextFile(tmpName)
-        >>> nTriangle = countTrianglesCPU(startEdge, fromVertex, toVertex)
-        >>> print(nTriangle)
+        >>> countTrianglesCPU(startEdge, fromVertex, toVertex)
         3
     """
     count = ops.evaluate(graph_triangle_count(startEdge, fromVertex, toVertex), target_language='cpp')
     return np.sum(count, axis=0, dtype=np.uint64)
+
 
 def countTrianglesGPU(startEdge, fromVertex, toVertex):
     """Count the triangles on the GPU.
@@ -141,8 +140,7 @@ def countTrianglesGPU(startEdge, fromVertex, toVertex):
         >>> tmpName = "/tmp/v7e20.txt"
         >>> writeExampleGraphToTextFile(tmpName)
         >>> startEdge, fromVertex, toVertex = loadGraphFromTextFile(tmpName)
-        >>> nTriangle = countTrianglesGPU(startEdge, fromVertex, toVertex)
-        >>> print(nTriangle)
+        >>> countTrianglesGPU(startEdge, fromVertex, toVertex)
         3
     """
     count = ops.evaluate(graph_triangle_count(startEdge, fromVertex, toVertex), target_language='cuda')
@@ -407,7 +405,6 @@ class TestGraphTriangleCountOp(unittest.TestCase):
         This test cases compares the numpy reference implementation and the opveclib implementation with the
         ground-truth count.
         """
-        print('*** Running Test: ' + self.__class__.__name__ + ' function: ' + _getframe().f_code.co_name)
 
         # Specify the graph data.
         tmpName     = "/tmp/v7e20.txt"
@@ -415,7 +412,7 @@ class TestGraphTriangleCountOp(unittest.TestCase):
 
         writeExampleGraphToTextFile(tmpName)
 
-        print('Testing graph %s.' % tmpName)
+        ops.logger.debug('Testing graph %s.' % tmpName)
 
         startEdge, fromVertex, toVertex = loadGraphFromTextFile(tmpName)
 
