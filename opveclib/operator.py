@@ -508,31 +508,184 @@ def _build_op_dag(*outputs):
     return dag
 
 
-def _get_output_indices(exp_dag):
+def _get_output_indices(expr_dag):
     """
     Find indices of expressions that are outputs in the expression dag.
-    :param exp_dag: expression dag
+    :param expr_dag: expression dag
     :return: a list of output indices
     """
     outs = []
     io_last = -1
-    for iExpr, expr in zip(range(len(exp_dag.expressions._values)), exp_dag.expressions._values):
+    for iExpr, expr in zip(range(len(expr_dag.expressions._values)), expr_dag.expressions._values):
         if expr.code == lang.OUTPUT:
             outs.append(iExpr)
             assert expr.io_index>io_last # Checks the ordering constraint!
             io_last = expr.io_index
     return outs
 
-def _get_output_shape(exp_dag, iOut):
+def _get_output_shape(expr_dag, iOut):
     """
     Returns the shape of the iOut-th output in the expression dag.
-    :param exp_dag: expression dag
+    :param expr_dag: expression dag
     :param iOut: output index. Must be >=0 and < number of outputs.
     :return: shape of the output.
     """
-    outs = _get_output_indices(exp_dag)
-    assert iOut<len(outs)
-    return exp_dag.expressions._values[outs[iOut]].tensor_type.shape
+    outs = _get_output_indices(expr_dag)
+    assert iOut < len(outs)
+    return expr_dag.expressions._values[outs[iOut]].tensor_type.shape
+
+
+def _get_expr_indices(expr_dag, expr_code):
+    """
+    Get indices of all read/write expression in the expression dag which is represented as a list.
+    :param expr_dag: The expression dag to search for read/write expressions.
+    :param expr_code: The expression code.
+    :return: A list of indices with all expressions that match the expression code.
+    """
+    expr_indices = []
+    exprs = expr_dag.expressions._values
+    for iExp, expr in zip(range(len(exprs)), exprs):
+        if expr.code == expr_code:
+            expr_indices.append(iExp)
+    return expr_indices
+
+
+def _get_tensor_read_indices(expr_dag):
+    """
+    Get indices for the READ_TENSOR expression code.
+    :param expr_dag: The expression dag.
+    :return: A list of indices with READ_TENSOR expressions.
+    """
+    return _get_expr_indices(expr_dag, lang.READ_TENSOR)
+
+
+def _get_tensor_write_indices(expr_dag):
+    """
+    Get indices for the ASSIGN_TENSOR expression code.
+    :param expr_dag: The expression dag.
+    :return: A list of indices with ASSIGN_TENSOR expressions.
+    """
+    return _get_expr_indices(expr_dag, lang.ASSIGN_TENSOR)
+
+
+def _get_indices_connected_to_expr_index(exp_dag, expr_indices, expr_index):
+    """
+    Get indices from expr_indices that can be traced back to expr_index.  A typical use case is to see if a READ_TENSOR
+    or ASSIGN_TENSOR expression is linked to an input or output tensor of an operation.
+    :param exp_dag: The expression dag.
+    :param expr_indices: The expression indices to test if they have a connection to expr_index.
+    :param expr_index: An expr_index in the dag. Assumes expr_index>=0 and expr_index<len(exp_dag.expressions._values).
+    :return: A sub-list of expr_indices that contains only those indices of expressions that are connected to the
+    expression at the index expr_index. We DO NOT guarantee for the returned indices to be in the same order than the
+    indices in expr_indices.
+    """
+    connected_indices = set()
+    indices = []
+    for rw_index in expr_indices:
+        indices.append(rw_index)
+        while len(indices) > 0:
+            i = indices.pop(0)
+            for op_index in exp_dag.references._values[i].operand_indices:
+                if op_index==expr_index:
+                    connected_indices.add(rw_index)
+                    # We can stop here, because we traced the op_index back to expr_index.
+                    indices[:] = []
+                    break
+                else:
+                    indices.append(op_index)
+    return list(connected_indices)
+
+def _get_tensor_read_indices_for_expr_index(expr_dag, expr_index):
+    """
+    Returns a list of all TENSOR_READs for the expr_index, which usually is an input/output tensor.
+    An input tensor can only be read but not assigned to in ovl.
+    :param expr_dag: The expression dag.
+    :param expr_index: Usually the index of an input/output tensor.
+    :return: A list of all expression indices that are TENSOR_READs and are connected to expr_index.
+    """
+    read_indices = _get_tensor_read_indices(expr_dag)
+    return _get_indices_connected_to_expr_index(expr_dag, read_indices, expr_index)
+
+def _get_tensor_write_indices_for_expr_index(expr_dag, expr_index):
+    """
+    Returns a list of all TENSOR_ASSIGNs for teh expr_index, which usually is an input/output tensor.
+    One output can have multiple writes but never a read. That is not allowed in ovl.
+    :param expr_dag: The expression dag.
+    :param expr_index: Usually the index of an input/output tensor.
+    :return: A list of all expression indices that are TENSOR_ASSIGNs and are connected to expr_index.
+    """
+    write_indices = _get_tensor_write_indices(expr_dag)
+    return _get_indices_connected_to_expr_index(expr_dag, write_indices, expr_index)
+
+def _refs_pos(expr_dag, expr_index):
+    """
+    Returns True if the input references of expr_index have a POSITION code among them otherwise False.
+    :param expr_dag: The expression dag.
+    :param expr_index: The expression index to inspect.
+    :return: True if POSITION code is among the input references otherwise False.
+    """
+    for op_index in expr_dag.references._values[expr_index].operand_indices:
+        expr = expr_dag.expressions._values[op_index]
+        if expr.code == lang.POSITION:
+            return True
+
+    return False
+
+
+def _get_worker_indices(expr_dag, tensor_rw_index):
+    """
+    We define the worker index of TENSOR_READ or a TENSOR_ASSIGN as follows:
+    (i)  it must be traced back to a POSITION code.
+    (ii) since the codes contain the flattened index we re-construct the original index position in row-major order
+         based on the ADD tree when flatting the index.
+    For instance, assume our tensor_rw_index and those codes before the tensor_rw_index express tensor[i0,i1,i2,...],
+    and i2 is traced back to a POSITION code, then we return 2.
+    Because there could be multiple READS or ASSIGNS we return a list of indices.
+    :param expr_dag: The expression dag.
+    :param tensor_rw_index: The index of the read/write code to look into.
+    :return: A list of worker indices.
+    """
+    worker_indices = [] # empty if none found, no worker reads from this tensor
+    # Walk the tree from the root to the leaves and then return that leave which has the POSITION code.
+    indices = [(tensor_rw_index, 0)]
+    while len(indices) > 0:
+        multi_index = indices.pop(0)
+        expr_index = multi_index[0]
+        arg_index = multi_index[1]
+        op_indices = expr_dag.references._values[expr_index].operand_indices
+        for i, op_index in zip(range(len(op_indices)), op_indices):
+            wasAddOp = expr_dag.expressions._values[expr_index].code == lang.ADD
+            expr = expr_dag.expressions._values[op_index]
+            if wasAddOp:
+                arg_index = arg_index + i # We assume that ADD codes are binary i=0 or i=1!
+            # Do not follow further READ_TENSOR instances.
+            if expr.code != lang.READ_TENSOR:
+                indices.append((op_index, arg_index))
+            else:
+                # Immediate read from POSITION otherwise we do not need to follow another tensor read.
+                if _refs_pos(expr_dag, op_index):
+                    worker_indices.append(arg_index)
+    return worker_indices
+
+def _eliminate_duplicates(l):
+    """
+    Removes duplicates from a list while maintaining the order of elements (stable).
+    :param l: The input list.
+    :return: List where duplicates were removed.
+    """
+    # TODO: Improve this implementation of making lists unique while maintaining the original order (stable).
+    duplicate = [False] * len(l)
+    for i1 in range(len(l)):
+        e = l[i1]
+        for i2 in range(i1+1,len(l)):
+            if e == l[i2]:
+                duplicate[i2] = True
+    unique = []
+    for i, d in zip(range(len(duplicate)), duplicate):
+        if not d:
+            unique.append(l[i])
+    return unique
+
 
 class _MergeRef(namedtuple('_MergeRef', ['to_op_index', 'to_in_arg_index', 'from_op_index', 'from_out_arg_index'])):
     """
@@ -558,6 +711,7 @@ class _MergeRef(namedtuple('_MergeRef', ['to_op_index', 'to_in_arg_index', 'from
                and self.from_out_arg_index == ref.from_out_arg_index
 
 _MergeInfo = namedtuple('_MergeInfo', ['merge_refs','merge_names'])
+
 
 def _merge_refs_op_dag(op_dag):
     """
@@ -593,34 +747,70 @@ def _merge_refs_op_dag(op_dag):
             to_workgroup_shape  = to_exp_dag.workgroup_shape
 
             for to_in_arg_index, input in zip(range(len(to_ref.input_refs)), to_ref.input_refs):
-                if input.is_leaf: # Do not consider leafe nodes.
+                from_op_index = input.op_index
+
+                # Do not consider leaf nodes.
+                if input.is_leaf:
                     continue
 
-                from_op_index           = input.op_index
+                # Append if not staged.
+                if from_op_index not in staged:
+                    staged.add(from_op_index)
+                    inputs.append(from_op_index)
+
                 expr                    = to_exp_dag.expressions._values[input.dag_input_index]
                 from_exp_dag            = ops[from_op_index]
                 from_workgroup_shape    = from_exp_dag.workgroup_shape
                 input_shape_of_out      = expr.tensor_type.shape
+                output_indices          = _get_output_indices(from_exp_dag)
+                output_index            = output_indices[input.op_output_index]
                 output_shape_of_in      = _get_output_shape(from_exp_dag, input.op_output_index)
 
                 match = to_workgroup_shape == from_workgroup_shape
                 assert input_shape_of_out == output_shape_of_in # Must always match in well defined dags.
 
-                # TODO: look at the indexing pattern and only merge if we have the same indexing pattern (otherwise RAW conflicts). Ensure the index appears in the same coordinate, e.g. always rows.
-                if match:
-                    merge_refs.append(_MergeRef(to_op_index=to_op_index,
-                                                to_in_arg_index=to_in_arg_index,
-                                                from_op_index=from_op_index,
-                                                from_out_arg_index=input.op_output_index))
-                    merge_names.append((to_exp_dag.name + ' in [%d]' % to_in_arg_index,
-                                        from_exp_dag.name + ' out [%d]' % input.op_output_index))
+                #print('%s in [%d], %s out [%d]' % (to_exp_dag.name, to_in_arg_index, from_exp_dag.name, input.op_output_index))
 
-                # Only append if not yet processed.
-                if from_op_index not in staged:
-                    staged.add(from_op_index)
-                    inputs.append(from_op_index)
+                if not match:
+                    #print('Workgroup shapes dont match.')
+                    continue
 
+                # get the indexing pattern for the output to this input.
+                tensor_write_indices = _get_tensor_write_indices_for_expr_index(from_exp_dag, output_index)
+                match = len(tensor_write_indices) == 1
+
+                if not match:
+                    #print('Multiple writes to output tensor.')
+                    continue
+
+                # if there are multiple different write patterns we cannot merge.
+                tensor_write_index = tensor_write_indices[0]
+                index_write_pattern = _get_worker_indices(from_exp_dag, tensor_write_index)
+                tensor_read_indices = _get_tensor_read_indices_for_expr_index(to_exp_dag, input.dag_input_index)
+                for read_index in tensor_read_indices:
+                    index_read_pattern = _get_worker_indices(to_exp_dag, read_index)
+                    match = index_write_pattern == index_read_pattern
+                    if not match:
+                        break
+
+                if not match:
+                    #print('Non match read/write index pattern')
+                    #print('Read pattern: ', index_read_pattern)
+                    #print('Write pattern: ', index_write_pattern)
+                    continue
+
+                merge_refs.append(_MergeRef(to_op_index=to_op_index,
+                                         to_in_arg_index=to_in_arg_index,
+                                         from_op_index=from_op_index,
+                                         from_out_arg_index=input.op_output_index))
+                merge_names.append((to_exp_dag.name + ' in [%d]' % to_in_arg_index,
+                                 from_exp_dag.name + ' out [%d]' % input.op_output_index))
+
+    # Duplicates are eliminated in merge_refs and merge_names
+    merge_refs = _eliminate_duplicates(merge_refs)
+    merge_names = _eliminate_duplicates(merge_names)
     return _MergeInfo(merge_refs=merge_refs, merge_names=merge_names)
+
 
 def _merge_op_dag(op_dag):
     merge_refs = _merge_refs_op_dag(op_dag)

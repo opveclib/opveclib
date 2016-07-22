@@ -44,8 +44,8 @@ def cumsumRows(in0):
     accum   = variable(0, in0.dtype)
     cumsum  = output_like(in0)
     for iRow in arange(nRow):
-        accum <<= accum + in0[iRow,iCol]
-        cumsum[iRow,iCol] = accum
+        accum <<= accum + in0[iRow, iCol]
+        cumsum[iRow, iCol] = accum
     return cumsum
 
 @operator()
@@ -57,8 +57,8 @@ def cumsumCols(in0):
     accum   = variable(0, in0.dtype)
     cumsum   = output_like(in0)
     for iCol in arange(nCol):
-        accum <<= accum + in0[iRow,iCol]
-        cumsum[iRow,iCol] = accum
+        accum <<= accum + in0[iRow, iCol]
+        cumsum[iRow, iCol] = accum
     return cumsum
 
 
@@ -115,7 +115,7 @@ def matmul(in0, in1):
     pos     = position_in([nRow, nCol])
     iRow    = pos[0]
     iCol    = pos[1]
-    out     = output([nRow,nCol], in0.dtype)
+    out     = output([nRow, nCol], in0.dtype)
     accum   = variable(0, dtype=in0.dtype)
     for iWork in arange(nWork):
         accum <<= in0[iRow, iWork] * in1[iWork, iCol]
@@ -209,20 +209,54 @@ class TestOperator(unittest.TestCase):
         merge_info = _merge_refs_op_dag(op_dag)
         assert euqal_set_merge_refs(merge_refs, merge_info.merge_refs)
 
+    def test_multiple_outputs(self):
+        print('*** Running Test: ' + self.__class__.__name__ + ' function: ' + _getframe().f_code.co_name)
+        in0     = np.random.random([4, 4])  # op-index      in-arg-index    out-arg-index
+        mmm0            = matmul(in0, in0)  #   0               0, 1            0
+        s0, s1, s2, s3  = split(mmm0)       #   1               0               0, 1, 2, 3
+        sum0            = add(s0, s1)       #   2               0, 1            0
+        sum1            = add(s2, s3)       #   3               0, 1            0
+
+        op_dag  = _build_op_dag(sum0, sum1)
+        merge_info = _merge_refs_op_dag(op_dag)
+        merge_refs = []
+        merge_refs.append(_MergeRef(to_op_index=3, to_in_arg_index=0, from_op_index=1, from_out_arg_index=2))  # split-sum1
+        merge_refs.append(_MergeRef(to_op_index=3, to_in_arg_index=1, from_op_index=1, from_out_arg_index=3))  # split-sum1
+        merge_refs.append(_MergeRef(to_op_index=2, to_in_arg_index=0, from_op_index=1, from_out_arg_index=0))  # split-sum0
+        merge_refs.append(_MergeRef(to_op_index=2, to_in_arg_index=1, from_op_index=1, from_out_arg_index=1))  # split-sum1
+        assert euqal_set_merge_refs(merge_refs, merge_info.merge_refs)
+
+    # Merging is possible but we need to insert a buffer.
+    def test_cumsum_nested(self):
+        print('*** Running Test: ' + self.__class__.__name__ + ' function: ' + _getframe().f_code.co_name)
+        in0         = np.random.random([3, 5])  # op-index      in-arg-index    out-arg-index
+        cRow0       = cumsumRows(in0)           #   0               0               0
+        cRow1       = cumsumRows(cRow0)         #   1               0               0
+        op_dag      = _build_op_dag(cRow1)
+        merge_info  = _merge_refs_op_dag(op_dag)
+        # For cumsumRows(cumsumRows(in0)) we merge using a temporary array for the output of the first cumsumRows!
+        merge_refs = []
+        merge_refs.append(_MergeRef(to_op_index=1, to_in_arg_index=0, from_op_index=0, from_out_arg_index=0))  # cRow1-cRow0
+        assert euqal_set_merge_refs(merge_refs, merge_info.merge_refs)
+
     # No merging because of different workgroup shapes.
     def test_cumsum(self):
         print('*** Running Test: ' + self.__class__.__name__ + ' function: ' + _getframe().f_code.co_name)
-
-        in0         = np.random.random([3, 5])
-        cRow        = cumsumRows(in0)
+        cRow        = cumsumRows(np.random.random([3, 5]))
         cCol        = cumsumCols(cRow)
         op_dag      = _build_op_dag(cCol)
         merge_info  = _merge_refs_op_dag(op_dag)
 
         assert euqal_set_merge_refs([], merge_info.merge_refs)
 
-        # TODO: The case with a 3 x 3 matrix will not work at the moment!
-        # TODO: For cumsumRows(cumsumRows(in0)) we can merge using a temporary array for the output of the first cumsum!
+    def test_cumsum_sym(self):
+        print('*** Running Test: ' + self.__class__.__name__ + ' function: ' + _getframe().f_code.co_name)
+        cRow        = cumsumRows(np.random.random([3, 3]))
+        cCol        = cumsumCols(cRow)
+        op_dag      = _build_op_dag(cCol)
+        merge_info  = _merge_refs_op_dag(op_dag)
+
+        assert euqal_set_merge_refs([], merge_info.merge_refs)
 
     # No merging because of different workgroup shapes.
     def test_matmul(self):
@@ -249,7 +283,6 @@ class TestOperator(unittest.TestCase):
 
         assert np.allclose(in0, evaluate(cropped))
         assert euqal_set_merge_refs([], merge_info.merge_refs)
-
 
 
 if __name__ == '__main__':
