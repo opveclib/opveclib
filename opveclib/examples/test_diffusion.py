@@ -835,6 +835,27 @@ def solveDiagCol2DNp(alpha, beta, gamma, y):
     return x
 
 
+class TestTensorToFloat64(unittest.TestCase):
+    """
+    Test case for tensor type conversion into float64.
+    """
+    def test(self):
+        """
+        Create random data with type float32 and convert it on the CPU/GPU/OVL/NUMPY into float64.
+        """
+        rng     = np.random.RandomState(1)
+        dataIn = rng.uniform(0, 1, [5, 3]).astype(np.float32)
+        dataOut = tensor_to_float64(dataIn)
+        dataNPY = dataIn.astype(np.float64)
+        dataCPU = ops.evaluate(dataOut, target_language="cpp")
+        assert np.allclose(dataCPU, dataNPY)
+        if ops.local.cuda_enabled:
+            dataGPU = ops.evaluate(dataOut, target_language="cuda")
+            assert np.allclose(dataGPU, dataNPY)
+
+    test.regression = 0
+
+
 class TestDiffusion2D(unittest.TestCase):
     """
     Test cases for diffusion in 2D.
