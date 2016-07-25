@@ -516,7 +516,7 @@ def _get_output_indices(expr_dag):
     """
     outs = []
     io_last = -1
-    for iExpr, expr in zip(range(len(expr_dag.expressions._values)), expr_dag.expressions._values):
+    for iExpr, expr in enumerate(expr_dag.expressions._values):
         if expr.code == lang.OUTPUT:
             outs.append(iExpr)
             assert expr.io_index>io_last # Checks the ordering constraint!
@@ -544,7 +544,7 @@ def _get_expr_indices(expr_dag, expr_code):
     """
     expr_indices = []
     exprs = expr_dag.expressions._values
-    for iExp, expr in zip(range(len(exprs)), exprs):
+    for iExp, expr in enumerate(exprs):
         if expr.code == expr_code:
             expr_indices.append(iExp)
     return expr_indices
@@ -653,7 +653,7 @@ def _get_worker_indices(expr_dag, tensor_rw_index):
         expr_index = multi_index[0]
         arg_index = multi_index[1]
         op_indices = expr_dag.references._values[expr_index].operand_indices
-        for i, op_index in zip(range(len(op_indices)), op_indices):
+        for i, op_index in enumerate(op_indices):
             wasAddOp = expr_dag.expressions._values[expr_index].code == lang.ADD
             expr = expr_dag.expressions._values[op_index]
             if wasAddOp:
@@ -666,6 +666,50 @@ def _get_worker_indices(expr_dag, tensor_rw_index):
                 if _refs_pos(expr_dag, op_index):
                     worker_indices.append(arg_index)
     return worker_indices
+
+
+def _match_index_in_expr_dags(expr_dag0, expr_index0, expr_dag1, expr_index1):
+    """
+    Compare the indexing by matching the sub-expression trees in expr_dag0 and expr_dag1. This captures also more
+    complex indexing patterns as given by mod, shift etc.
+    :param expr_dag0: The first expression dag.
+    :param expr_index0: The index that refers to the READ_TENSOR or ASSIGN_TENSOR statement in the first dag.
+    :param expr_dag1: The second expression dag.
+    :param expr_index1: The index that refers to the READ_TENSOR or ASSIGN_TENSOR statement in the second dag.
+    :return: True if the codes of all expressions match, otherwise False.
+    """
+    op_indices0 = expr_dag0.references._values[expr_index0].operand_indices
+    op_indices1 = expr_dag1.references._values[expr_index1].operand_indices
+    assert len(op_indices0) > 1 # Must have sub-expression tree for index at pos 1
+    assert len(op_indices1) > 1 # Must have sub-expression tree for index at pos 1
+    index0  = op_indices0[1]
+    index1  = op_indices1[1]
+    indices = [(index0, index1)] # Initialize the indices with the index expression in both sub-trees.
+    while len(indices) > 0:
+        multi_index = indices.pop(0)
+        index0      = multi_index[0]
+        index1      = multi_index[1]
+        expr0       = expr_dag0.expressions._values[index0]
+        expr1       = expr_dag1.expressions._values[index1]
+
+        if expr0.code != expr1.code:
+            return False
+
+        if expr0.code == lang.CONST_SCALAR:
+            if expr0.sint64_data != expr1.sint64_data:
+                return False
+
+        op_indices0 = expr_dag0.references._values[index0].operand_indices
+        op_indices1 = expr_dag1.references._values[index1].operand_indices
+
+        if len(op_indices0) != len(op_indices1):
+            return False
+
+        for i in range(len(op_indices0)):
+            indices.append((op_indices0[i], op_indices1[i]))
+
+    return True
+
 
 def _eliminate_duplicates(l):
     """
@@ -713,7 +757,7 @@ class _MergeRef(namedtuple('_MergeRef', ['to_op_index', 'to_in_arg_index', 'from
 _MergeInfo = namedtuple('_MergeInfo', ['merge_refs','merge_names'])
 
 
-def _merge_refs_op_dag(op_dag):
+def _get_merge_refs_for_op_dag(op_dag):
     """
     Creates a list of operators with their arguments that can be merged into single operators. Notice that merge
     information is given per argument.
@@ -746,7 +790,8 @@ def _merge_refs_op_dag(op_dag):
             to_ref              = refs[to_op_index]
             to_workgroup_shape  = to_exp_dag.workgroup_shape
 
-            for to_in_arg_index, input in zip(range(len(to_ref.input_refs)), to_ref.input_refs):
+            #for to_in_arg_index, input in zip(range(len(to_ref.input_refs)), to_ref.input_refs):
+            for to_in_arg_index, input in enumerate(to_ref.input_refs):
                 from_op_index = input.op_index
 
                 # Do not consider leaf nodes.
@@ -785,11 +830,9 @@ def _merge_refs_op_dag(op_dag):
 
                 # if there are multiple different write patterns we cannot merge.
                 tensor_write_index = tensor_write_indices[0]
-                index_write_pattern = _get_worker_indices(from_exp_dag, tensor_write_index)
                 tensor_read_indices = _get_tensor_read_indices_for_expr_index(to_exp_dag, input.dag_input_index)
                 for read_index in tensor_read_indices:
-                    index_read_pattern = _get_worker_indices(to_exp_dag, read_index)
-                    match = index_write_pattern == index_read_pattern
+                    match = _match_index_in_expr_dags(from_exp_dag, tensor_write_index, to_exp_dag, read_index)
                     if not match:
                         break
 
@@ -813,7 +856,7 @@ def _merge_refs_op_dag(op_dag):
 
 
 def _merge_op_dag(op_dag):
-    merge_refs = _merge_refs_op_dag(op_dag)
+    merge_refs = _get_merge_refs_for_op_dag(op_dag)
     # TODO: Apply the merge_refs to the op_dag by fusing expression dags.
     # TODO: When merging expression dags with loops/<<= insert a temporary for each output/input pair.
     # TODO: Need to keep gradient dags in mind.
