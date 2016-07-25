@@ -20,7 +20,8 @@ from collections import namedtuple
 import numpy as np
 from numpy.ctypeslib import ndpointer
 
-from .expression import TensorType, ExpressionDAG, input, OutputTensor
+from .expression import TensorType, ExpressionDAG, input, OutputTensor, output, position_in, \
+    uint8, uint16, uint32, uint64
 from .local import version, cache_directory, cuda_enabled, cuda_directory, logger
 from . import language_pb2 as lang
 
@@ -143,6 +144,159 @@ class _OperatorOutput(object):
         self.shape = parent.output_types[index].shape
         self.dtype = parent.output_types[index].dtype
 
+    @staticmethod
+    def broadcast_binary(lhs, rhs, fcn, name):
+        if isinstance(rhs, _Operator) and len(rhs.output_types) == 1:
+            resolved_rhs = rhs[0]
+        else:
+            resolved_rhs = rhs
+
+        if isinstance(lhs, _Operator) and len(lhs.output_types) == 1:
+            resolved_lhs = lhs[0]
+        else:
+            resolved_lhs = lhs
+        print(lhs)
+        rhs_type = TensorType.like(resolved_rhs)
+        lhs_type = TensorType.like(resolved_lhs)
+        if rhs_type != lhs_type:
+            raise TypeError('Input types must match')
+
+        @operator(name=name)
+        def binary_op(lhs_arg, rhs_arg):
+            out = output(lhs_arg.shape, lhs_arg.dtype)
+            pos = position_in(lhs_arg.shape)
+
+            out[pos] = fcn(lhs_arg[pos], rhs_arg[pos])
+            return out
+
+        return binary_op(lhs, rhs)
+
+    def __add__(self, other):
+        def add(x, y):
+            return x + y
+
+        return _OperatorOutput.broadcast_binary(self, other, add, '__add')
+
+    def __radd__(self, other):
+        def add(x, y):
+            return x + y
+
+        return _OperatorOutput.broadcast_binary(other, self, add, '__add')
+
+    def __sub__(self, other):
+        def sub(x, y):
+            return x - y
+
+        return _OperatorOutput.broadcast_binary(self, other, sub, '__sub')
+
+    def __rsub__(self, other):
+        def sub(x, y):
+            return x - y
+
+        return _OperatorOutput.broadcast_binary(other, self, sub, '__sub')
+
+    def __mul__(self, other):
+        def mul(x, y):
+            return x * y
+
+        return _OperatorOutput.broadcast_binary(self, other, mul, '__mul')
+
+    def __rmul__(self, other):
+        def mul(x, y):
+            return x * y
+
+        return _OperatorOutput.broadcast_binary(other, self, mul, '__mul')
+
+    # python 2
+    def __div__(self, other):
+        def div(x, y):
+            return x / y
+
+        return _OperatorOutput.broadcast_binary(self, other, div, '__div')
+
+    def __rdiv__(self, other):
+        def div(x, y):
+            return x / y
+
+        return _OperatorOutput.broadcast_binary(other, self, div, '__div')
+
+    # python 3
+    def __truediv__(self, other):
+        def div(x, y):
+            return x / y
+
+        return _OperatorOutput.broadcast_binary(self, other, div, '__div')
+
+    def __rtruediv__(self, other):
+        def div(x, y):
+            return x / y
+
+        return _OperatorOutput.broadcast_binary(other, self, div, '__div')
+
+    def __mod__(self, other):
+        def mod(x, y):
+            return x % y
+
+        return _OperatorOutput.broadcast_binary(self, other, mod, '__mod')
+
+    def __rmod__(self, other):
+        def mod(x, y):
+            return x % y
+
+        return _OperatorOutput.broadcast_binary(other, self, mod, '__mod')
+
+    def __eq__(self, other):
+        def eq(x, y):
+            return x == y
+
+        return _OperatorOutput.broadcast_binary(self, other, eq, '__eq')
+
+    def __ne__(self, other):
+        def ne(x, y):
+            return x != y
+
+        return _OperatorOutput.broadcast_binary(self, other, ne, '__ne')
+
+    def __lt__(self, other):
+        def lt(x, y):
+            return x < y
+
+        return _OperatorOutput.broadcast_binary(self, other, lt, '__lt')
+
+    def __le__(self, other):
+        def le(x, y):
+            return x <= y
+
+        return _OperatorOutput.broadcast_binary(self, other, le, '__le')
+
+    def __gt__(self, other):
+        def gt(x, y):
+            return x > y
+
+        return _OperatorOutput.broadcast_binary(self, other, gt, '__gt')
+
+    def __ge__(self, other):
+        def ge(x, y):
+            return x >= y
+
+        return _OperatorOutput.broadcast_binary(self, other, ge, '__ge')
+
+    def __neg__(self):
+        if self.dtype in [uint8, uint16, uint32, uint64]:
+            raise TypeError('Cannot negate an unsigned tensor.')
+
+        @operator()
+        def __neg(arg):
+            out = output(self.shape, self.dtype)
+            pos = position_in(self.shape)
+            out[pos] = -arg[pos]
+            return out
+
+        return __neg(self)
+
+    def __bool__(self):
+        raise SyntaxError('Cannot resolve operator values at interpretation time.')
+
 
 class _GradientPlaceholder(object):
     def __init__(self, shape, dtype):
@@ -159,11 +313,24 @@ class _Operator(object):
         self.expression_dag = dag
         self.output_types = output_types
         self.name = name
-
         self.grad_dag = grad_dag
+
+        logger.debug('Operator created: ' + str(dag.name))
 
     def __getitem__(self, item):
         return _OperatorOutput(self, item)
+
+    def check_binary(self):
+        if len(self.output_types) != 1:
+            raise SyntaxError('Cannot use binary operators on multi-output operators.')
+
+    def __add__(self, other):
+        self.check_binary()
+        return self[0] + other
+
+    def __radd__(self, other):
+        self.check_binary()
+        return other + self[0]
 
 
 def _resolve_output(x):
@@ -191,10 +358,10 @@ def _op_hash(op):
 
 
 class _OpGenerator(object):
-    def __init__(self, op_function, forbid_none_valued_constants):
+    def __init__(self, op_function, forbid_none_valued_constants, name):
         self.op_function = op_function
         self.forbid_none_valued_constants = forbid_none_valued_constants
-
+        self.name = name
         self.grad_function = None
 
     def __str__(self):
@@ -210,7 +377,11 @@ class _OpGenerator(object):
             constants = dict(zip(func_args[-len(func_defaults):], func_defaults))
             constants.update(defined_constants)
 
-        f_name = self.op_function.__name__
+        # name this op based on it's function name unless a name is supplied to the operator decorator
+        if self.name is None:
+            f_name = self.op_function.__name__
+        else:
+            f_name = self.name
 
         if self.forbid_none_valued_constants:
             for key in constants.keys():
@@ -340,7 +511,7 @@ class _OpGenerator(object):
             raise ValueError('Gradient function is already defined.')
 
 
-def operator(forbid_none_valued_constants=True):
+def operator(forbid_none_valued_constants=True, name=None):
     def wrapper(op_function):
         if inspect.getargspec(op_function).keywords is not None:
             raise SyntaxError('Operator functions cannot accept keyword arguments without default values.')
@@ -350,7 +521,7 @@ def operator(forbid_none_valued_constants=True):
             raise NotImplementedError('Operator functions cannot accept varags. '
                                       'This functionality may be enabled in the future.')
 
-        return _OpGenerator(op_function, forbid_none_valued_constants)
+        return _OpGenerator(op_function, forbid_none_valued_constants, name)
     return wrapper
 
 
@@ -537,6 +708,7 @@ def _get_output_indices(expr_dag):
             assert expr.io_index>io_last # Checks the ordering constraint!
             io_last = expr.io_index
     return outs
+
 
 def _get_output_shape(expr_dag, iOut):
     """

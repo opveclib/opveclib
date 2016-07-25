@@ -12,7 +12,8 @@ import unittest
 import numpy as np
 import tensorflow as tf
 from ..operator import operator, gradient, as_tensorflow
-from ..expression import position_in, output_like, if_, elif_, else_, exp, logical_and, variable, tanh
+from ..expression import position_in, output_like, if_, elif_, else_, exp, logical_and, variable
+from ..expression import tanh as tanh_expr
 from ..local import clear_op_cache
 
 
@@ -89,8 +90,32 @@ def sigmoid_grad(arg, d_out):
     return sigmoid_grad_op(arg, d_out)
 
 
+@operator()
+def tanh(arg):
+    out = output_like(arg)
+    pos = position_in(arg.shape)
+
+    out[pos] = tanh_expr(arg[pos])
+    return out
+
+
+@operator()
+def tanh_grad_op(arg, grad_above):
+    out = output_like(arg)
+    pos = position_in(arg.shape)
+
+    t = tanh_expr(arg[pos])
+    out[pos] = (1 - t*t)*grad_above[pos]
+    return out
+
+
+@gradient(tanh)
+def tanh_grad(arg, grad_above):
+    return tanh_grad_op(arg, grad_above)
+
+
 class TestGradients(unittest.TestCase):
-    # clear_op_cache()
+    clear_op_cache()
 
     def test_clip_grad(self):
         """
@@ -123,7 +148,22 @@ class TestGradients(unittest.TestCase):
             grad_tf = tf.gradients(sig_tf, a, grad_ys=grad_above)[0]
 
             sig_ovl, sig_tf, grad_ovl, grad_tf = s.run([sig_ovl, sig_tf, grad_ovl, grad_tf])
-            assert np.all(np.equal(sig_ovl, sig_tf))
+            assert np.allclose(sig_ovl, sig_tf)
+            assert np.allclose(grad_ovl, grad_tf)
+
+    def test_tanh_grad(self):
+        with tf.Session() as s:
+            num_points = 10
+            a = tf.constant(np.random.random(num_points))
+            tanh_ovl = as_tensorflow(tanh(a))
+            tanh_tf = tf.tanh(a)
+            grad_above = np.random.random(num_points)
+
+            grad_ovl = tf.gradients(tanh_ovl, a, grad_ys=grad_above)[0]
+            grad_tf = tf.gradients(tanh_tf, a, grad_ys=grad_above)[0]
+
+            tanh_ovl, tanh_tf, grad_ovl, grad_tf = s.run([tanh_ovl, tanh_tf, grad_ovl, grad_tf])
+            assert np.allclose(tanh_ovl, tanh_tf)
             assert np.allclose(grad_ovl, grad_tf)
 
 

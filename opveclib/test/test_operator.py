@@ -228,3 +228,26 @@ class TestOperator(unittest.TestCase):
             pass
         else:
             assert False
+
+    def test_builtins(self):
+        @operator()
+        def no_op(x):
+            out = output_like(x)
+            pos = position_in(x.shape)
+
+            out[pos] = x[pos]
+
+            return out
+
+        np0 = np.random.random(10)
+        np1 = np.random.random(10)
+
+        ovl0 = no_op(np0)
+
+        sum0 = ovl0 + np1
+        sum1 = np1 + ovl0
+        sum2 = np0 + np1
+
+        sum0, sum1 = evaluate([sum0, sum1])
+        assert np.all(sum0 == sum2)
+        assert np.all(sum1 == sum2)
