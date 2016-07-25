@@ -12,7 +12,16 @@ import unittest
 import numpy as np
 from ..operator import operator, _build_op_dag, evaluate
 from ..expression import position_in, output_like
-from ..local import clear_op_cache
+from ..local import clear_op_cache, logger
+
+
+def index_by_id(items, item):
+    item_id = id(item)
+    for n, elem in enumerate(items):
+        if id(elem) == item_id:
+            return n
+
+    raise ValueError('Item not found')
 
 
 class TestOperator(unittest.TestCase):
@@ -45,13 +54,13 @@ class TestOperator(unittest.TestCase):
         operators = op_dag.operators
 
         # assert correct dag structure
-        first_index = operators.index(a1.parent)
+        first_index = index_by_id(operators, a1.parent)
         assert dag.references[first_index].input_refs[0].is_leaf is True
         assert inputs[dag.references[first_index].input_refs[0].dag_input_index] is in0
         assert dag.references[first_index].input_refs[1].is_leaf is True
         assert inputs[dag.references[first_index].input_refs[1].dag_input_index] is in1
 
-        second_index = operators.index(a2.parent)
+        second_index = index_by_id(operators, a2.parent)
         assert second_index > first_index
         assert dag.references[second_index].input_refs[0].is_leaf is False
         assert dag.references[second_index].input_refs[0].op_index == first_index
@@ -96,17 +105,22 @@ class TestOperator(unittest.TestCase):
         dag = op_dag.proto_dag
         inputs = op_dag.inputs
         # neither i nor h are dependent on c or d, so their parent op should not be in op_dag
-        assert c.parent not in operators
+        try:
+            index_by_id(operators, c.parent)
+        except ValueError:
+            pass
+        else:
+            raise AssertionError
 
         # assert correct dag structure for output a's parent
-        first_index = operators.index(a.parent)
+        first_index = index_by_id(operators, a.parent)
         assert dag.references[first_index].input_refs[0].is_leaf is True
         assert inputs[dag.references[first_index].input_refs[0].dag_input_index] is in0
         assert dag.references[first_index].input_refs[1].is_leaf is True
         assert inputs[dag.references[first_index].input_refs[1].dag_input_index] is in1
 
         # assert correct dag structure for output e's parent
-        second_index = operators.index(e.parent)
+        second_index = index_by_id(operators, e.parent)
         assert second_index > first_index
         assert dag.references[second_index].input_refs[0].is_leaf is True
         assert inputs[dag.references[second_index].input_refs[0].dag_input_index] is in1
@@ -115,7 +129,7 @@ class TestOperator(unittest.TestCase):
         assert dag.references[second_index].input_refs[1].op_output_index == 1
 
         # assert correct dag structure for output g's parent
-        third_index = operators.index(g.parent)
+        third_index = index_by_id(operators, g.parent)
         assert third_index > second_index
         assert dag.references[third_index].input_refs[0].is_leaf is False
         assert dag.references[third_index].input_refs[0].op_index == second_index
@@ -126,7 +140,7 @@ class TestOperator(unittest.TestCase):
         assert dag.references[third_index].input_refs[1].op_output_index == 0
 
         # assert correct dag structure for output i's parent
-        fourth_index = operators.index(i.parent)
+        fourth_index = index_by_id(operators, i.parent)
         assert fourth_index > second_index
         assert dag.references[fourth_index].input_refs[0].is_leaf is False
         assert dag.references[fourth_index].input_refs[0].op_index == second_index
@@ -239,15 +253,51 @@ class TestOperator(unittest.TestCase):
 
             return out
 
-        np0 = np.random.random(10)
-        np1 = np.random.random(10)
+        np0 = np.random.random(100)
+        np1 = np0 + np.random.randint(-1, 2, size=100)
 
         ovl0 = no_op(np0)
 
-        sum0 = ovl0 + np1
-        sum1 = np1 + ovl0
-        sum2 = np0 + np1
+        def test_np(fcn):
+            ovl_l = fcn(ovl0, np1)
+            ovl_r = fcn(np1, ovl0)
+            ovl_l, ovl_r = evaluate([ovl_l, ovl_r])
+            np_l = fcn(np0, np1)
+            np_r = fcn(np1, np0)
 
-        sum0, sum1 = evaluate([sum0, sum1])
-        assert np.all(sum0 == sum2)
-        assert np.all(sum1 == sum2)
+            assert np.all(np.equal(ovl_l, np_l))
+            assert np.all(np.equal(ovl_r, np_r))
+
+        def add(x, y):
+            return x + y
+
+        test_np(add)
+
+        def sub(x, y):
+            return x - y
+
+        test_np(sub)
+
+        def mul(x, y):
+            return x * y
+
+        test_np(mul)
+
+        def div(x, y):
+            return x / y
+
+        test_np(div)
+
+        # OVL uses c-style fmod, not python style mod, so use numpy fmod function for test
+        # see : http://docs.scipy.org/doc/numpy/reference/generated/numpy.fmod.html
+        ovl_left, ovl_right = evaluate([ovl0 % np1, np1 % ovl0])
+        np_left = np.fmod(np0, np1)
+        np_right = np.fmod(np1, np0)
+
+        assert np.all(np.equal(ovl_left, np_left))
+        assert np.all(np.equal(ovl_right, np_right))
+
+        def lt(x, y):
+            x < y
+
+        test_np(lt)

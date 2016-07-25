@@ -133,6 +133,10 @@ class _OperatorOutput(object):
     """
     Class which represents an un-evaluated output tensor, used for building lazily evaluated DAGs of operators
     """
+
+    # raise operator priority so that numpy does not try to use its own operator
+    __array_priority__ = 1
+
     def __init__(self, parent, index):
         if not isinstance(parent, _Operator):
             raise TypeError('parent must be an Operator')
@@ -155,7 +159,6 @@ class _OperatorOutput(object):
             resolved_lhs = lhs[0]
         else:
             resolved_lhs = lhs
-        print(lhs)
         rhs_type = TensorType.like(resolved_rhs)
         lhs_type = TensorType.like(resolved_lhs)
         if rhs_type != lhs_type:
@@ -308,6 +311,10 @@ class _Operator(object):
     """
     Class which is extended to define a new operator and its gradient.
     """
+
+    # raise operator priority so that numpy does not try to use its own operator
+    __array_priority__ = 1
+
     def __init__(self, dag, output_types, inputs, grad_dag, name):
         self.inputs = inputs
         self.expression_dag = dag
@@ -331,6 +338,76 @@ class _Operator(object):
     def __radd__(self, other):
         self.check_binary()
         return other + self[0]
+
+    def __sub__(self, other):
+        self.check_binary()
+        return self[0] - other
+
+    def __rsub__(self, other):
+        self.check_binary()
+        return other - self[0]
+
+    def __mul__(self, other):
+        self.check_binary()
+        return self[0] * other
+
+    def __rmul__(self, other):
+        self.check_binary()
+        return other * self[0]
+
+    # python 2
+    def __div__(self, other):
+        self.check_binary()
+        return self[0] / other
+
+    def __rdiv__(self, other):
+        self.check_binary()
+        return other / self[0]
+
+    # python 3
+    def __truediv__(self, other):
+        self.check_binary()
+        return self[0] / other
+
+    def __rtruediv__(self, other):
+        self.check_binary()
+        return other / self[0]
+
+    def __mod__(self, other):
+        self.check_binary()
+        return self[0] % other
+
+    def __rmod__(self, other):
+        self.check_binary()
+        return other % self[0]
+
+    def __eq__(self, other):
+        self.check_binary()
+        return self[0] == other
+
+    def __ne__(self, other):
+        self.check_binary()
+        return self[0] != other
+
+    def __lt__(self, other):
+        self.check_binary()
+        return self[0] < other
+
+    def __le__(self, other):
+        self.check_binary()
+        return self[0] <= other
+
+    def __gt__(self, other):
+        self.check_binary()
+        return self[0] > other
+
+    def __ge__(self, other):
+        self.check_binary()
+        return self[0] >= other
+
+    def __neg__(self):
+        self.check_binary()
+        return -self[0]
 
 
 def _resolve_output(x):
@@ -1012,6 +1089,8 @@ def _make_generic_c(src, name):
     generic_cpp_so_path = os.path.join(cache_directory, name + '_generic_cpp.so')
 
     if not os.path.exists(generic_cpp_so_path):
+        logger.debug('Compiling generic C++ for Op ' + name)
+
         generic_cpp_path = os.path.join(cache_directory, name + '_generic_cpp.cpp')
         with open(generic_cpp_path, 'w') as f:
             f.write(src)
@@ -1037,6 +1116,7 @@ def _make_generic_cuda(src, name):
     # look for generic cuda shared library in the operator cache
     generic_cuda_so_path = os.path.join(cache_directory, name + '_generic_cuda.so')
     if not os.path.exists(generic_cuda_so_path):
+        logger.debug('Compiling generic CUDA for Op ' + name)
         # generate and compile generic cuda operator
         nvcc_path = os.path.join(cuda_directory, 'bin/nvcc')
         generic_cuda_path = os.path.join(cache_directory, name + '_generic_cuda.cu')
@@ -1321,10 +1401,8 @@ def _dag_to_tf(dag, inputs, grad_dags):
         op_c_src, op_cuda_src, op_cuda_launch_template, op_c_generic, op_cuda_generic = \
             ExpressionDAG.generate(op, name)
 
-        logger.debug('Compiling generic C++ for Op ' + name)
         cpu_op_lib = _make_generic_c(op_c_generic, name)
         if cuda_enabled:
-            logger.debug('Compiling generic CUDA for Op ' + name)
             cuda_op_lib = _make_generic_cuda(op_cuda_generic, name)
         else:
             cuda_op_lib = ''
