@@ -268,25 +268,16 @@ class TestOperator(unittest.TestCase):
             assert np.all(np.equal(ovl_l, np_l))
             assert np.all(np.equal(ovl_r, np_r))
 
-        def add(x, y):
-            return x + y
-
-        test_np(add)
-
-        def sub(x, y):
-            return x - y
-
-        test_np(sub)
-
-        def mul(x, y):
-            return x * y
-
-        test_np(mul)
-
-        def div(x, y):
-            return x / y
-
-        test_np(div)
+        test_np(lambda x, y: x + y)
+        test_np(lambda x, y: x - y)
+        test_np(lambda x, y: x * y)
+        test_np(lambda x, y: x / y)
+        test_np(lambda x, y: x == y)
+        test_np(lambda x, y: x != y)
+        test_np(lambda x, y: x < y)
+        test_np(lambda x, y: x <= y)
+        test_np(lambda x, y: x > y)
+        test_np(lambda x, y: x >= y)
 
         # OVL uses c-style fmod, not python style mod, so use numpy fmod function for test
         # see : http://docs.scipy.org/doc/numpy/reference/generated/numpy.fmod.html
@@ -297,7 +288,14 @@ class TestOperator(unittest.TestCase):
         assert np.all(np.equal(ovl_left, np_left))
         assert np.all(np.equal(ovl_right, np_right))
 
-        def lt(x, y):
-            x < y
+        ovl_neg = evaluate([-ovl0])
+        assert np.all(np.equal(ovl_neg, -np0))
 
-        test_np(lt)
+        # attempting to negate an unsigned tensor should raise a type error
+        uint = np.random.randint(0, 10, size=10).astype(np.uint8)
+        try:
+            -no_op(uint)
+        except TypeError:
+            pass
+        else:
+            raise AssertionError
