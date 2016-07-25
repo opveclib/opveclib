@@ -296,7 +296,12 @@ class _OpGenerator(object):
             grad_dag = None
         else:
             grad_args, grad_varargs, grad_keywords, grad_defaults = inspect.getargspec(self.grad_function)
-            if len(output_types) + len(input_names) != len(grad_args[:-len(grad_defaults)]):
+            if grad_defaults is None:
+                num_defaults = 0
+            else:
+                num_defaults = len(grad_defaults)
+
+            if len(output_types) + len(input_names) != len(grad_args)-num_defaults:
                 raise SyntaxError('Gradient function must have inputs equal to the sum of the number of '
                                   'inputs and outputs of the operator function.')
 
@@ -357,11 +362,21 @@ def gradient(op_function):
         func_args, func_varargs, func_keywords, func_defaults = inspect.getargspec(op_function.op_function)
         grad_args, grad_varargs, grad_keywords, grad_defaults = inspect.getargspec(grad_function)
 
-        func_input_names = func_args[:-len(func_defaults)]
-        func_constants = dict(zip(func_args[-len(func_defaults):], func_defaults))
+        if func_defaults is None:
+            func_input_names = []
+            func_constants = {}
+        else:
+            num_func_defaults = len(func_defaults)
+            func_input_names = func_args[:-num_func_defaults]
+            func_constants = dict(zip(func_args[-num_func_defaults:], func_defaults))
 
-        grad_input_names = grad_args[:-len(grad_defaults)]
-        grad_constants = dict(zip(grad_args[-len(func_defaults):], grad_defaults))
+        if grad_defaults is None:
+            grad_input_names = []
+            grad_constants = {}
+        else:
+            num_grad_defaults = len(grad_defaults)
+            grad_input_names = grad_args[:-num_grad_defaults]
+            grad_constants = dict(zip(grad_args[-num_grad_defaults:], grad_defaults))
 
         if func_constants != grad_constants:
             raise SyntaxError('Constant argument names and default values must be identical for '

@@ -12,56 +12,90 @@ import unittest
 import numpy as np
 import tensorflow as tf
 from ..operator import operator, gradient, as_tensorflow
-from ..expression import position_in, output_like, if_, elif_, else_
+from ..expression import position_in, output_like, if_, elif_, else_, exp, logical_and, variable, tanh
 from ..local import clear_op_cache
 
 
+@operator()
+def clip(arg, threshold1=None, threshold2=None):
+    pos = position_in(arg.shape)
+
+    clipped = output_like(arg)
+    x = arg[pos]
+
+    with if_(x < threshold1):
+        clipped[pos] = threshold1
+
+    with elif_(x > threshold2):
+        clipped[pos] = threshold2
+
+    with else_():
+        clipped[pos] = x
+
+    return clipped
+
+
+@operator()
+def clip_grad_op(arg, d_arg, threshold1=None, threshold2=None):
+    assert arg.tensor_type == d_arg.tensor_type
+
+    pos = position_in(arg.shape)
+    g = output_like(arg)
+
+    arg_at_pos = arg[pos]
+
+    with if_(arg_at_pos < threshold1):
+        g[pos] = 0
+    with elif_(arg_at_pos > threshold2):
+        g[pos] = 0
+    with else_():
+        g[pos] = d_arg[pos]
+
+    return g
+
+
+@gradient(clip)
+def clip_grad(arg, d_arg, threshold1=None, threshold2=None):
+    return clip_grad_op(arg, d_arg, threshold1=threshold1, threshold2=threshold2)
+
+
+@operator()
+def sigmoid(arg):
+    out = output_like(arg)
+    pos = position_in(arg.shape)
+    out[pos] = 1/(1 + exp(-arg[pos]))
+
+    return out
+
+
+@operator()
+def sigmoid_grad_op(arg, grad_above):
+    out = output_like(arg)
+    pos = position_in(arg.shape)
+
+    valid_grad = logical_and(arg[pos] > -50, arg[pos] < 50)
+    result = variable(0, arg.dtype)
+    with if_(valid_grad):
+        e = exp(-arg[pos])
+        result <<= e/((1+e)*(1+e))
+
+    out[pos] = result*grad_above[pos]
+
+    return out
+
+
+@gradient(sigmoid)
+def sigmoid_grad(arg, d_out):
+    return sigmoid_grad_op(arg, d_out)
+
+
 class TestGradients(unittest.TestCase):
-    clear_op_cache()
+    # clear_op_cache()
 
     def test_clip_grad(self):
         """
         Define a simple clip function and its gradient and test against a tensorflow reference
         """
-        @operator()
-        def clip(arg, threshold1=None, threshold2=None):
-            pos = position_in(arg.shape)
-
-            clipped = output_like(arg)
-            x = arg[pos]
-
-            with if_(x < threshold1):
-                clipped[pos] = threshold1
-
-            with elif_(x > threshold2):
-                clipped[pos] = threshold2
-
-            with else_():
-                clipped[pos] = x
-
-            return clipped
-
-        @operator()
-        def clip_grad_op(arg, d_arg, threshold1=None, threshold2=None):
-            assert arg.tensor_type == d_arg.tensor_type
-
-            pos = position_in(arg.shape)
-            g = output_like(arg)
-
-            arg_at_pos = arg[pos]
-
-            with if_(arg_at_pos < threshold1):
-                g[pos] = 0
-            with elif_(arg_at_pos > threshold2):
-                g[pos] = 0
-            with else_():
-                g[pos] = d_arg[pos]
-
-            return g
-
-        @gradient(clip)
-        def clip_grad(arg, d_arg, threshold1=None, threshold2=None):
-            return clip_grad_op(arg, d_arg, threshold1=threshold1, threshold2=threshold2)
 
         with tf.Session() as s:
             a = tf.constant(np.random.random(10))
@@ -70,33 +104,34 @@ class TestGradients(unittest.TestCase):
             clip_tf = tf.clip_by_value(a, 0.1, 0.9)
             sum_tf = tf.reduce_sum(clip_tf)
             grad_above = np.random.random(1)
-            # clip_grad_ovl = clip_grad
+
             clip_grad_ovl = tf.gradients(sum_ovl, a, grad_ys=grad_above)[0]
             clip_grad_tf = tf.gradients(sum_tf, a, grad_ys=grad_above)[0]
 
             clip_grad_ovl, clip_grad_tf = s.run([clip_grad_ovl, clip_grad_tf])
             assert np.all(np.equal(clip_grad_ovl, clip_grad_tf))
 
-    def test_lstm_grad(self):
-        # TODO: port this test from the old format
-        pass
-        # def sig(arg):
-    #     return 1/(1 + exp(-arg))
-    #
-    #
-    # def sig_grad(arg):
-    #     valid_grad = logical_and(arg > -50, arg < 50)
-    #     result = variable(0, arg.dtype)
-    #     with if_(valid_grad):
-    #         e = exp(-arg)
-    #         result <<= e/((1+e)*(1+e))
-    #     return result
-    #
-    #
-    # def tanh_grad(arg):
-    #     t = tanh(arg)
-    #     return 1 - t*t
-    #
+    def test_sigmoid_grad(self):
+        with tf.Session() as s:
+            num_points = 10
+            a = tf.constant(np.random.random(num_points))
+            sig_ovl = as_tensorflow(sigmoid(a))
+            sig_tf = tf.sigmoid(a)
+            grad_above = np.random.random(num_points)
+
+            grad_ovl = tf.gradients(sig_ovl, a, grad_ys=grad_above)[0]
+            grad_tf = tf.gradients(sig_tf, a, grad_ys=grad_above)[0]
+
+            sig_ovl, sig_tf, grad_ovl, grad_tf = s.run([sig_ovl, sig_tf, grad_ovl, grad_tf])
+            assert np.all(np.equal(sig_ovl, sig_tf))
+            assert np.allclose(grad_ovl, grad_tf)
+
+
+        # @operator()
+        # def tanh_grad(arg):
+        #     t = tanh(arg)
+        #     return 1 - t*t
+
     #
     # class LSTMP(Operator):
     #     def op(self, concat, c, forget_bias):
