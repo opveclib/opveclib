@@ -20,7 +20,7 @@ from collections import namedtuple
 import numpy as np
 from numpy.ctypeslib import ndpointer
 
-from .expression import TensorType, ExpressionDAG, input, OutputTensor, output, position_in, \
+from .expression import TensorType, ExpressionDAG, input, OutputTensor, output, output_like, position_in, \
     uint8, uint16, uint32, uint64
 from .local import version, cache_directory, cuda_enabled, cuda_directory, logger
 from . import language_pb2 as lang
@@ -149,7 +149,7 @@ class _OperatorOutput(object):
         self.dtype = parent.output_types[index].dtype
 
     @staticmethod
-    def broadcast_binary(lhs, rhs, fcn, name):
+    def broadcast_binary(lhs, rhs, fcn, grad_fcn, name):
         if isinstance(rhs, _Operator) and len(rhs.output_types) == 1:
             resolved_rhs = rhs[0]
         else:
@@ -172,117 +172,135 @@ class _OperatorOutput(object):
             out[pos] = fcn(lhs_arg[pos], rhs_arg[pos])
             return out
 
+        if grad_fcn is not None:
+            @operator(name=name+'_grad')
+            def binary_op_grad(lhs_arg, rhs_arg, grad_above):
+                lhs_grad = output_like(lhs_arg)
+                rhs_grad = output_like(rhs_arg)
+                pos = position_in(lhs_arg.shape)
+
+                l, r = grad_fcn(lhs_arg[pos], rhs_arg[pos], grad_above[pos])
+
+                lhs_grad[pos] = l
+                rhs_grad[pos] = r
+                return lhs_grad, rhs_grad
+
+            @gradient(binary_op)
+            def grad(lhs_arg, rhs_arg, grad_above):
+                op = binary_op_grad(lhs_arg, rhs_arg, grad_above)
+                return op[0], op[1]
+
         return binary_op(lhs, rhs)
 
     def __add__(self, other):
-        def add(x, y):
-            return x + y
-
-        return _OperatorOutput.broadcast_binary(self, other, add, '__add')
+        return _OperatorOutput.broadcast_binary(self, other,
+                                                lambda x, y: x + y,
+                                                lambda x, y, dz: (dz, dz),
+                                                '__add')
 
     def __radd__(self, other):
-        def add(x, y):
-            return x + y
-
-        return _OperatorOutput.broadcast_binary(other, self, add, '__add')
+        return _OperatorOutput.broadcast_binary(other, self,
+                                                lambda x, y: x + y,
+                                                lambda x, y, dz: (dz, dz),
+                                                '__add')
 
     def __sub__(self, other):
-        def sub(x, y):
-            return x - y
-
-        return _OperatorOutput.broadcast_binary(self, other, sub, '__sub')
+        return _OperatorOutput.broadcast_binary(self, other,
+                                                lambda x, y: x - y,
+                                                lambda x, y, dz: (dz, -dz),
+                                                '__sub')
 
     def __rsub__(self, other):
-        def sub(x, y):
-            return x - y
-
-        return _OperatorOutput.broadcast_binary(other, self, sub, '__sub')
+        return _OperatorOutput.broadcast_binary(other, self,
+                                                lambda x, y: x - y,
+                                                lambda x, y, dz: (dz, -dz),
+                                                '__sub')
 
     def __mul__(self, other):
-        def mul(x, y):
-            return x * y
-
-        return _OperatorOutput.broadcast_binary(self, other, mul, '__mul')
+        return _OperatorOutput.broadcast_binary(self, other,
+                                                lambda x, y: x * y,
+                                                lambda x, y, dz: (y*dz, x*dz),
+                                                '__mul')
 
     def __rmul__(self, other):
-        def mul(x, y):
-            return x * y
-
-        return _OperatorOutput.broadcast_binary(other, self, mul, '__mul')
+        return _OperatorOutput.broadcast_binary(other, self,
+                                                lambda x, y: x * y,
+                                                lambda x, y, dz: (y*dz, x*dz),
+                                                '__mul')
 
     # python 2
     def __div__(self, other):
         def div(x, y):
             return x / y
 
-        return _OperatorOutput.broadcast_binary(self, other, div, '__div')
+        return _OperatorOutput.broadcast_binary(self, other, div, None, '__div')
 
     def __rdiv__(self, other):
         def div(x, y):
             return x / y
 
-        return _OperatorOutput.broadcast_binary(other, self, div, '__div')
+        return _OperatorOutput.broadcast_binary(other, self, div, None, '__div')
 
     # python 3
     def __truediv__(self, other):
         def div(x, y):
             return x / y
 
-        return _OperatorOutput.broadcast_binary(self, other, div, '__div')
+        return _OperatorOutput.broadcast_binary(self, other, div, None, '__div')
 
     def __rtruediv__(self, other):
         def div(x, y):
             return x / y
 
-        return _OperatorOutput.broadcast_binary(other, self, div, '__div')
+        return _OperatorOutput.broadcast_binary(other, self, div, None, '__div')
 
     def __mod__(self, other):
         def mod(x, y):
             return x % y
 
-        return _OperatorOutput.broadcast_binary(self, other, mod, '__mod')
+        return _OperatorOutput.broadcast_binary(self, other, mod, None, '__mod')
 
     def __rmod__(self, other):
         def mod(x, y):
             return x % y
 
-        return _OperatorOutput.broadcast_binary(other, self, mod, '__mod')
+        return _OperatorOutput.broadcast_binary(other, self, mod, None, '__mod')
 
     def __eq__(self, other):
         def eq(x, y):
             return x == y
 
-        return _OperatorOutput.broadcast_binary(self, other, eq, '__eq')
+        return _OperatorOutput.broadcast_binary(self, other, eq, None, '__eq')
 
     def __ne__(self, other):
         def ne(x, y):
             return x != y
 
-        return _OperatorOutput.broadcast_binary(self, other, ne, '__ne')
+        return _OperatorOutput.broadcast_binary(self, other, ne, None, '__ne')
 
     def __lt__(self, other):
         def lt(x, y):
             return x < y
 
-        return _OperatorOutput.broadcast_binary(self, other, lt, '__lt')
+        return _OperatorOutput.broadcast_binary(self, other, lt, None, '__lt')
 
     def __le__(self, other):
         def le(x, y):
             return x <= y
 
-        return _OperatorOutput.broadcast_binary(self, other, le, '__le')
+        return _OperatorOutput.broadcast_binary(self, other, le, None, '__le')
 
     def __gt__(self, other):
         def gt(x, y):
             return x > y
 
-        return _OperatorOutput.broadcast_binary(self, other, gt, '__gt')
+        return _OperatorOutput.broadcast_binary(self, other, gt, None, '__gt')
 
     def __ge__(self, other):
         def ge(x, y):
             return x >= y
 
-        return _OperatorOutput.broadcast_binary(self, other, ge, '__ge')
+        return _OperatorOutput.broadcast_binary(self, other, ge, None, '__ge')
 
     def __neg__(self):
         if self.dtype in [uint8, uint16, uint32, uint64]:
@@ -570,6 +588,10 @@ class _OpGenerator(object):
 
             # make sure grad outputs are the same type as op inputs
             for grad_output_index, grad_output in enumerate(grad_outputs):
+                if isinstance(grad_output, _Operator) and len(grad_output.output_types) != 1:
+                    raise TypeError('A multi-output operator was returned from a gradient function, but the meaning '
+                                    'of this is ambiguous: explicitly index each output from operator: ' +
+                                    str(grad_output.name))
                 cur_input_type = input_types[grad_output_index]
                 cur_grad_output_type = TensorType.like(_resolve_output(grad_output))
                 if cur_input_type != cur_grad_output_type:
