@@ -13,6 +13,7 @@
 #include <memory>
 #include <chrono>
 #include <vector>
+#include <thread>
 #include "dynamiclibop.h"
 #include "language_dtype.h"
 
@@ -21,7 +22,7 @@
 
 typedef uint16_t
         (*C_FUNPTR)(std::vector<std::shared_ptr<const InputParameter>> inputs,
-                  std::vector<std::shared_ptr<OutputParameter>> outputs);
+                  std::vector<std::shared_ptr<OutputParameter>> outputs, int num_threads, int thread_idx);
 
 struct TensorParam {
     void* data;
@@ -161,13 +162,6 @@ int32_t testCOperator(const char *opLibPath, const char *opFuncName,
          }
     }
 
-    // create the threadpool
-    // TODO - pass it to the test function
-    // TODO - figure out how many cores we actually have from the system
-    const int num_threads = 48;
-    tensorflow::thread::ThreadPool pool(tensorflow::Env::Default(), "test", num_threads);
-    std::cout << "*** threadpool threads:  " + std::to_string(pool.NumThreads()) << std::endl;
-
     // load the operator library
 //    std::cout << "loading function " <<  opFuncName << '\n';
 //    std::cout << "from " <<  opLibPath << '\n';
@@ -187,12 +181,26 @@ int32_t testCOperator(const char *opLibPath, const char *opFuncName,
         return 1;
     }
 
+    // create the threadpool
+    unsigned int num_threads = std::thread::hardware_concurrency();
+//    std::cout << "num_threads: " + std::to_string(num_threads) << '\n';
+
     // call the test library function
     // time the execution in milliseconds
-    int err = 1;
+    int err = 0;
     for (size_t profiling_iter = 0; profiling_iter < profiling_iterations; profiling_iter++) {
         auto t1 = std::chrono::high_resolution_clock::now();
-        err = func_(inputs, outputs);
+        // ThreadPool destructor is what joins all the threads and waits for completion, so we
+        // scope it as a local variable and when it goes out of scope, all the work is done and result
+        // can be used
+        {
+            tensorflow::thread::ThreadPool thread_pool(tensorflow::Env::Default(), "test", num_threads);
+            for (int thread = 0; thread < num_threads; thread++) {
+                auto fn_work = std::bind(func_, inputs, outputs, num_threads, thread);
+                thread_pool.Schedule(fn_work);
+            }
+        }
+//        err = func_(inputs, outputs);
         auto t2 = std::chrono::high_resolution_clock::now();
         std::chrono::duration<double, std::milli> dt_dur = t2 - t1;
         executionTimeMilliseconds[profiling_iter] = dt_dur.count();

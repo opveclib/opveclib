@@ -9,7 +9,6 @@
  the specific language governing permissions and limitations under the License.*/
 
 #include "dynamiclibop.h"
-#include "threadpool.h"
 #include <vector>
 #include <memory>
 #include <iostream>
@@ -21,17 +20,45 @@
 //#define EIGEN_USE_NONBLOCKING_THREAD_POOL
 
 // worker functions
-void Add2CPUWork(const float *in0, const float *in1, float* out, int64_t index) {
-//    for (int64_t i = begin; i < end; i++ ) {
-		out[index] = in0[index] + in1[index];
-//	}
+int Add2CPUWork(const float *in0, const float *in1, float* out, int64_t len,
+                 uint32_t block_size, uint32_t thread_index) {
+    int64_t begin = thread_index * block_size;
+    int64_t end = begin + block_size;
+    if (end > len) end = len;
+    for (int64_t i = begin; i < end; i++ ) {
+		out[i] = in0[i] + in1[i];
+	}
+	return 0;
+}
+
+int AddFDFCPUWork(const float *in0, const double *in1, const float* in2, float* out, int64_t len,
+                   uint32_t block_size, uint32_t thread_index) {
+    int64_t begin = thread_index * block_size;
+    int64_t end = begin + block_size;
+    if (end > len) end = len;
+    for (int64_t i = begin; i < end; i++ ) {
+		out[i] = in0[i] + in1[i] + in2[i];
+	}
+	return 0;
+}
+
+int SumSqCPUWork(const float *in0, const double *in1, float* out0, float* out1, int64_t len,
+                 uint32_t block_size, uint32_t thread_index) {
+    int64_t begin = thread_index * block_size;
+    int64_t end = begin + block_size;
+    if (end > len) end = len;
+    for (int64_t i = begin; i < end; i++ ) {
+		out0[i] = in0[i] + in1[i];
+		out1[i] = out0[i] * out0[i];
+	}
+	return 0;
 }
 
 // CPU functions to be called by the TF dynamic_lib_addgpu_test.py
 
 ADDCPU_EXPORT
 int add2float(std::vector<std::shared_ptr<const InputParameter>> inputs,
-		      std::vector<std::shared_ptr<OutputParameter>> outputs, tensorflow::thread::ThreadPool *thread_pool) {
+		      std::vector<std::shared_ptr<OutputParameter>> outputs, int num_threads, int thread_index) {
 	if (inputs.size() != 2) return 1;
 	if (outputs.size() != 1) return 1;
 
@@ -43,7 +70,7 @@ int add2float(std::vector<std::shared_ptr<const InputParameter>> inputs,
 	// Make ParallelFor use as many threads as possible.
 	// based on https://github.com/tensorflow/tensorflow/blob/r0.9/tensorflow/core/lib/core/threadpool_test.cc
 //    int64_t kHugeCost = 1 << 30;
-	std::cout << "*** Add2CPUWork - threads:  " + std::to_string(thread_pool->NumThreads()) << std::endl;
+
 
 	// bind the first 3 parameters to the input and output arrays. begin and end parameters are
 	// placeholders that come from the ParallelFor parameters when it gets called
@@ -53,38 +80,42 @@ int add2float(std::vector<std::shared_ptr<const InputParameter>> inputs,
     // this fails the assertion in https://github.com/tensorflow/tensorflow/blob/r0.9/tensorflow/core/lib/core/threadpool.cc
     // at line 90 because it seems TF library was not compiled with EIGEN_USE_NONBLOCKING_THREAD_POOL
 //	thread_pool->ParallelFor(len, kHugeCost, fn_work);
-    for (int64_t i = 0; i < len; i++ ) {
-        auto fn_work = std::bind(Add2CPUWork, in0, in1, out, i);
-        thread_pool->Schedule(fn_work);
-    }
 
-	return 0;
+    uint32_t block_size = len / num_threads;
+    if(len % num_threads > 0) block_size += 1;
+    return Add2CPUWork(in0, in1, out, len, block_size, thread_index);
 }
 
 ADDCPU_EXPORT
 int addFloatDoubleFloat(std::vector<std::shared_ptr<const InputParameter>> inputs,
-	      std::vector<std::shared_ptr<OutputParameter>> outputs, const tensorflow::thread::ThreadPool *thread_pool) {
+	      std::vector<std::shared_ptr<OutputParameter>> outputs, int num_threads, int thread_index) {
 	if (inputs.size() != 3) return 1;
 	if (outputs.size() != 1) return 1;
 
-	int64_t N = inputs[0]->length();
-	for (int i = 0; i < N; i++ ) {
-		outputs[0]->setValue<float>(i, *(inputs[0]->get<float>(i)) + *(inputs[1]->get<double>(i))
-				+ *(inputs[2]->get<float>(i)));
-	}
-	return 0;
+	int64_t len = inputs[0]->length();
+	float *out = outputs[0]->get<float>();
+	const float *in0 = inputs[0]->get<float>();
+	const double *in1 = inputs[1]->get<double>();
+	const float *in2 = inputs[2]->get<float>();
+
+	uint32_t block_size = len / num_threads;
+    if(len % num_threads > 0) block_size += 1;
+    return AddFDFCPUWork(in0, in1, in2, out, len, block_size, thread_index);
 }
 
 ADDCPU_EXPORT
 int sumAndSq(std::vector<std::shared_ptr<const InputParameter>> inputs,
-	      std::vector<std::shared_ptr<OutputParameter>> outputs, const tensorflow::thread::ThreadPool *thread_pool) {
+	      std::vector<std::shared_ptr<OutputParameter>> outputs, int num_threads, int thread_index) {
 	if (inputs.size() != 2) return 1;
 	if (outputs.size() != 2) return 1;
 
-	int64_t N = inputs[0]->length();
-	for (int i = 0; i < N; i++ ) {
-		outputs[0]->setValue<float>(i, *(inputs[0]->get<float>(i)) + *(inputs[1]->get<double>(i)));
-		outputs[1]->setValue<float>(i, *(outputs[0]->get<float>(i)) * *(outputs[0]->get<float>(i)));
-	}
-	return 0;
+	int64_t len = inputs[0]->length();
+	float *out0 = outputs[0]->get<float>();
+	float *out1 = outputs[1]->get<float>();
+	const float *in0 = inputs[0]->get<float>();
+	const double *in1 = inputs[1]->get<double>();
+
+	uint32_t block_size = len / num_threads;
+    if(len % num_threads > 0) block_size += 1;
+    return SumSqCPUWork(in0, in1, out0, out1, len, block_size, thread_index);
 }

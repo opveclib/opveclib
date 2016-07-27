@@ -31,13 +31,10 @@ class DynamicLibAddGPUTest(unittest.TestCase):
             this_directory = os.path.split(this_file_path)[0]
 
             cpp_path = os.path.join(this_directory, 'addcpu.cpp')
-            # get the tensorflow include directory to find threadpool.h include files
-            tf_include = tf.sysconfig.get_include()
             subprocess.call(['g++', '-fPIC', '-Wall',
                          '-std=c++11', '-Ofast', '-Wextra',
                          '-g', '-pedantic',
                          '-I'+this_directory+'/..',
-                         '-isystem', tf_include,
                          '-o', cpulib, '-shared',  cpp_path])
 
         if cuda_enabled:
@@ -131,5 +128,5 @@ class DynamicLibAddGPUTest(unittest.TestCase):
                     assert np.allclose(x, t_verified.eval())
 
 if __name__ == "__main__":
-    clear_op_cache()
+    # clear_op_cache()
     unittest.main()
