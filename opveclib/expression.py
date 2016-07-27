@@ -1174,6 +1174,20 @@ def output(*args):
 
     :param args: args the define a TensorType, can be either a TensorType or a shape and a DType
     :return: a tensor expression which refers to the newly defined output tensor
+
+    :Example:
+
+    Create a new output tensor ``out`` based on the ``TensorType`` of input tensor ``in0`` ::
+
+        out = output(in0.tensor_type)
+
+    :Example:
+
+    Create a new output tensor ``out`` based on the ``shape`` of input tensor ``in0`` and the ``DType`` of input tensor
+    ``in1``::
+
+        out = output(in0.shape, in1.dtype)
+
     """
 
     tensor_type = _tensor_type_polymorhpic(*args)

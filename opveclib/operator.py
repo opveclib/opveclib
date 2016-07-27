@@ -145,8 +145,10 @@ class _OperatorOutput(object):
 
         self.parent = parent
         self.index = index
+        self.tensor_type = parent.output_types[index]
         self.shape = parent.output_types[index].shape
         self.dtype = parent.output_types[index].dtype
+        self.size = self.tensor_type.size
 
     @staticmethod
     def broadcast_binary(lhs, rhs, fcn, grad_fcn, name):
@@ -193,114 +195,60 @@ class _OperatorOutput(object):
         return binary_op(lhs, rhs)
 
     def __add__(self, other):
-        return _OperatorOutput.broadcast_binary(self, other,
-                                                lambda x, y: x + y,
-                                                lambda x, y, dz: (dz, dz),
-                                                '__add')
+        return add(self, other)
 
     def __radd__(self, other):
-        return _OperatorOutput.broadcast_binary(other, self,
-                                                lambda x, y: x + y,
-                                                lambda x, y, dz: (dz, dz),
-                                                '__add')
+        return add(other, self)
 
     def __sub__(self, other):
-        return _OperatorOutput.broadcast_binary(self, other,
-                                                lambda x, y: x - y,
-                                                lambda x, y, dz: (dz, -dz),
-                                                '__sub')
+        return sub(self, other)
 
     def __rsub__(self, other):
-        return _OperatorOutput.broadcast_binary(other, self,
-                                                lambda x, y: x - y,
-                                                lambda x, y, dz: (dz, -dz),
-                                                '__sub')
+        return sub(other, self)
 
     def __mul__(self, other):
-        return _OperatorOutput.broadcast_binary(self, other,
-                                                lambda x, y: x * y,
-                                                lambda x, y, dz: (y*dz, x*dz),
-                                                '__mul')
+        return mul(self, other)
 
     def __rmul__(self, other):
-        return _OperatorOutput.broadcast_binary(other, self,
-                                                lambda x, y: x * y,
-                                                lambda x, y, dz: (y*dz, x*dz),
-                                                '__mul')
+        return mul(other, self)
 
     # python 2
     def __div__(self, other):
-        def div(x, y):
-            return x / y
-
-        return _OperatorOutput.broadcast_binary(self, other, div, None, '__div')
+        return div(self, other)
 
     def __rdiv__(self, other):
-        def div(x, y):
-            return x / y
-
-        return _OperatorOutput.broadcast_binary(other, self, div, None, '__div')
+        return div(other, self)
 
     # python 3
     def __truediv__(self, other):
-        def div(x, y):
-            return x / y
-
-        return _OperatorOutput.broadcast_binary(self, other, div, None, '__div')
+        return div(self, other)
 
     def __rtruediv__(self, other):
-        def div(x, y):
-            return x / y
-
-        return _OperatorOutput.broadcast_binary(other, self, div, None, '__div')
+        return div(other, self)
 
     def __mod__(self, other):
-        def mod(x, y):
-            return x % y
-
-        return _OperatorOutput.broadcast_binary(self, other, mod, None, '__mod')
+        return mod(self, other)
 
     def __rmod__(self, other):
-        def mod(x, y):
-            return x % y
-
-        return _OperatorOutput.broadcast_binary(other, self, mod, None, '__mod')
+        return mod(other, self)
 
     def __eq__(self, other):
-        def eq(x, y):
-            return x == y
-
-        return _OperatorOutput.broadcast_binary(self, other, eq, None, '__eq')
+        return equal(self, other)
 
     def __ne__(self, other):
-        def ne(x, y):
-            return x != y
-
-        return _OperatorOutput.broadcast_binary(self, other, ne, None, '__ne')
+        return not_equal(self, other)
 
     def __lt__(self, other):
-        def lt(x, y):
-            return x < y
-
-        return _OperatorOutput.broadcast_binary(self, other, lt, None, '__lt')
+        return less(self, other)
 
     def __le__(self, other):
-        def le(x, y):
-            return x <= y
-
-        return _OperatorOutput.broadcast_binary(self, other, le, None, '__le')
+        return less_equal(self, other)
 
     def __gt__(self, other):
-        def gt(x, y):
-            return x > y
-
-        return _OperatorOutput.broadcast_binary(self, other, gt, None, '__gt')
+        return greater(self, other)
 
     def __ge__(self, other):
-        def ge(x, y):
-            return x >= y
-
-        return _OperatorOutput.broadcast_binary(self, other, ge, None, '__ge')
+        return greater_equal(self, other)
 
     def __neg__(self):
         if self.dtype in [uint8, uint16, uint32, uint64]:
@@ -315,6 +263,7 @@ class _OperatorOutput(object):
 
         return __neg(self)
 
+    @staticmethod
     def __bool__(self):
         raise SyntaxError('Cannot resolve operator values at interpretation time.')
 
@@ -658,6 +607,87 @@ def gradient(op_function):
         op_function.add_grad(grad_function)
 
     return wrapper
+
+
+def _broadcast_cwise_binary(lhs, rhs, fcn):
+    if lhs.dtype != rhs.dtype:
+        raise TypeError()
+
+    if lhs.size == 1 and rhs.size > 1:
+        # broadcast lhs into rhs
+        out = output_like(rhs)
+        lhs_pos = [0]*lhs.rank
+        rhs_pos = out_pos = position_in(rhs.shape)
+    elif lhs.size > 1 and rhs.size == 1:
+        # broadcast rhs into lhs
+        out = output_like(lhs)
+        lhs_pos = out_pos = position_in(lhs.shape)
+        rhs_pos = [0]*rhs.rank
+    else:
+        # point-wise operations must be same shape
+        if lhs.shape != rhs.shape:
+            raise TypeError()
+        out = output_like(lhs)
+        lhs_pos = rhs_pos = out_pos = position_in(lhs.shape)
+
+    out[out_pos] = fcn(lhs[lhs_pos], rhs[rhs_pos])
+
+    return out
+
+
+@operator()
+def add(lhs, rhs):
+    return _broadcast_cwise_binary(lhs, rhs, lambda x, y: x + y)
+
+
+@operator()
+def sub(lhs, rhs):
+    return _broadcast_cwise_binary(lhs, rhs, lambda x, y: x - y)
+
+
+@operator()
+def mul(lhs, rhs):
+    return _broadcast_cwise_binary(lhs, rhs, lambda x, y: x * y)
+
+
+@operator()
+def div(lhs, rhs):
+    return _broadcast_cwise_binary(lhs, rhs, lambda x, y: x / y)
+
+
+@operator()
+def mod(lhs, rhs):
+    return _broadcast_cwise_binary(lhs, rhs, lambda x, y: x % y)
+
+
+@operator()
+def equal(lhs, rhs):
+    return _broadcast_cwise_binary(lhs, rhs, lambda x, y: x == y)
+
+
+@operator()
+def not_equal(lhs, rhs):
+    return _broadcast_cwise_binary(lhs, rhs, lambda x, y: x != y)
+
+
+@operator()
+def less(lhs, rhs):
+    return _broadcast_cwise_binary(lhs, rhs, lambda x, y: x < y)
+
+
+@operator()
+def less_equal(lhs, rhs):
+    return _broadcast_cwise_binary(lhs, rhs, lambda x, y: x <= y)
+
+
+@operator()
+def greater(lhs, rhs):
+    return _broadcast_cwise_binary(lhs, rhs, lambda x, y: x > y)
+
+
+@operator()
+def greater_equal(lhs, rhs):
+    return _broadcast_cwise_binary(lhs, rhs, lambda x, y: x >= y)
 
 
 _OperatorDAG = namedtuple('_OperatorDAG', ['proto_dag', 'inputs', 'operators', 'grad_dags'])
