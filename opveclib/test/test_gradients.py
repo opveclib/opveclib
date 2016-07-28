@@ -61,36 +61,6 @@ def clip_grad(arg, d_arg, threshold1=None, threshold2=None):
 
 
 @operator()
-def sigmoid(arg):
-    out = output_like(arg)
-    pos = position_in(arg.shape)
-    out[pos] = 1/(1 + exp(-arg[pos]))
-
-    return out
-
-
-@operator()
-def sigmoid_grad_op(arg, grad_above):
-    out = output_like(arg)
-    pos = position_in(arg.shape)
-
-    valid_grad = logical_and(arg[pos] > -50, arg[pos] < 50)
-    result = variable(0, arg.dtype)
-    with if_(valid_grad):
-        e = exp(-arg[pos])
-        result <<= e/((1+e)*(1+e))
-
-    out[pos] = result*grad_above[pos]
-
-    return out
-
-
-@gradient(sigmoid)
-def sigmoid_grad(arg, d_out):
-    return sigmoid_grad_op(arg, d_out)
-
-
-@operator()
 def tanh(arg):
     out = output_like(arg)
     pos = position_in(arg.shape)

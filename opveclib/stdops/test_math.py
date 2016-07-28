@@ -14,7 +14,7 @@ import tensorflow as tf
 from ..operator import operator, evaluate, as_tensorflow
 from ..expression import position_in, output_like
 from ..local import clear_op_cache
-from .math import add, sub, mul, div, neg
+from .math import add, sub, mul, div, neg, tanh, sigmoid
 
 
 class TestMath(unittest.TestCase):
@@ -142,7 +142,9 @@ class TestMath(unittest.TestCase):
                 tf_grad = tf.gradients(tf_out, arg, grad_above)[0]
                 ovl_out, tf_out, ovl_grad, tf_grad = s.run([ovl_out, tf_out, ovl_grad, tf_grad])
 
-                assert np.all(np.equal(ovl_out, tf_out))
-                assert np.all(np.equal(ovl_grad, tf_grad))
+                assert np.allclose(ovl_out, tf_out)
+                assert np.allclose(ovl_grad, tf_grad)
 
             test_grad(lambda x: neg(x), lambda x: tf.neg(x))
+            test_grad(lambda x: tanh(x), lambda x: tf.tanh(x))
+            test_grad(lambda x: sigmoid(x), lambda x: tf.sigmoid(x))

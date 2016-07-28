@@ -11,6 +11,72 @@
 from ..operator import operator, gradient, OperatorOutput
 from ..expression import output, output_like, position_in, \
     uint8, uint16, uint32, uint64
+from ..expression import tanh as expr_tanh, exp as expr_exp, logical_and as expr_logical_and, variable, if_
+
+
+def _cwise_unary(arg, func):
+    out = output(arg.shape, arg.dtype)
+    pos = position_in(arg.shape)
+    out[pos] = func(arg[pos])
+
+    return out
+
+
+def _cwise_unary_grad(arg, grad_above, func):
+    out = output(arg.shape, arg.dtype)
+    pos = position_in(arg.shape)
+    out[pos] = func(arg[pos], grad_above[pos])
+
+    return out
+
+
+@operator()
+def neg(arg):
+    if arg.dtype in [uint8, uint16, uint32, uint64]:
+        raise TypeError('Cannot negate an unsigned tensor.')
+
+    return _cwise_unary(arg, lambda x: -x)
+
+
+@gradient(neg)
+@operator()
+def div_grad(arg, grad_above):
+    return _cwise_unary_grad(arg, grad_above, lambda x, dz: - dz)
+
+OperatorOutput.register_magic_method('neg', neg)
+
+
+@operator()
+def tanh(arg):
+    return _cwise_unary(arg, lambda x: expr_tanh(x))
+
+
+@gradient(tanh)
+@operator()
+def tanh_grad(arg, grad_above):
+    return _cwise_unary_grad(arg, grad_above, lambda x, dz: (1-expr_tanh(x)*expr_tanh(x))*dz)
+
+
+@operator()
+def sigmoid(arg):
+    return _cwise_unary(arg, lambda x: 1/(1 + expr_exp(-x)))
+
+
+@gradient(sigmoid)
+@operator()
+def sigmoid_grad(arg, grad_above):
+    grad = output_like(arg)
+    pos = position_in(arg.shape)
+
+    valid_grad = expr_logical_and(arg[pos] > -50, arg[pos] < 50)
+    result = variable(0, arg.dtype)
+    with if_(valid_grad):
+        e = expr_exp(-arg[pos])
+        result <<= e/((1+e)*(1+e))
+
+    grad[pos] = result*grad_above[pos]
+
+    return grad
 
 
 def _broadcast_cwise_binary(lhs, rhs, fcn):
@@ -166,26 +232,3 @@ def greater_equal(lhs, rhs):
     return _broadcast_cwise_binary(lhs, rhs, lambda x, y: x >= y)
 
 OperatorOutput.register_magic_method('ge', greater_equal)
-
-
-@operator()
-def neg(arg):
-    if arg.dtype in [uint8, uint16, uint32, uint64]:
-        raise TypeError('Cannot negate an unsigned tensor.')
-
-    out = output(arg.shape, arg.dtype)
-    pos = position_in(arg.shape)
-    out[pos] = -arg[pos]
-    return out
-
-
-@gradient(neg)
-@operator()
-def div_grad(arg, grad_above):
-    grad = output(arg.shape, arg.dtype)
-    pos = position_in(arg.shape)
-    grad[pos] = -grad_above[pos]
-    return grad
-
-
-OperatorOutput.register_magic_method('neg', neg)
