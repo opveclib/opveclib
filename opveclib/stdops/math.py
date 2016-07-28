@@ -84,6 +84,12 @@ OperatorOutput.register_magic_method('add', add)
 def sub(lhs, rhs):
     return _broadcast_cwise_binary(lhs, rhs, lambda x, y: x - y)
 
+
+@gradient(sub)
+@operator()
+def sub_grad(lhs, rhs, grad_above):
+    return _broadcast_cwise_binary_grad(lhs, rhs, grad_above, lambda x, y, dz: (dz, -dz))
+
 OperatorOutput.register_magic_method('sub', sub)
 
 
@@ -91,12 +97,24 @@ OperatorOutput.register_magic_method('sub', sub)
 def mul(lhs, rhs):
     return _broadcast_cwise_binary(lhs, rhs, lambda x, y: x * y)
 
+
+@gradient(mul)
+@operator()
+def mul_grad(lhs, rhs, grad_above):
+    return _broadcast_cwise_binary_grad(lhs, rhs, grad_above, lambda x, y, dz: (y*dz, x*dz))
+
 OperatorOutput.register_magic_method('mul', mul)
 
 
 @operator()
 def div(lhs, rhs):
     return _broadcast_cwise_binary(lhs, rhs, lambda x, y: x / y)
+
+
+@gradient(div)
+@operator()
+def div_grad(lhs, rhs, grad_above):
+    return _broadcast_cwise_binary_grad(lhs, rhs, grad_above, lambda x, y, dz: (dz/y, -x/(y*y)*dz))
 
 OperatorOutput.register_magic_method('div', div)
 
@@ -151,7 +169,7 @@ OperatorOutput.register_magic_method('ge', greater_equal)
 
 
 @operator()
-def negate(arg):
+def neg(arg):
     if arg.dtype in [uint8, uint16, uint32, uint64]:
         raise TypeError('Cannot negate an unsigned tensor.')
 
@@ -160,4 +178,14 @@ def negate(arg):
     out[pos] = -arg[pos]
     return out
 
-OperatorOutput.register_magic_method('neg', negate)
+
+@gradient(neg)
+@operator()
+def div_grad(arg, grad_above):
+    grad = output(arg.shape, arg.dtype)
+    pos = position_in(arg.shape)
+    grad[pos] = -grad_above[pos]
+    return grad
+
+
+OperatorOutput.register_magic_method('neg', neg)
