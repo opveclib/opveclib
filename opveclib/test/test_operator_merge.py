@@ -12,7 +12,7 @@ from __future__ import print_function
 import unittest
 import numpy as np
 from sys import _getframe
-from ..operator import operator, evaluate, _merge_refs_op_dag, _build_op_dag, _MergeRef
+from ..operator import operator, evaluate, _get_merge_refs_for_op_dag, _build_op_dag, _MergeRef
 from ..expression import position_in, output, variable, arange, output_like, if_, elif_, else_, cast
 from ..local import clear_op_cache
 
@@ -206,7 +206,7 @@ class TestOperator(unittest.TestCase):
         merge_refs.append(_MergeRef(to_op_index=2, to_in_arg_index=1, from_op_index=0, from_out_arg_index=3)) # add-row3
         merge_refs.append(_MergeRef(to_op_index=1, to_in_arg_index=0, from_op_index=0, from_out_arg_index=0)) # add-row0
         merge_refs.append(_MergeRef(to_op_index=1, to_in_arg_index=1, from_op_index=0, from_out_arg_index=1)) # add-row1
-        merge_info = _merge_refs_op_dag(op_dag)
+        merge_info = _get_merge_refs_for_op_dag(op_dag)
         assert euqal_set_merge_refs(merge_refs, merge_info.merge_refs)
 
     def test_multiple_outputs(self):
@@ -218,7 +218,7 @@ class TestOperator(unittest.TestCase):
         sum1            = add(s2, s3)       #   3               0, 1            0
 
         op_dag  = _build_op_dag(sum0, sum1)
-        merge_info = _merge_refs_op_dag(op_dag)
+        merge_info = _get_merge_refs_for_op_dag(op_dag)
         merge_refs = []
         merge_refs.append(_MergeRef(to_op_index=3, to_in_arg_index=0, from_op_index=1, from_out_arg_index=2))  # split-sum1
         merge_refs.append(_MergeRef(to_op_index=3, to_in_arg_index=1, from_op_index=1, from_out_arg_index=3))  # split-sum1
@@ -233,7 +233,7 @@ class TestOperator(unittest.TestCase):
         cRow0       = cumsumRows(in0)           #   0               0               0
         cRow1       = cumsumRows(cRow0)         #   1               0               0
         op_dag      = _build_op_dag(cRow1)
-        merge_info  = _merge_refs_op_dag(op_dag)
+        merge_info  = _get_merge_refs_for_op_dag(op_dag)
         # For cumsumRows(cumsumRows(in0)) we merge using a temporary array for the output of the first cumsumRows!
         merge_refs = []
         merge_refs.append(_MergeRef(to_op_index=1, to_in_arg_index=0, from_op_index=0, from_out_arg_index=0))  # cRow1-cRow0
@@ -245,16 +245,17 @@ class TestOperator(unittest.TestCase):
         cRow        = cumsumRows(np.random.random([3, 5]))
         cCol        = cumsumCols(cRow)
         op_dag      = _build_op_dag(cCol)
-        merge_info  = _merge_refs_op_dag(op_dag)
+        merge_info  = _get_merge_refs_for_op_dag(op_dag)
 
         assert euqal_set_merge_refs([], merge_info.merge_refs)
 
+    # No merging because of different access pattern.
     def test_cumsum_sym(self):
         print('*** Running Test: ' + self.__class__.__name__ + ' function: ' + _getframe().f_code.co_name)
         cRow        = cumsumRows(np.random.random([3, 3]))
         cCol        = cumsumCols(cRow)
         op_dag      = _build_op_dag(cCol)
-        merge_info  = _merge_refs_op_dag(op_dag)
+        merge_info  = _get_merge_refs_for_op_dag(op_dag)
 
         assert euqal_set_merge_refs([], merge_info.merge_refs)
 
@@ -267,7 +268,7 @@ class TestOperator(unittest.TestCase):
         mmm     = matmul(in0, in1)
         cCol    = cumsumCols(mmm)
         op_dag  = _build_op_dag(cCol)
-        merge_info = _merge_refs_op_dag(op_dag)
+        merge_info = _get_merge_refs_for_op_dag(op_dag)
 
         assert euqal_set_merge_refs([], merge_info.merge_refs)
 
@@ -279,7 +280,7 @@ class TestOperator(unittest.TestCase):
         padded      = pad(in0, n=2)
         cropped     = crop(padded, n=2)
         op_dag      = _build_op_dag(cropped)
-        merge_info  = _merge_refs_op_dag(op_dag)
+        merge_info  = _get_merge_refs_for_op_dag(op_dag)
 
         assert np.allclose(in0, evaluate(cropped))
         assert euqal_set_merge_refs([], merge_info.merge_refs)
