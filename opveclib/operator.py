@@ -20,8 +20,7 @@ from collections import namedtuple
 import numpy as np
 from numpy.ctypeslib import ndpointer
 
-from .expression import TensorType, ExpressionDAG, input, OutputTensor, output, output_like, position_in, \
-    uint8, uint16, uint32, uint64
+from .expression import TensorType, ExpressionDAG, input, OutputTensor
 from .local import version, cache_directory, cuda_enabled, cuda_directory, logger
 from . import language_pb2 as lang
 
@@ -129,13 +128,18 @@ class _TensorParam(ctypes.Structure):
                 ("len", ctypes.c_size_t)]
 
 
-class _OperatorOutput(object):
+class OperatorOutput(object):
     """
     Class which represents an un-evaluated output tensor, used for building lazily evaluated DAGs of operators
     """
 
     # raise operator priority so that numpy does not try to use its own operator
     __array_priority__ = 1
+    _builtin_ops = {}
+
+    @staticmethod
+    def register_magic_method(key, value):
+        OperatorOutput._builtin_ops[key] = value
 
     def __init__(self, parent, index):
         if not isinstance(parent, _Operator):
@@ -150,118 +154,64 @@ class _OperatorOutput(object):
         self.dtype = parent.output_types[index].dtype
         self.size = self.tensor_type.size
 
-    @staticmethod
-    def broadcast_binary(lhs, rhs, fcn, grad_fcn, name):
-        if isinstance(rhs, _Operator) and len(rhs.output_types) == 1:
-            resolved_rhs = rhs[0]
-        else:
-            resolved_rhs = rhs
-
-        if isinstance(lhs, _Operator) and len(lhs.output_types) == 1:
-            resolved_lhs = lhs[0]
-        else:
-            resolved_lhs = lhs
-        rhs_type = TensorType.like(resolved_rhs)
-        lhs_type = TensorType.like(resolved_lhs)
-        if rhs_type != lhs_type:
-            raise TypeError('Input types must match')
-
-        @operator(name=name)
-        def binary_op(lhs_arg, rhs_arg):
-            out = output(lhs_arg.shape, lhs_arg.dtype)
-            pos = position_in(lhs_arg.shape)
-
-            out[pos] = fcn(lhs_arg[pos], rhs_arg[pos])
-            return out
-
-        if grad_fcn is not None:
-            @operator(name=name+'_grad')
-            def binary_op_grad(lhs_arg, rhs_arg, grad_above):
-                lhs_grad = output_like(lhs_arg)
-                rhs_grad = output_like(rhs_arg)
-                pos = position_in(lhs_arg.shape)
-
-                l, r = grad_fcn(lhs_arg[pos], rhs_arg[pos], grad_above[pos])
-
-                lhs_grad[pos] = l
-                rhs_grad[pos] = r
-                return lhs_grad, rhs_grad
-
-            @gradient(binary_op)
-            def grad(lhs_arg, rhs_arg, grad_above):
-                op = binary_op_grad(lhs_arg, rhs_arg, grad_above)
-                return op[0], op[1]
-
-        return binary_op(lhs, rhs)
-
     def __add__(self, other):
-        return add(self, other)
+        return OperatorOutput._builtin_ops['add'](self, other)
 
     def __radd__(self, other):
-        return add(other, self)
+        return OperatorOutput._builtin_ops['add'](other, self)
 
     def __sub__(self, other):
-        return sub(self, other)
+        return OperatorOutput._builtin_ops['sub'](self, other)
 
     def __rsub__(self, other):
-        return sub(other, self)
+        return OperatorOutput._builtin_ops['sub'](other, self)
 
     def __mul__(self, other):
-        return mul(self, other)
+        return OperatorOutput._builtin_ops['mul'](self, other)
 
     def __rmul__(self, other):
-        return mul(other, self)
+        return OperatorOutput._builtin_ops['mul'](other, self)
 
     # python 2
     def __div__(self, other):
-        return div(self, other)
+        return OperatorOutput._builtin_ops['div'](self, other)
 
     def __rdiv__(self, other):
-        return div(other, self)
+        return OperatorOutput._builtin_ops['div'](other, self)
 
     # python 3
     def __truediv__(self, other):
-        return div(self, other)
+        return OperatorOutput._builtin_ops['div'](self, other)
 
     def __rtruediv__(self, other):
-        return div(other, self)
+        return OperatorOutput._builtin_ops['div'](other, self)
 
     def __mod__(self, other):
-        return mod(self, other)
+        return OperatorOutput._builtin_ops['mod'](self, other)
 
     def __rmod__(self, other):
-        return mod(other, self)
+        return OperatorOutput._builtin_ops['mod'](other, self)
 
     def __eq__(self, other):
-        return equal(self, other)
+        return OperatorOutput._builtin_ops['eq'](self, other)
 
     def __ne__(self, other):
-        return not_equal(self, other)
+        return OperatorOutput._builtin_ops['ne'](self, other)
 
     def __lt__(self, other):
-        return less(self, other)
+        return OperatorOutput._builtin_ops['lt'](self, other)
 
     def __le__(self, other):
-        return less_equal(self, other)
+        return OperatorOutput._builtin_ops['le'](self, other)
 
     def __gt__(self, other):
-        return greater(self, other)
+        return OperatorOutput._builtin_ops['gt'](self, other)
 
     def __ge__(self, other):
-        return greater_equal(self, other)
+        return OperatorOutput._builtin_ops['ge'](self, other)
 
     def __neg__(self):
-        if self.dtype in [uint8, uint16, uint32, uint64]:
-            raise TypeError('Cannot negate an unsigned tensor.')
-
-        @operator()
-        def __neg(arg):
-            out = output(self.shape, self.dtype)
-            pos = position_in(self.shape)
-            out[pos] = -arg[pos]
-            return out
-
-        return __neg(self)
+        return OperatorOutput._builtin_ops['neg'](self)
 
     @staticmethod
     def __bool__(self):
@@ -292,11 +242,12 @@ class _Operator(object):
         logger.debug('Operator created: ' + str(dag.name))
 
     def __getitem__(self, item):
-        return _OperatorOutput(self, item)
+        return OperatorOutput(self, item)
 
     def check_binary(self):
         if len(self.output_types) != 1:
-            raise SyntaxError('Cannot use binary operators on multi-output operators.')
+            raise SyntaxError('Cannot use binary infix operators on multi-output operators. '
+                              'Explicitly index an output.')
 
     def __add__(self, other):
         self.check_binary()
@@ -379,7 +330,7 @@ class _Operator(object):
 
 def _resolve_output(x):
     """
-    Resolve whether or not an object is an _OperatorOutput. Converts single-output Operators to an _OperatorOutput
+    Resolve whether or not an object is an OperatorOutput. Converts single-output Operators to an OperatorOutput
 
     :param x: the argument to resolve
     :return: the argument converted into an _OperatorOutput
@@ -391,7 +342,7 @@ def _resolve_output(x):
             raise ValueError('Only a single-output Operator can be used as an input to another operator. '
                              'Index a specific output from multi-output Operators.')
         return x[0]
-    elif not isinstance(x, _OperatorOutput):
+    elif not isinstance(x, OperatorOutput):
         raise TypeError('Only operator outputs can be used to build an op dag. Received a ' + str(type(x)))
     else:
         return x
@@ -405,8 +356,15 @@ class _OpGenerator(object):
     def __init__(self, op_function, forbid_none_valued_constants, name):
         self.op_function = op_function
         self.forbid_none_valued_constants = forbid_none_valued_constants
-        self.name = name
+
+        # name this op based on it's function name unless a name is supplied to the operator decorator
+        if name is None:
+            self.name = self.op_function.__name__
+        else:
+            self.name = self.name
+
         self.grad_function = None
+        self.num_grad_args = None
 
     def __str__(self):
         return self.op_function.__name__
@@ -421,16 +379,10 @@ class _OpGenerator(object):
             constants = dict(zip(func_args[-len(func_defaults):], func_defaults))
             constants.update(defined_constants)
 
-        # name this op based on it's function name unless a name is supplied to the operator decorator
-        if self.name is None:
-            f_name = self.op_function.__name__
-        else:
-            f_name = self.name
-
         if self.forbid_none_valued_constants:
             for key in constants.keys():
                 if constants[key] is None:
-                    raise ValueError(f_name + ' argument ' + key + ' is None, which implies an unset constant.\n'
+                    raise ValueError(self.name + ' argument ' + key + ' is None, which implies an unset constant.\n'
                                      '  If a None constant is meaningful for this operator, the operator should be '
                                      'defined with the appropriate decorator flag.')
 
@@ -446,14 +398,14 @@ class _OpGenerator(object):
             except AttributeError:
                 raise TypeError('Unexpectedly received a ' + inp.__class__.__name__ +
                                 ' instead of a tensor at argument position ' +
-                                str(inp_n + 1) + ' in the call to ' + f_name + '.  '
+                                str(inp_n + 1) + ' in the call to ' + self.name + '.  '
                                 'Should this argument be passed as a constant (keyword argument) instead?')
 
         num_inputs = len(input_types)
 
         if len(input_names) != num_inputs:
             err_msg = '\n'
-            err_msg += f_name + ' function signature expects ' + str(len(input_names)) + \
+            err_msg += self.name + ' function signature expects ' + str(len(input_names)) + \
                 ' input tensor argument(s):\n' + str(input_names) + '\n'
             err_msg += 'but was supplied with ' + str(num_inputs) + '.\n'
             if len(input_names) > num_inputs:
@@ -505,19 +457,13 @@ class _OpGenerator(object):
 
         expression_dag = ExpressionDAG.as_proto()
         ExpressionDAG.clear()
-        expression_dag.name = f_name
+        expression_dag.name = self.name
 
         if self.grad_function is None:
             grad_dag = None
         else:
-            grad_args, grad_varargs, grad_keywords, grad_defaults = inspect.getargspec(self.grad_function)
-            if grad_defaults is None:
-                num_defaults = 0
-            else:
-                num_defaults = len(grad_defaults)
-
-            if len(output_types) + len(input_names) != len(grad_args)-num_defaults:
-                raise SyntaxError('Gradient function must have inputs equal to the sum of the number of '
+            if len(output_types) + len(input_names) != self.num_grad_args:
+                raise SyntaxError('Gradient function must have number of inputs equal to the sum of the number of '
                                   'inputs and outputs of the operator function.')
 
             grad_inputs = []
@@ -550,13 +496,14 @@ class _OpGenerator(object):
 
             grad_dag = _build_op_dag(*grad_outputs).proto_dag
 
-        return _Operator(expression_dag, output_types, inputs, grad_dag, f_name)
+        return _Operator(expression_dag, output_types, inputs, grad_dag, self.name)
 
-    def add_grad(self, grad_function):
+    def add_grad(self, grad_function, num_grad_args):
         if self.grad_function is None:
             self.grad_function = grad_function
+            self.num_grad_args = num_grad_args
         else:
-            raise ValueError('Gradient function is already defined.')
+            raise ValueError('Gradient function is already defined for operator ' + str(self.name) + '.')
 
 
 def operator(forbid_none_valued_constants=True, name=None):
@@ -564,10 +511,8 @@ def operator(forbid_none_valued_constants=True, name=None):
         if inspect.getargspec(op_function).keywords is not None:
             raise SyntaxError('Operator functions cannot accept keyword arguments without default values.')
 
-        # TODO: implement vararg input parsing
         if inspect.getargspec(op_function).varargs is not None:
-            raise NotImplementedError('Operator functions cannot accept varags. '
-                                      'This functionality may be enabled in the future.')
+            raise NotImplementedError('Operator functions cannot accept varags.')
 
         return _OpGenerator(op_function, forbid_none_valued_constants, name)
     return wrapper
@@ -579,18 +524,31 @@ def gradient(op_function):
 
     def wrapper(grad_function):
         func_args, func_varargs, func_keywords, func_defaults = inspect.getargspec(op_function.op_function)
-        grad_args, grad_varargs, grad_keywords, grad_defaults = inspect.getargspec(grad_function)
-
         if func_defaults is None:
-            func_input_names = []
+            func_input_names = func_args
             func_constants = {}
         else:
             num_func_defaults = len(func_defaults)
             func_input_names = func_args[:-num_func_defaults]
             func_constants = dict(zip(func_args[-num_func_defaults:], func_defaults))
 
+        if isinstance(grad_function, _OpGenerator):
+            grad_args, grad_varargs, grad_keywords, grad_defaults = inspect.getargspec(grad_function.op_function)
+
+            def resolved(*args, **defaults):
+                op = grad_function(*args, **defaults)
+
+                op_outputs = []
+                for output_index in range(len(op.output_types)):
+                    op_outputs.append(op[output_index])
+
+                return op_outputs
+        else:
+            grad_args, grad_varargs, grad_keywords, grad_defaults = inspect.getargspec(grad_function)
+            resolved = grad_function
+
         if grad_defaults is None:
-            grad_input_names = []
+            grad_input_names = grad_args
             grad_constants = {}
         else:
             num_grad_defaults = len(grad_defaults)
@@ -604,90 +562,10 @@ def gradient(op_function):
         if func_input_names != grad_input_names[:len(func_input_names)]:
             raise SyntaxError('Gradient function must have same initial argument names as the op function.')
 
-        op_function.add_grad(grad_function)
+        op_function.add_grad(resolved, len(grad_input_names))
+        return resolved
 
     return wrapper
-
-
-def _broadcast_cwise_binary(lhs, rhs, fcn):
-    if lhs.dtype != rhs.dtype:
-        raise TypeError()
-
-    if lhs.size == 1 and rhs.size > 1:
-        # broadcast lhs into rhs
-        out = output_like(rhs)
-        lhs_pos = [0]*lhs.rank
-        rhs_pos = out_pos = position_in(rhs.shape)
-    elif lhs.size > 1 and rhs.size == 1:
-        # broadcast rhs into lhs
-        out = output_like(lhs)
-        lhs_pos = out_pos = position_in(lhs.shape)
-        rhs_pos = [0]*rhs.rank
-    else:
-        # point-wise operations must be same shape
-        if lhs.shape != rhs.shape:
-            raise TypeError()
-        out = output_like(lhs)
-        lhs_pos = rhs_pos = out_pos = position_in(lhs.shape)
-
-    out[out_pos] = fcn(lhs[lhs_pos], rhs[rhs_pos])
-
-    return out
-
-
-@operator()
-def add(lhs, rhs):
-    return _broadcast_cwise_binary(lhs, rhs, lambda x, y: x + y)
-
-
-@operator()
-def sub(lhs, rhs):
-    return _broadcast_cwise_binary(lhs, rhs, lambda x, y: x - y)
-
-
-@operator()
-def mul(lhs, rhs):
-    return _broadcast_cwise_binary(lhs, rhs, lambda x, y: x * y)
-
-
-@operator()
-def div(lhs, rhs):
-    return _broadcast_cwise_binary(lhs, rhs, lambda x, y: x / y)
-
-
-@operator()
-def mod(lhs, rhs):
-    return _broadcast_cwise_binary(lhs, rhs, lambda x, y: x % y)
-
-
-@operator()
-def equal(lhs, rhs):
-    return _broadcast_cwise_binary(lhs, rhs, lambda x, y: x == y)
-
-
-@operator()
-def not_equal(lhs, rhs):
-    return _broadcast_cwise_binary(lhs, rhs, lambda x, y: x != y)
-
-
-@operator()
-def less(lhs, rhs):
-    return _broadcast_cwise_binary(lhs, rhs, lambda x, y: x < y)
-
-
-@operator()
-def less_equal(lhs, rhs):
-    return _broadcast_cwise_binary(lhs, rhs, lambda x, y: x <= y)
-
-
-@operator()
-def greater(lhs, rhs):
-    return _broadcast_cwise_binary(lhs, rhs, lambda x, y: x > y)
-
-
-@operator()
-def greater_equal(lhs, rhs):
-    return _broadcast_cwise_binary(lhs, rhs, lambda x, y: x >= y)
 
 
 _OperatorDAG = namedtuple('_OperatorDAG', ['proto_dag', 'inputs', 'operators', 'grad_dags'])
