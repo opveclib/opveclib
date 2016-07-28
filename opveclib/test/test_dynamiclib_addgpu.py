@@ -128,5 +128,5 @@ class DynamicLibAddGPUTest(unittest.TestCase):
                     assert np.allclose(x, t_verified.eval())
 
 if __name__ == "__main__":
-    # clear_op_cache()
+    clear_op_cache()
     unittest.main()

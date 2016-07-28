@@ -731,7 +731,7 @@ def profile(output_list, target_language='cpp', profiling_iterations=1):
         name = _op_hash(op)
 
         # generate code
-        op_c_src, op_cuda_src, op_cuda_launch_template, op_c_generic, op_cuda_generic = \
+        op_c_src, op_cuda_src, op_c_generic, op_cuda_generic = \
             ExpressionDAG.generate(op, name)
 
         input_types, output_types = ExpressionDAG.io_types()
@@ -821,7 +821,7 @@ def _dag_to_tf(dag, inputs, grad_dags):
         name = _op_hash(op)
 
         # generate code
-        op_c_src, op_cuda_src, op_cuda_launch_template, op_c_generic, op_cuda_generic = \
+        op_c_src, op_cuda_src, op_c_generic, op_cuda_generic = \
             ExpressionDAG.generate(op, name)
 
         tf.logging.log(tf.logging.DEBUG, 'Compiling generic C++ for Op ' + name)

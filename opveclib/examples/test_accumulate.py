@@ -210,7 +210,10 @@ class TestAccumulate(unittest.TestCase):
         # ensure TF runs on GPU
         test_config=tf.ConfigProto(allow_soft_placement=False)
         test_config.graph_options.optimizer_options.opt_level = -1
-        devices = ['/cpu:0', '/gpu:0']
+        if ops.cuda_enabled:
+            devices = ['/cpu:0', '/gpu:0']
+        else:
+            devices = ['/cpu:0']
         with tf.Session(config=test_config) as sess:
            for dev_string in devices:
                 with tf.device(dev_string):
@@ -230,5 +233,5 @@ class TestAccumulate(unittest.TestCase):
 
 
 if __name__ == '__main__':
-    # ops.clear_op_cache()
+    ops.clear_op_cache()
     unittest.main()
