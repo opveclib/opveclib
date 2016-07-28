@@ -105,11 +105,16 @@ class DynamicLibLaunch<CPUDevice>  {
              std::vector<std::shared_ptr<const InputParameter>> inputs,
              std::vector<std::shared_ptr<OutputParameter>> outputs) {
         const int num_threads = context->device()->tensorflow_cpu_worker_threads()->workers->NumThreads();
-        thread::ThreadPool thread_pool(Env::Default(), "dynamiclibop", num_threads);
         uint16_t err = 0;
-        for (int thread = 0; thread < num_threads; thread++) {
-            auto fn_work = std::bind(func_, inputs, outputs, num_threads, thread, &err);
-            thread_pool.Schedule(fn_work);
+        // ThreadPool destructor is what joins all the threads and waits for completion, so we
+        // scope it as a local variable and when it goes out of scope, all the work is done and result
+        // can be used
+        {
+            thread::ThreadPool thread_pool(Env::Default(), "dynamiclibop", num_threads);
+            for (int thread = 0; thread < num_threads; thread++) {
+                auto fn_work = std::bind(func_, inputs, outputs, num_threads, thread, &err);
+                thread_pool.Schedule(fn_work);
+            }
         }
         OP_REQUIRES(context, err == 0,
             errors::InvalidArgument("External function execution error code: ",
