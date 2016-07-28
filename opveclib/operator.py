@@ -17,12 +17,11 @@ import subprocess
 import string
 import re
 from collections import namedtuple
-import tensorflow as tf
 import numpy as np
 from numpy.ctypeslib import ndpointer
 
 from .expression import TensorType, ExpressionDAG, input, OutputTensor
-from .local import version, cache_directory, cuda_enabled, cuda_directory
+from .local import version, cache_directory, cuda_enabled, cuda_directory, logger
 from . import language_pb2 as lang
 
 _default_cuda_threads_per_block = 32
@@ -35,6 +34,7 @@ class _DynamicLibOp(object):
 
     @staticmethod
     def module():
+        import tensorflow as tf
         if _DynamicLibOp._loaded_module is None:
             libname = 'dynamiclibop.so.' + version
             dynamiclibop_path = os.path.join(cache_directory, libname)
@@ -47,7 +47,7 @@ class _DynamicLibOp(object):
                 this_directory = os.path.split(this_file_path)[0]
                 try:
                     if cuda_enabled:
-                        tf.logging.log(tf.logging.INFO, '*** building dynamiclibop for GPU')
+                        logger.debug('*** building dynamiclibop for GPU')
                         subprocess.check_output(['g++', '-fPIC', '-Wall', '-shared',
                                                  '-std=c++11', '-O2', '-Wextra', '-DGOOGLE_CUDA=1',
                                                  '-o', dynamiclibop_path,
@@ -57,7 +57,7 @@ class _DynamicLibOp(object):
                                                 stderr=subprocess.STDOUT,
                                                 universal_newlines=True)
                     else:
-                        tf.logging.log(tf.logging.INFO, '*** building dynamiclibop for CPU')
+                        logger.debug('*** building dynamiclibop for CPU')
                         subprocess.check_output(['g++', '-fPIC', '-Wall', '-shared',
                                                  '-std=c++11', '-O2', '-Wextra',
                                                  '-o', dynamiclibop_path,
@@ -66,7 +66,7 @@ class _DynamicLibOp(object):
                                                 stderr=subprocess.STDOUT,
                                                 universal_newlines=True)
                 except subprocess.CalledProcessError as exception:
-                    tf.logging.log(tf.logging.ERROR, 'g++ error: ' + exception.output)
+                    logger.debug('g++ error: ' + exception.output)
                     raise
 
             _DynamicLibOp._loaded_module = tf.load_op_library(dynamiclibop_path)
@@ -128,10 +128,19 @@ class _TensorParam(ctypes.Structure):
                 ("len", ctypes.c_size_t)]
 
 
-class _OperatorOutput(object):
+class OperatorOutput(object):
     """
     Class which represents an un-evaluated output tensor, used for building lazily evaluated DAGs of operators
     """
+
+    # raise operator priority so that numpy does not try to use its own operator
+    __array_priority__ = 1
+    _builtin_ops = {}
+
+    @staticmethod
+    def register_magic_method(key, value):
+        OperatorOutput._builtin_ops[key] = value
+
     def __init__(self, parent, index):
         if not isinstance(parent, _Operator):
             raise TypeError('parent must be an Operator')
@@ -140,8 +149,73 @@ class _OperatorOutput(object):
 
         self.parent = parent
         self.index = index
+        self.tensor_type = parent.output_types[index]
         self.shape = parent.output_types[index].shape
         self.dtype = parent.output_types[index].dtype
+        self.size = self.tensor_type.size
+
+    def __add__(self, other):
+        return OperatorOutput._builtin_ops['add'](self, other)
+
+    def __radd__(self, other):
+        return OperatorOutput._builtin_ops['add'](other, self)
+
+    def __sub__(self, other):
+        return OperatorOutput._builtin_ops['sub'](self, other)
+
+    def __rsub__(self, other):
+        return OperatorOutput._builtin_ops['sub'](other, self)
+
+    def __mul__(self, other):
+        return OperatorOutput._builtin_ops['mul'](self, other)
+
+    def __rmul__(self, other):
+        return OperatorOutput._builtin_ops['mul'](other, self)
+
+    # python 2
+    def __div__(self, other):
+        return OperatorOutput._builtin_ops['div'](self, other)
+
+    def __rdiv__(self, other):
+        return OperatorOutput._builtin_ops['div'](other, self)
+
+    # python 3
+    def __truediv__(self, other):
+        return OperatorOutput._builtin_ops['div'](self, other)
+
+    def __rtruediv__(self, other):
+        return OperatorOutput._builtin_ops['div'](other, self)
+
+    def __mod__(self, other):
+        return OperatorOutput._builtin_ops['mod'](self, other)
+
+    def __rmod__(self, other):
+        return OperatorOutput._builtin_ops['mod'](other, self)
+
+    def __eq__(self, other):
+        return OperatorOutput._builtin_ops['eq'](self, other)
+
+    def __ne__(self, other):
+        return OperatorOutput._builtin_ops['ne'](self, other)
+
+    def __lt__(self, other):
+        return OperatorOutput._builtin_ops['lt'](self, other)
+
+    def __le__(self, other):
+        return OperatorOutput._builtin_ops['le'](self, other)
+
+    def __gt__(self, other):
+        return OperatorOutput._builtin_ops['gt'](self, other)
+
+    def __ge__(self, other):
+        return OperatorOutput._builtin_ops['ge'](self, other)
+
+    def __neg__(self):
+        return OperatorOutput._builtin_ops['neg'](self)
+
+    @staticmethod
+    def __bool__(self):
+        raise SyntaxError('Cannot resolve operator values at interpretation time.')
 
 
 class _GradientPlaceholder(object):
@@ -154,21 +228,109 @@ class _Operator(object):
     """
     Class which is extended to define a new operator and its gradient.
     """
+
+    # raise operator priority so that numpy does not try to use its own operator
+    __array_priority__ = 1
+
     def __init__(self, dag, output_types, inputs, grad_dag, name):
         self.inputs = inputs
         self.expression_dag = dag
         self.output_types = output_types
         self.name = name
-
         self.grad_dag = grad_dag
 
+        logger.debug('Operator created: ' + str(dag.name))
+
     def __getitem__(self, item):
-        return _OperatorOutput(self, item)
+        return OperatorOutput(self, item)
+
+    def check_binary(self):
+        if len(self.output_types) != 1:
+            raise SyntaxError('Cannot use binary infix operators on multi-output operators. '
+                              'Explicitly index an output.')
+
+    def __add__(self, other):
+        self.check_binary()
+        return self[0] + other
+
+    def __radd__(self, other):
+        self.check_binary()
+        return other + self[0]
+
+    def __sub__(self, other):
+        self.check_binary()
+        return self[0] - other
+
+    def __rsub__(self, other):
+        self.check_binary()
+        return other - self[0]
+
+    def __mul__(self, other):
+        self.check_binary()
+        return self[0] * other
+
+    def __rmul__(self, other):
+        self.check_binary()
+        return other * self[0]
+
+    # python 2
+    def __div__(self, other):
+        self.check_binary()
+        return self[0] / other
+
+    def __rdiv__(self, other):
+        self.check_binary()
+        return other / self[0]
+
+    # python 3
+    def __truediv__(self, other):
+        self.check_binary()
+        return self[0] / other
+
+    def __rtruediv__(self, other):
+        self.check_binary()
+        return other / self[0]
+
+    def __mod__(self, other):
+        self.check_binary()
+        return self[0] % other
+
+    def __rmod__(self, other):
+        self.check_binary()
+        return other % self[0]
+
+    def __eq__(self, other):
+        self.check_binary()
+        return self[0] == other
+
+    def __ne__(self, other):
+        self.check_binary()
+        return self[0] != other
+
+    def __lt__(self, other):
+        self.check_binary()
+        return self[0] < other
+
+    def __le__(self, other):
+        self.check_binary()
+        return self[0] <= other
+
+    def __gt__(self, other):
+        self.check_binary()
+        return self[0] > other
+
+    def __ge__(self, other):
+        self.check_binary()
+        return self[0] >= other
+
+    def __neg__(self):
+        self.check_binary()
+        return -self[0]
 
 
 def _resolve_output(x):
     """
-    Resolve whether or not an object is an _OperatorOutput. Converts single-output Operators to an _OperatorOutput
+    Resolve whether or not an object is an OperatorOutput. Converts single-output Operators to an OperatorOutput
 
     :param x: the argument to resolve
     :return: the argument converted into an _OperatorOutput
@@ -180,7 +342,7 @@ def _resolve_output(x):
             raise ValueError('Only a single-output Operator can be used as an input to another operator. '
                              'Index a specific output from multi-output Operators.')
         return x[0]
-    elif not isinstance(x, _OperatorOutput):
+    elif not isinstance(x, OperatorOutput):
         raise TypeError('Only operator outputs can be used to build an op dag. Received a ' + str(type(x)))
     else:
         return x
@@ -191,11 +353,18 @@ def _op_hash(op):
 
 
 class _OpGenerator(object):
-    def __init__(self, op_function, forbid_none_valued_constants):
+    def __init__(self, op_function, forbid_none_valued_constants, name):
         self.op_function = op_function
         self.forbid_none_valued_constants = forbid_none_valued_constants
 
+        # name this op based on it's function name unless a name is supplied to the operator decorator
+        if name is None:
+            self.name = self.op_function.__name__
+        else:
+            self.name = self.name
+
         self.grad_function = None
+        self.num_grad_args = None
 
     def __str__(self):
         return self.op_function.__name__
@@ -210,12 +379,10 @@ class _OpGenerator(object):
             constants = dict(zip(func_args[-len(func_defaults):], func_defaults))
             constants.update(defined_constants)
 
-        f_name = self.op_function.__name__
-
         if self.forbid_none_valued_constants:
             for key in constants.keys():
                 if constants[key] is None:
-                    raise ValueError(f_name + ' argument ' + key + ' is None, which implies an unset constant.\n'
+                    raise ValueError(self.name + ' argument ' + key + ' is None, which implies an unset constant.\n'
                                      '  If a None constant is meaningful for this operator, the operator should be '
                                      'defined with the appropriate decorator flag.')
 
@@ -231,14 +398,14 @@ class _OpGenerator(object):
             except AttributeError:
                 raise TypeError('Unexpectedly received a ' + inp.__class__.__name__ +
                                 ' instead of a tensor at argument position ' +
-                                str(inp_n + 1) + ' in the call to ' + f_name + '.  '
+                                str(inp_n + 1) + ' in the call to ' + self.name + '.  '
                                 'Should this argument be passed as a constant (keyword argument) instead?')
 
         num_inputs = len(input_types)
 
         if len(input_names) != num_inputs:
             err_msg = '\n'
-            err_msg += f_name + ' function signature expects ' + str(len(input_names)) + \
+            err_msg += self.name + ' function signature expects ' + str(len(input_names)) + \
                 ' input tensor argument(s):\n' + str(input_names) + '\n'
             err_msg += 'but was supplied with ' + str(num_inputs) + '.\n'
             if len(input_names) > num_inputs:
@@ -290,14 +457,13 @@ class _OpGenerator(object):
 
         expression_dag = ExpressionDAG.as_proto()
         ExpressionDAG.clear()
-        expression_dag.name = f_name
+        expression_dag.name = self.name
 
         if self.grad_function is None:
             grad_dag = None
         else:
-            grad_args, grad_varargs, grad_keywords, grad_defaults = inspect.getargspec(self.grad_function)
-            if len(output_types) + len(input_names) != len(grad_args[:-len(grad_defaults)]):
-                raise SyntaxError('Gradient function must have inputs equal to the sum of the number of '
+            if len(output_types) + len(input_names) != self.num_grad_args:
+                raise SyntaxError('Gradient function must have number of inputs equal to the sum of the number of '
                                   'inputs and outputs of the operator function.')
 
             grad_inputs = []
@@ -317,6 +483,10 @@ class _OpGenerator(object):
 
             # make sure grad outputs are the same type as op inputs
             for grad_output_index, grad_output in enumerate(grad_outputs):
+                if isinstance(grad_output, _Operator) and len(grad_output.output_types) != 1:
+                    raise TypeError('A multi-output operator was returned from a gradient function, but the meaning '
+                                    'of this is ambiguous: explicitly index each output from operator: ' +
+                                    str(grad_output.name))
                 cur_input_type = input_types[grad_output_index]
                 cur_grad_output_type = TensorType.like(_resolve_output(grad_output))
                 if cur_input_type != cur_grad_output_type:
@@ -326,26 +496,25 @@ class _OpGenerator(object):
 
             grad_dag = _build_op_dag(*grad_outputs).proto_dag
 
-        return _Operator(expression_dag, output_types, inputs, grad_dag, f_name)
+        return _Operator(expression_dag, output_types, inputs, grad_dag, self.name)
 
-    def add_grad(self, grad_function):
+    def add_grad(self, grad_function, num_grad_args):
         if self.grad_function is None:
             self.grad_function = grad_function
+            self.num_grad_args = num_grad_args
         else:
-            raise ValueError('Gradient function is already defined.')
+            raise ValueError('Gradient function is already defined for operator ' + str(self.name) + '.')
 
 
-def operator(forbid_none_valued_constants=True):
+def operator(forbid_none_valued_constants=True, name=None):
     def wrapper(op_function):
         if inspect.getargspec(op_function).keywords is not None:
             raise SyntaxError('Operator functions cannot accept keyword arguments without default values.')
 
-        # TODO: implement vararg input parsing
         if inspect.getargspec(op_function).varargs is not None:
-            raise NotImplementedError('Operator functions cannot accept varags. '
-                                      'This functionality may be enabled in the future.')
+            raise NotImplementedError('Operator functions cannot accept varags.')
 
-        return _OpGenerator(op_function, forbid_none_valued_constants)
+        return _OpGenerator(op_function, forbid_none_valued_constants, name)
     return wrapper
 
 
@@ -355,13 +524,36 @@ def gradient(op_function):
 
     def wrapper(grad_function):
         func_args, func_varargs, func_keywords, func_defaults = inspect.getargspec(op_function.op_function)
-        grad_args, grad_varargs, grad_keywords, grad_defaults = inspect.getargspec(grad_function)
+        if func_defaults is None:
+            func_input_names = func_args
+            func_constants = {}
+        else:
+            num_func_defaults = len(func_defaults)
+            func_input_names = func_args[:-num_func_defaults]
+            func_constants = dict(zip(func_args[-num_func_defaults:], func_defaults))
 
-        func_input_names = func_args[:-len(func_defaults)]
-        func_constants = dict(zip(func_args[-len(func_defaults):], func_defaults))
+        if isinstance(grad_function, _OpGenerator):
+            grad_args, grad_varargs, grad_keywords, grad_defaults = inspect.getargspec(grad_function.op_function)
 
-        grad_input_names = grad_args[:-len(grad_defaults)]
-        grad_constants = dict(zip(grad_args[-len(func_defaults):], grad_defaults))
+            def resolved(*args, **defaults):
+                op = grad_function(*args, **defaults)
+
+                op_outputs = []
+                for output_index in range(len(op.output_types)):
+                    op_outputs.append(op[output_index])
+
+                return op_outputs
+        else:
+            grad_args, grad_varargs, grad_keywords, grad_defaults = inspect.getargspec(grad_function)
+            resolved = grad_function
+
+        if grad_defaults is None:
+            grad_input_names = grad_args
+            grad_constants = {}
+        else:
+            num_grad_defaults = len(grad_defaults)
+            grad_input_names = grad_args[:-num_grad_defaults]
+            grad_constants = dict(zip(grad_args[-num_grad_defaults:], grad_defaults))
 
         if func_constants != grad_constants:
             raise SyntaxError('Constant argument names and default values must be identical for '
@@ -370,7 +562,8 @@ def gradient(op_function):
         if func_input_names != grad_input_names[:len(func_input_names)]:
             raise SyntaxError('Gradient function must have same initial argument names as the op function.')
 
-        op_function.add_grad(grad_function)
+        op_function.add_grad(resolved, len(grad_input_names))
+        return resolved
 
     return wrapper
 
@@ -508,11 +701,369 @@ def _build_op_dag(*outputs):
     return dag
 
 
+def _get_output_indices(expr_dag):
+    """
+    Find indices of expressions that are outputs in the expression dag.
+    :param expr_dag: expression dag
+    :return: a list of output indices
+    """
+    outs = []
+    io_last = -1
+    for iExpr, expr in enumerate(expr_dag.expressions._values):
+        if expr.code == lang.OUTPUT:
+            outs.append(iExpr)
+            assert expr.io_index>io_last # Checks the ordering constraint!
+            io_last = expr.io_index
+    return outs
+
+
+def _get_output_shape(expr_dag, iOut):
+    """
+    Returns the shape of the iOut-th output in the expression dag.
+    :param expr_dag: expression dag
+    :param iOut: output index. Must be >=0 and < number of outputs.
+    :return: shape of the output.
+    """
+    outs = _get_output_indices(expr_dag)
+    assert iOut < len(outs)
+    return expr_dag.expressions._values[outs[iOut]].tensor_type.shape
+
+
+def _get_expr_indices(expr_dag, expr_code):
+    """
+    Get indices of all read/write expression in the expression dag which is represented as a list.
+    :param expr_dag: The expression dag to search for read/write expressions.
+    :param expr_code: The expression code.
+    :return: A list of indices with all expressions that match the expression code.
+    """
+    expr_indices = []
+    exprs = expr_dag.expressions._values
+    for iExp, expr in enumerate(exprs):
+        if expr.code == expr_code:
+            expr_indices.append(iExp)
+    return expr_indices
+
+
+def _get_tensor_read_indices(expr_dag):
+    """
+    Get indices for the READ_TENSOR expression code.
+    :param expr_dag: The expression dag.
+    :return: A list of indices with READ_TENSOR expressions.
+    """
+    return _get_expr_indices(expr_dag, lang.READ_TENSOR)
+
+
+def _get_tensor_write_indices(expr_dag):
+    """
+    Get indices for the ASSIGN_TENSOR expression code.
+    :param expr_dag: The expression dag.
+    :return: A list of indices with ASSIGN_TENSOR expressions.
+    """
+    return _get_expr_indices(expr_dag, lang.ASSIGN_TENSOR)
+
+
+def _get_indices_connected_to_expr_index(exp_dag, expr_indices, expr_index):
+    """
+    Get indices from expr_indices that can be traced back to expr_index.  A typical use case is to see if a READ_TENSOR
+    or ASSIGN_TENSOR expression is linked to an input or output tensor of an operation.
+    :param exp_dag: The expression dag.
+    :param expr_indices: The expression indices to test if they have a connection to expr_index.
+    :param expr_index: An expr_index in the dag. Assumes expr_index>=0 and expr_index<len(exp_dag.expressions._values).
+    :return: A sub-list of expr_indices that contains only those indices of expressions that are connected to the
+    expression at the index expr_index. We DO NOT guarantee for the returned indices to be in the same order than the
+    indices in expr_indices.
+    """
+    connected_indices = set()
+    indices = []
+    for rw_index in expr_indices:
+        indices.append(rw_index)
+        while len(indices) > 0:
+            i = indices.pop(0)
+            for op_index in exp_dag.references._values[i].operand_indices:
+                if op_index==expr_index:
+                    connected_indices.add(rw_index)
+                    # We can stop here, because we traced the op_index back to expr_index.
+                    indices[:] = []
+                    break
+                else:
+                    indices.append(op_index)
+    return list(connected_indices)
+
+def _get_tensor_read_indices_for_expr_index(expr_dag, expr_index):
+    """
+    Returns a list of all TENSOR_READs for the expr_index, which usually is an input/output tensor.
+    An input tensor can only be read but not assigned to in ovl.
+    :param expr_dag: The expression dag.
+    :param expr_index: Usually the index of an input/output tensor.
+    :return: A list of all expression indices that are TENSOR_READs and are connected to expr_index.
+    """
+    read_indices = _get_tensor_read_indices(expr_dag)
+    return _get_indices_connected_to_expr_index(expr_dag, read_indices, expr_index)
+
+def _get_tensor_write_indices_for_expr_index(expr_dag, expr_index):
+    """
+    Returns a list of all TENSOR_ASSIGNs for teh expr_index, which usually is an input/output tensor.
+    One output can have multiple writes but never a read. That is not allowed in ovl.
+    :param expr_dag: The expression dag.
+    :param expr_index: Usually the index of an input/output tensor.
+    :return: A list of all expression indices that are TENSOR_ASSIGNs and are connected to expr_index.
+    """
+    write_indices = _get_tensor_write_indices(expr_dag)
+    return _get_indices_connected_to_expr_index(expr_dag, write_indices, expr_index)
+
+def _refs_pos(expr_dag, expr_index):
+    """
+    Returns True if the input references of expr_index have a POSITION code among them otherwise False.
+    :param expr_dag: The expression dag.
+    :param expr_index: The expression index to inspect.
+    :return: True if POSITION code is among the input references otherwise False.
+    """
+    for op_index in expr_dag.references._values[expr_index].operand_indices:
+        expr = expr_dag.expressions._values[op_index]
+        if expr.code == lang.POSITION:
+            return True
+
+    return False
+
+
+def _get_worker_indices(expr_dag, tensor_rw_index):
+    """
+    We define the worker index of TENSOR_READ or a TENSOR_ASSIGN as follows:
+    (i)  it must be traced back to a POSITION code.
+    (ii) since the codes contain the flattened index we re-construct the original index position in row-major order
+         based on the ADD tree when flatting the index.
+    For instance, assume our tensor_rw_index and those codes before the tensor_rw_index express tensor[i0,i1,i2,...],
+    and i2 is traced back to a POSITION code, then we return 2.
+    Because there could be multiple READS or ASSIGNS we return a list of indices.
+    :param expr_dag: The expression dag.
+    :param tensor_rw_index: The index of the read/write code to look into.
+    :return: A list of worker indices.
+    """
+    worker_indices = [] # empty if none found, no worker reads from this tensor
+    # Walk the tree from the root to the leaves and then return that leave which has the POSITION code.
+    indices = [(tensor_rw_index, 0)]
+    while len(indices) > 0:
+        multi_index = indices.pop(0)
+        expr_index = multi_index[0]
+        arg_index = multi_index[1]
+        op_indices = expr_dag.references._values[expr_index].operand_indices
+        for i, op_index in enumerate(op_indices):
+            wasAddOp = expr_dag.expressions._values[expr_index].code == lang.ADD
+            expr = expr_dag.expressions._values[op_index]
+            if wasAddOp:
+                arg_index = arg_index + i # We assume that ADD codes are binary i=0 or i=1!
+            # Do not follow further READ_TENSOR instances.
+            if expr.code != lang.READ_TENSOR:
+                indices.append((op_index, arg_index))
+            else:
+                # Immediate read from POSITION otherwise we do not need to follow another tensor read.
+                if _refs_pos(expr_dag, op_index):
+                    worker_indices.append(arg_index)
+    return worker_indices
+
+
+def _match_index_in_expr_dags(expr_dag0, expr_index0, expr_dag1, expr_index1):
+    """
+    Compare the indexing by matching the sub-expression trees in expr_dag0 and expr_dag1. This captures also more
+    complex indexing patterns as given by mod, shift etc.
+    :param expr_dag0: The first expression dag.
+    :param expr_index0: The index that refers to the READ_TENSOR or ASSIGN_TENSOR statement in the first dag.
+    :param expr_dag1: The second expression dag.
+    :param expr_index1: The index that refers to the READ_TENSOR or ASSIGN_TENSOR statement in the second dag.
+    :return: True if the codes of all expressions match, otherwise False.
+    """
+    op_indices0 = expr_dag0.references._values[expr_index0].operand_indices
+    op_indices1 = expr_dag1.references._values[expr_index1].operand_indices
+    assert len(op_indices0) > 1 # Must have sub-expression tree for index at pos 1
+    assert len(op_indices1) > 1 # Must have sub-expression tree for index at pos 1
+    index0  = op_indices0[1]
+    index1  = op_indices1[1]
+    indices = [(index0, index1)] # Initialize the indices with the index expression in both sub-trees.
+    while len(indices) > 0:
+        multi_index = indices.pop(0)
+        index0      = multi_index[0]
+        index1      = multi_index[1]
+        expr0       = expr_dag0.expressions._values[index0]
+        expr1       = expr_dag1.expressions._values[index1]
+
+        if expr0.code != expr1.code:
+            return False
+
+        if expr0.code == lang.CONST_SCALAR:
+            if expr0.sint64_data != expr1.sint64_data:
+                return False
+
+        op_indices0 = expr_dag0.references._values[index0].operand_indices
+        op_indices1 = expr_dag1.references._values[index1].operand_indices
+
+        if len(op_indices0) != len(op_indices1):
+            return False
+
+        for i in range(len(op_indices0)):
+            indices.append((op_indices0[i], op_indices1[i]))
+
+    return True
+
+
+def _eliminate_duplicates(l):
+    """
+    Removes duplicates from a list while maintaining the order of elements (stable).
+    :param l: The input list.
+    :return: List where duplicates were removed.
+    """
+    # TODO: Improve this implementation of making lists unique while maintaining the original order (stable).
+    duplicate = [False] * len(l)
+    for i1 in range(len(l)):
+        e = l[i1]
+        for i2 in range(i1+1,len(l)):
+            if e == l[i2]:
+                duplicate[i2] = True
+    unique = []
+    for i, d in zip(range(len(duplicate)), duplicate):
+        if not d:
+            unique.append(l[i])
+    return unique
+
+
+class _MergeRef(namedtuple('_MergeRef', ['to_op_index', 'to_in_arg_index', 'from_op_index', 'from_out_arg_index'])):
+    """
+    Merge reference referring to the indices in the operation dag to/from indices and the input/output argument index
+    as defined in the signature of the operation. This input/output argument index has a correspondence in the
+    expression dag of the operator.
+    :param to_op_index: As from the programmers view this is a to operation with arguments supplied by a from operation.
+    :param to_in_arg_index: The index of the input argument in the to operation.
+    :param from_op_index: The operation that arguments are supplied from.
+    :param from_out_arg_index: The index of the output argument of the from operation.
+    :return: A to merge reference.
+    """
+    __slots__ = () # empty slots
+    def same(self, ref):
+        """
+        Two merge reference are the same if all their indices match. This method does NOT measure object equality.
+        :param ref: The other merge reference.
+        :return: True if they are the same or False otherwise.
+        """
+        return self.to_op_index == ref.to_op_index \
+               and self.to_in_arg_index == ref.to_in_arg_index \
+               and self.from_op_index == ref.from_op_index \
+               and self.from_out_arg_index == ref.from_out_arg_index
+
+_MergeInfo = namedtuple('_MergeInfo', ['merge_refs','merge_names'])
+
+
+def _get_merge_refs_for_op_dag(op_dag):
+    """
+    Creates a list of operators with their arguments that can be merged into single operators. Notice that merge
+    information is given per argument.
+    :param op_dag: operator dag.
+    :return: merge information that contains a list of merge_refs for operators and their input/output arguments and it
+    contains a list of merge_names of operator names (ambiguous) together with argument indices as strings which is ONLY
+    useful for debugging.
+    """
+    dag     = op_dag.proto_dag          # get the dag
+    ops     = dag.operators._values     # get operators, each operator contains an expression dag
+    outs    = dag.dag_outputs._values   # get outputs of the operator dag
+    refs    = dag.references._values    # references of the operator dag
+
+    # Walk the dag from each output to inputs and compute information about merging of ops.
+    inputs      = []    # List (ab)used as queue.
+    staged      = set() # Set that holds ops staged for processing.
+    merge_refs  = []    # Holds the indices of ops in tuples.
+    merge_names = []    # For debugging hold the name of ops (those are not unique).
+
+    for output in outs:
+
+        iOutput = output.op_index   # operator index of this output
+        inputs.append(iOutput)      # add output index
+        staged.clear()              # remove all staged operator indices.
+        staged.add(iOutput)         # mark this operator index as staged.
+
+        while len(inputs) > 0:
+            to_op_index         = inputs.pop(0)
+            to_exp_dag          = ops[to_op_index]
+            to_ref              = refs[to_op_index]
+            to_workgroup_shape  = to_exp_dag.workgroup_shape
+
+            #for to_in_arg_index, input in zip(range(len(to_ref.input_refs)), to_ref.input_refs):
+            for to_in_arg_index, input in enumerate(to_ref.input_refs):
+                from_op_index = input.op_index
+
+                # Do not consider leaf nodes.
+                if input.is_leaf:
+                    continue
+
+                # Append if not staged.
+                if from_op_index not in staged:
+                    staged.add(from_op_index)
+                    inputs.append(from_op_index)
+
+                expr                    = to_exp_dag.expressions._values[input.dag_input_index]
+                from_exp_dag            = ops[from_op_index]
+                from_workgroup_shape    = from_exp_dag.workgroup_shape
+                input_shape_of_out      = expr.tensor_type.shape
+                output_indices          = _get_output_indices(from_exp_dag)
+                output_index            = output_indices[input.op_output_index]
+                output_shape_of_in      = _get_output_shape(from_exp_dag, input.op_output_index)
+
+                match = to_workgroup_shape == from_workgroup_shape
+                assert input_shape_of_out == output_shape_of_in # Must always match in well defined dags.
+
+                #print('%s in [%d], %s out [%d]' % (to_exp_dag.name, to_in_arg_index, from_exp_dag.name, input.op_output_index))
+
+                if not match:
+                    #print('Workgroup shapes dont match.')
+                    continue
+
+                # get the indexing pattern for the output to this input.
+                tensor_write_indices = _get_tensor_write_indices_for_expr_index(from_exp_dag, output_index)
+                match = len(tensor_write_indices) == 1
+
+                if not match:
+                    #print('Multiple writes to output tensor.')
+                    continue
+
+                # if there are multiple different write patterns we cannot merge.
+                tensor_write_index = tensor_write_indices[0]
+                tensor_read_indices = _get_tensor_read_indices_for_expr_index(to_exp_dag, input.dag_input_index)
+                for read_index in tensor_read_indices:
+                    match = _match_index_in_expr_dags(from_exp_dag, tensor_write_index, to_exp_dag, read_index)
+                    if not match:
+                        break
+
+                if not match:
+                    #print('Non match read/write index pattern')
+                    #print('Read pattern: ', index_read_pattern)
+                    #print('Write pattern: ', index_write_pattern)
+                    continue
+
+                merge_refs.append(_MergeRef(to_op_index=to_op_index,
+                                         to_in_arg_index=to_in_arg_index,
+                                         from_op_index=from_op_index,
+                                         from_out_arg_index=input.op_output_index))
+                merge_names.append((to_exp_dag.name + ' in [%d]' % to_in_arg_index,
+                                 from_exp_dag.name + ' out [%d]' % input.op_output_index))
+
+    # Duplicates are eliminated in merge_refs and merge_names
+    merge_refs = _eliminate_duplicates(merge_refs)
+    merge_names = _eliminate_duplicates(merge_names)
+    return _MergeInfo(merge_refs=merge_refs, merge_names=merge_names)
+
+
+def _merge_op_dag(op_dag):
+    merge_refs = _get_merge_refs_for_op_dag(op_dag)
+    # TODO: Apply the merge_refs to the op_dag by fusing expression dags.
+    # TODO: When merging expression dags with loops/<<= insert a temporary for each output/input pair.
+    # TODO: Need to keep gradient dags in mind.
+    return op_dag
+
+
 def _make_generic_c(src, name):
     # look for generic c++ shared library in the operator cache
     generic_cpp_so_path = os.path.join(cache_directory, name + '_generic_cpp.so')
 
     if not os.path.exists(generic_cpp_so_path):
+        logger.debug('Compiling generic C++ for Op ' + name)
+
         generic_cpp_path = os.path.join(cache_directory, name + '_generic_cpp.cpp')
         with open(generic_cpp_path, 'w') as f:
             f.write(src)
@@ -528,7 +1079,7 @@ def _make_generic_c(src, name):
                                     stderr=subprocess.STDOUT,
                                     universal_newlines=True)
         except subprocess.CalledProcessError as exception:
-            tf.logging.log(tf.logging.ERROR, 'g++ error: ' + exception.output)
+            logger.debug('g++ error: ' + exception.output)
             raise
 
     return generic_cpp_so_path
@@ -538,6 +1089,7 @@ def _make_generic_cuda(src, name):
     # look for generic cuda shared library in the operator cache
     generic_cuda_so_path = os.path.join(cache_directory, name + '_generic_cuda.so')
     if not os.path.exists(generic_cuda_so_path):
+        logger.debug('Compiling generic CUDA for Op ' + name)
         # generate and compile generic cuda operator
         nvcc_path = os.path.join(cuda_directory, 'bin/nvcc')
         generic_cuda_path = os.path.join(cache_directory, name + '_generic_cuda.cu')
@@ -558,7 +1110,7 @@ def _make_generic_cuda(src, name):
                                     stderr=subprocess.STDOUT,
                                     universal_newlines=True)
         except subprocess.CalledProcessError as exception:
-            tf.logging.log(tf.logging.ERROR, 'nvcc error: ' + exception.output)
+            logger.debug('nvcc error: ' + exception.output)
             raise
 
         # clean up .o files
@@ -634,6 +1186,7 @@ def profile(output_list, target_language='cpp', profiling_iterations=1):
         try:
             libtest = ctypes.cdll.LoadLibrary(testlib_path)
         except OSError:
+            import tensorflow as tf
             this_file_path = os.path.abspath(__file__)
             this_directory = os.path.split(this_file_path)[0]
             tf_include = tf.sysconfig.get_include()
@@ -651,7 +1204,7 @@ def profile(output_list, target_language='cpp', profiling_iterations=1):
                                         stderr=subprocess.STDOUT,
                                         universal_newlines=True)
             except subprocess.CalledProcessError as exception:
-                tf.logging.log(tf.logging.ERROR, 'g++ error: ' + exception.output)
+                logger.debug('g++ error: ' + exception.output)
                 raise
 
             libtest = ctypes.cdll.LoadLibrary(testlib_path)
@@ -700,7 +1253,7 @@ def profile(output_list, target_language='cpp', profiling_iterations=1):
                                         stderr=subprocess.STDOUT,
                                         universal_newlines=True)
             except subprocess.CalledProcessError as exception:
-                tf.logging.log(tf.logging.ERROR, 'nvcc error: ' + exception.output)
+                logger.debug('nvcc error: ' + exception.output)
                 raise
 
             # clean up .o files
@@ -824,10 +1377,8 @@ def _dag_to_tf(dag, inputs, grad_dags):
         op_c_src, op_cuda_src, op_c_generic, op_cuda_generic = \
             ExpressionDAG.generate(op, name)
 
-        tf.logging.log(tf.logging.DEBUG, 'Compiling generic C++ for Op ' + name)
         cpu_op_lib = _make_generic_c(op_c_generic, name)
         if cuda_enabled:
-            tf.logging.log(tf.logging.DEBUG, 'Compiling generic CUDA for Op ' + name)
             cuda_op_lib = _make_generic_cuda(op_cuda_generic, name)
         else:
             cuda_op_lib = ''

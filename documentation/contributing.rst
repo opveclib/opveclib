@@ -4,6 +4,10 @@ Contributor's Guide
 Contribution Policy
 -------------------
 
+* Do not use a logging level above debug - library should be silent unless there is an error raised, or the user is
+   explicitly capturing debug level logs.
+* Do not use print statements. All debugging output should be made to the library's logger.
+* All functionality must be tested.
 
 Contributor License Agreement
 -----------------------------

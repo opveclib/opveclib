@@ -8,10 +8,8 @@
 # on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for
 # the specific language governing permissions and limitations under the License.
 
-from __future__ import print_function
 import unittest
 import numpy as np
-from sys import _getframe
 from ..operator import operator, evaluate
 from ..expression import position_in, output_like
 from ..local import cuda_enabled, clear_op_cache
@@ -44,8 +42,9 @@ def multi_op(input0, input1, input2):
 
 
 class TestMultipleOutputs(unittest.TestCase):
+    clear_op_cache()
+
     def test(self):
-        print('*** Running Test: ' + self.__class__.__name__ + ' function: ' + _getframe().f_code.co_name)
         a = np.random.random(5)
         b = np.random.random(5)
         c = np.random.random(5)
@@ -61,8 +60,3 @@ class TestMultipleOutputs(unittest.TestCase):
             assert np.allclose(op_cuda[0], a+b)
             assert np.allclose(op_cuda[1], (a+b)*c)
             assert np.allclose(op_cuda[2], a+b+c)
-
-
-if __name__ == '__main__':
-    clear_op_cache()
-    unittest.main()

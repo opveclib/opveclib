@@ -8,13 +8,4 @@
 # on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for
 # the specific language governing permissions and limitations under the License.
 
-from __future__ import print_function
-import unittest
-import os
-
-loader = unittest.TestLoader()
-testpath = os.path.dirname(__file__)
-print('running tests in ' + testpath)
-tests = loader.discover(testpath)
-testRunner = unittest.runner.TextTestRunner()
-testRunner.run(tests)
+from .math import *

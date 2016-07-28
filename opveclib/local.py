@@ -15,10 +15,10 @@ import logging
 import tensorflow as tf
 
 #: Version string for current version
-version = '1.0.0-dev1'
+version = '1.0.1-dev1'
 
 #: The log
-log = logging.getLogger('opveclib')
+logger = logging.getLogger('opveclib')
 
 # set directories for cuda and operator cache
 cuda_directory = os.getenv('CUDA_HOME', '/usr/local/cuda')
@@ -50,7 +50,7 @@ cuda_enabled = True
 # test whether we have cuda installed and if the tensorflow cuda version is installed
 if not os.path.exists(cuda_directory):
     cuda_enabled = False
-    tf.logging.log(tf.logging.INFO, '*** CUDA directory not found - Running on CPU Only ***')
+    logger.debug('*** CUDA directory not found - Running on CPU Only ***')
 elif not tf.test.is_built_with_cuda():
     cuda_enabled = False
-    tf.logging.log(tf.logging.INFO, '*** TensorFlow CUDA version not installed - Running on CPU Only ***')
+    logger.debug('*** TensorFlow CUDA version not installed - Running on CPU Only ***')
