@@ -77,7 +77,8 @@ class DynamicLibLaunch<CPUDevice>  {
  public:
     typedef uint16_t
         (*FUNPTR)(std::vector<std::shared_ptr<const InputParameter>> inputs,
-                  std::vector<std::shared_ptr<OutputParameter>> outputs, int num_threads, int thread_idx);
+                  std::vector<std::shared_ptr<OutputParameter>> outputs,
+                  int num_threads, int thread_idx, uint16_t *err);
     DynamicLibLaunch(OpKernelConstruction* context,
                      const string& cpu_func_name, const string& cpu_lib_path,
                      const string&, const string&,
@@ -105,14 +106,14 @@ class DynamicLibLaunch<CPUDevice>  {
              std::vector<std::shared_ptr<OutputParameter>> outputs) {
         const int num_threads = context->device()->tensorflow_cpu_worker_threads()->workers->NumThreads();
         thread::ThreadPool thread_pool(Env::Default(), "dynamiclibop", num_threads);
+        uint16_t err = 0;
         for (int thread = 0; thread < num_threads; thread++) {
-            auto fn_work = std::bind(func_, inputs, outputs, num_threads, thread);
+            auto fn_work = std::bind(func_, inputs, outputs, num_threads, thread, &err);
             thread_pool.Schedule(fn_work);
         }
-//        uint16_t err = func_(inputs, outputs, &thread_pool);
-//        OP_REQUIRES(context, err == 0,
-//            errors::InvalidArgument("External function execution error code: ",
-//                                    err));
+        OP_REQUIRES(context, err == 0,
+            errors::InvalidArgument("External function execution error code: ",
+                                    err));
     }
 
  private:

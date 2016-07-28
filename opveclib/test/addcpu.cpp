@@ -20,7 +20,7 @@
 //#define EIGEN_USE_NONBLOCKING_THREAD_POOL
 
 // worker functions
-int Add2CPUWork(const float *in0, const float *in1, float* out, int64_t len,
+void Add2CPUWork(const float *in0, const float *in1, float* out, int64_t len,
                  uint32_t block_size, uint32_t thread_index) {
     int64_t begin = thread_index * block_size;
     int64_t end = begin + block_size;
@@ -28,10 +28,9 @@ int Add2CPUWork(const float *in0, const float *in1, float* out, int64_t len,
     for (int64_t i = begin; i < end; i++ ) {
 		out[i] = in0[i] + in1[i];
 	}
-	return 0;
 }
 
-int AddFDFCPUWork(const float *in0, const double *in1, const float* in2, float* out, int64_t len,
+void AddFDFCPUWork(const float *in0, const double *in1, const float* in2, float* out, int64_t len,
                    uint32_t block_size, uint32_t thread_index) {
     int64_t begin = thread_index * block_size;
     int64_t end = begin + block_size;
@@ -39,10 +38,9 @@ int AddFDFCPUWork(const float *in0, const double *in1, const float* in2, float* 
     for (int64_t i = begin; i < end; i++ ) {
 		out[i] = in0[i] + in1[i] + in2[i];
 	}
-	return 0;
 }
 
-int SumSqCPUWork(const float *in0, const double *in1, float* out0, float* out1, int64_t len,
+void SumSqCPUWork(const float *in0, const double *in1, float* out0, float* out1, int64_t len,
                  uint32_t block_size, uint32_t thread_index) {
     int64_t begin = thread_index * block_size;
     int64_t end = begin + block_size;
@@ -51,16 +49,22 @@ int SumSqCPUWork(const float *in0, const double *in1, float* out0, float* out1, 
 		out0[i] = in0[i] + in1[i];
 		out1[i] = out0[i] * out0[i];
 	}
-	return 0;
 }
 
 // CPU functions to be called by the TF dynamic_lib_addgpu_test.py
 
 ADDCPU_EXPORT
-int add2float(std::vector<std::shared_ptr<const InputParameter>> inputs,
-		      std::vector<std::shared_ptr<OutputParameter>> outputs, int num_threads, int thread_index) {
-	if (inputs.size() != 2) return 1;
-	if (outputs.size() != 1) return 1;
+void add2float(std::vector<std::shared_ptr<const InputParameter>> inputs,
+		      std::vector<std::shared_ptr<OutputParameter>> outputs,
+		      int num_threads, int thread_index, uint16_t *err) {
+	if (inputs.size() != 2) {
+	    *err = 1;
+	    return;
+	}
+	if (outputs.size() != 1) {
+	    *err = 1;
+	    return;
+	}
 
 	float *out = outputs[0]->get<float>();
 	const float *in0 = inputs[0]->get<float>();
@@ -87,10 +91,18 @@ int add2float(std::vector<std::shared_ptr<const InputParameter>> inputs,
 }
 
 ADDCPU_EXPORT
-int addFloatDoubleFloat(std::vector<std::shared_ptr<const InputParameter>> inputs,
-	      std::vector<std::shared_ptr<OutputParameter>> outputs, int num_threads, int thread_index) {
-	if (inputs.size() != 3) return 1;
-	if (outputs.size() != 1) return 1;
+void addFloatDoubleFloat(std::vector<std::shared_ptr<const InputParameter>> inputs,
+	      std::vector<std::shared_ptr<OutputParameter>> outputs,
+	      int num_threads, int thread_index, uint16_t *err) {
+	if (inputs.size() != 3) {
+	    *err = 1;
+	    return;
+	}
+
+	if (outputs.size() != 1) {
+	    *err = 1;
+	    return;
+	}
 
 	int64_t len = inputs[0]->length();
 	float *out = outputs[0]->get<float>();
@@ -104,10 +116,17 @@ int addFloatDoubleFloat(std::vector<std::shared_ptr<const InputParameter>> input
 }
 
 ADDCPU_EXPORT
-int sumAndSq(std::vector<std::shared_ptr<const InputParameter>> inputs,
-	      std::vector<std::shared_ptr<OutputParameter>> outputs, int num_threads, int thread_index) {
-	if (inputs.size() != 2) return 1;
-	if (outputs.size() != 2) return 1;
+void sumAndSq(std::vector<std::shared_ptr<const InputParameter>> inputs,
+	      std::vector<std::shared_ptr<OutputParameter>> outputs,
+	      int num_threads, int thread_index, uint16_t *err) {
+	if (inputs.size() != 2) {
+	    *err = 1;
+	    return;
+	}
+	if (outputs.size() != 2) {
+	    *err = 1;
+	    return;
+	}
 
 	int64_t len = inputs[0]->length();
 	float *out0 = outputs[0]->get<float>();
