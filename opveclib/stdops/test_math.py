@@ -184,4 +184,4 @@ class TestMath(unittest.TestCase):
             print(ovl_split_0d[0].get_attr('out_shapes'))
             ovl_grad_0d = tf.gradients(ovl_split_0d[0], arg_1d)[0]
 
-            # print(s.run(tf_grad_4d) - s.run(ovl_grad_4d))
+            print(s.run(tf_grad_0d) - s.run(ovl_grad_0d))

@@ -88,6 +88,7 @@ class _DynamicLibOp(object):
 
                 grad_dag = lang.OperatorDAG()
                 grad_dag.ParseFromString(op.get_attr('serialized_grad_dag'))
+                grad_dag_arg_index=op.get_attr('grad_dag_arg_index')
 
                 try:
                     len(grads)
@@ -105,8 +106,12 @@ class _DynamicLibOp(object):
                     grad_inputs.append(grad)
                     grad_of_grad_dags.append(None)
 
+                selected_inputs = []
+                for arg_index in grad_dag_arg_index:
+                    selected_inputs.append(grad_inputs[arg_index])
+
                 # make sure that the input types and expected types are consistent
-                for grad_input_index, grad_input in enumerate(grad_inputs):
+                for grad_input_index, grad_input in enumerate(selected_inputs):
                     received_type = TensorType.like(grad_input).as_proto()
                     expected_type = grad_dag.dag_input_types[grad_input_index]
 
@@ -115,7 +120,7 @@ class _DynamicLibOp(object):
                                         ', but expected a type: ' + str(expected_type) +
                                         ' at gradient input index: ' + str(grad_input_index))
 
-                return _dag_to_tf(grad_dag, grad_inputs, grad_of_grad_dags)
+                return _dag_to_tf(grad_dag, selected_inputs, grad_of_grad_dags, None)
 
             _DynamicLibOp._gradient_registered = True
 
@@ -232,12 +237,13 @@ class _Operator(object):
     # raise operator priority so that numpy does not try to use its own operator
     __array_priority__ = 1
 
-    def __init__(self, dag, output_types, inputs, grad_dag, name):
+    def __init__(self, dag, output_types, inputs, grad_dag, grad_dag_arg_index, name):
         self.inputs = inputs
         self.expression_dag = dag
         self.output_types = output_types
         self.name = name
         self.grad_dag = grad_dag
+        self.grad_dag_arg_index = grad_dag_arg_index
 
         logger.debug('Operator created: ' + str(dag.name))
 
@@ -459,7 +465,8 @@ class _OpGenerator(object):
         expression_dag.name = self.name
 
         if self.grad_function is None:
-            grad_dag = None
+            proto_grad_dag = None
+            grad_dag_arg_index = None
         else:
             grad_inputs = []
             for t in input_types:
@@ -489,9 +496,13 @@ class _OpGenerator(object):
                                     str(cur_grad_output_type) + ' is inconsistent with operator input index ' +
                                     str(grad_output_index) + ', with TensorType: ' + str(cur_input_type))
 
-            grad_dag = _build_op_dag(*grad_outputs).proto_dag
+            grad_dag = _build_op_dag(*grad_outputs)
+            proto_grad_dag = grad_dag.proto_dag
+            grad_dag_arg_index = []
+            for inp in grad_dag.inputs:
+                grad_dag_arg_index.append(grad_inputs.index(inp))
 
-        return _Operator(expression_dag, output_types, inputs, grad_dag, self.name)
+        return _Operator(expression_dag, output_types, inputs, proto_grad_dag, grad_dag_arg_index, self.name)
 
     def add_grad(self, grad_function):
         if self.grad_function is None:
@@ -1321,11 +1332,14 @@ def as_tensorflow(tensor_list):
     :return: A TensorFlow operator.
     """
     op_dag = _build_op_dag(*tensor_list)
+    grad_dag_arg_index_list = []
+    for op in op_dag.operators:
+        grad_dag_arg_index_list.append(op.grad_dag_arg_index)
 
-    return _dag_to_tf(op_dag.proto_dag, op_dag.inputs, op_dag.grad_dags)
+    return _dag_to_tf(op_dag.proto_dag, op_dag.inputs, op_dag.grad_dags, grad_dag_arg_index_list)
 
 
-def _dag_to_tf(dag, inputs, grad_dags):
+def _dag_to_tf(dag, inputs, grad_dags, grad_dag_arg_index_list):
     output_tensors = []
     # compile all ops in the dag
     for op_index, op in enumerate(dag.operators):
@@ -1358,8 +1372,10 @@ def _dag_to_tf(dag, inputs, grad_dags):
 
         if grad_dags[op_index] is None:
             serialized_grad_dag = ''
+            grad_dag_arg_index = []
         else:
             serialized_grad_dag = grad_dags[op_index].SerializeToString()
+            grad_dag_arg_index = grad_dag_arg_index_list[op_index]
 
         tf_op = _DynamicLibOp.module().dynamic_lib(inputs=cur_inputs,
                                                    out_shapes=out_shapes,
@@ -1369,6 +1385,7 @@ def _dag_to_tf(dag, inputs, grad_dags):
                                                    gpu_lib_path=cuda_op_lib,
                                                    gpu_func_name=name + '_generic_cuda',
                                                    serialized_grad_dag=serialized_grad_dag,
+                                                   grad_dag_arg_index=grad_dag_arg_index,
                                                    cuda_threads_per_block=_default_cuda_threads_per_block)
         output_tensors.append(tf_op)
 
