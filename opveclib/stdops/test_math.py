@@ -14,11 +14,11 @@ import tensorflow as tf
 from ..operator import operator, evaluate, as_tensorflow
 from ..expression import position_in, output_like
 from ..local import clear_op_cache
-from .math import add, sub, mul, div, neg, tanh, sigmoid
+from .math import add, sub, mul, div, neg, tanh, sigmoid, split
 
 
 class TestMath(unittest.TestCase):
-    clear_op_cache()
+    # clear_op_cache()
 
     def test_binary_infix(self):
         """
@@ -148,3 +148,27 @@ class TestMath(unittest.TestCase):
             test_grad(lambda x: neg(x), lambda x: tf.neg(x))
             test_grad(lambda x: tanh(x), lambda x: tf.tanh(x))
             test_grad(lambda x: sigmoid(x), lambda x: tf.sigmoid(x))
+
+    def test_split(self):
+        with tf.Session() as s:
+            arg_1d = tf.constant(np.random.random(10))
+            arg_2d = tf.constant(np.random.random(100).reshape((10, 10)))
+            arg_3d = tf.constant(np.random.random(1000).reshape((10, 10, 10)))
+            arg_4d = tf.constant(np.random.random(10000).reshape((10, 10, 10, 10)))
+
+            num_split = 5
+            ovl_1d = s.run(as_tensorflow(split(arg_1d, split_dim=0, num_split=num_split)))
+            ovl_2d = s.run(as_tensorflow(split(arg_2d, split_dim=1, num_split=num_split)))
+            ovl_3d = s.run(as_tensorflow(split(arg_3d, split_dim=2, num_split=num_split)))
+            ovl_4d = s.run(as_tensorflow(split(arg_4d, split_dim=3, num_split=num_split)))
+
+            tf_1d = s.run(tf.split(0, num_split, arg_1d))
+            tf_2d = s.run(tf.split(1, num_split, arg_2d))
+            tf_3d = s.run(tf.split(2, num_split, arg_3d))
+            tf_4d = s.run(tf.split(3, num_split, arg_4d))
+
+            for n in range(num_split):
+                assert np.all(np.equal(ovl_1d[n], tf_1d[n]))
+                assert np.all(np.equal(ovl_2d[n], tf_2d[n]))
+                assert np.all(np.equal(ovl_3d[n], tf_3d[n]))
+                assert np.all(np.equal(ovl_4d[n], tf_4d[n]))

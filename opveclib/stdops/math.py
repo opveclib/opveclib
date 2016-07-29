@@ -79,6 +79,34 @@ def sigmoid_grad(arg, grad_above):
     return grad
 
 
+@operator()
+def split(arg, split_dim=None, num_split=None):
+    split_size, remainder = divmod(arg.shape[split_dim], num_split)
+    if remainder != 0:
+        raise ValueError('num_split must evenly divide the axis')
+
+    out_shape = []
+    for dim in range(arg.rank):
+        if dim == split_dim:
+            out_shape.append(split_size)
+        else:
+            out_shape.append(arg.shape[dim])
+    pos = position_in(out_shape)
+
+    outputs = []
+    for n in range(num_split):
+        outputs.append(output(out_shape, arg.dtype))
+        input_pos = []
+        for dim in range(arg.rank):
+            if dim == split_dim:
+                input_pos.append(n*split_size + pos[dim])
+            else:
+                input_pos.append(pos[dim])
+        outputs[n][pos] = arg[input_pos]
+
+    return outputs
+
+
 def _broadcast_cwise_binary(lhs, rhs, fcn):
     if lhs.dtype != rhs.dtype:
         raise TypeError('Binary operator input dtypes must be the same.')
