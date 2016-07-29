@@ -237,13 +237,14 @@ class _Operator(object):
     # raise operator priority so that numpy does not try to use its own operator
     __array_priority__ = 1
 
-    def __init__(self, dag, output_types, inputs, grad_dag, grad_dag_arg_index, name):
+    def __init__(self, dag, output_types, inputs, grad_dag, grad_dag_arg_index, from_gradient, name):
         self.inputs = inputs
         self.expression_dag = dag
         self.output_types = output_types
         self.name = name
         self.grad_dag = grad_dag
         self.grad_dag_arg_index = grad_dag_arg_index
+        self.from_gradient = from_gradient
 
         logger.debug('Operator created: ' + str(dag.name))
 
@@ -375,6 +376,19 @@ class _OpGenerator(object):
         return self.op_function.__name__
 
     def __call__(self, *inputs, **defined_constants):
+
+        # Determine if this function is part of a gradient graph. If so, do not generate a gradient DAG.
+        from_gradient = False
+        for inp in inputs:
+            try:
+                if inp.from_gradient:
+                    from_gradient = True
+            except AttributeError:
+                pass
+
+            if isinstance(inp, _GradientPlaceholder):
+                from_gradient = True
+
         func_args, func_varargs, func_keywords, func_defaults = inspect.getargspec(self.op_function)
         if func_defaults is None:
             input_names = func_args
@@ -464,7 +478,7 @@ class _OpGenerator(object):
         ExpressionDAG.clear()
         expression_dag.name = self.name
 
-        if self.grad_function is None:
+        if self.grad_function is None or from_gradient:
             proto_grad_dag = None
             grad_dag_arg_index = None
         else:
@@ -502,7 +516,8 @@ class _OpGenerator(object):
             for inp in grad_dag.inputs:
                 grad_dag_arg_index.append(grad_inputs.index(inp))
 
-        return _Operator(expression_dag, output_types, inputs, proto_grad_dag, grad_dag_arg_index, self.name)
+        return _Operator(expression_dag, output_types, inputs, proto_grad_dag, grad_dag_arg_index,
+                         from_gradient, self.name)
 
     def add_grad(self, grad_function):
         if self.grad_function is None:

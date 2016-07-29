@@ -14,7 +14,7 @@ import tensorflow as tf
 from ..operator import operator, evaluate, as_tensorflow
 from ..expression import position_in, output_like
 from ..local import clear_op_cache
-from .math import add, sub, mul, div, neg, tanh, sigmoid, split
+from .math import add, sub, mul, div, neg, tanh, sigmoid, split, concat
 
 
 class TestMath(unittest.TestCase):
@@ -149,6 +149,55 @@ class TestMath(unittest.TestCase):
             test_grad(lambda x: tanh(x), lambda x: tf.tanh(x))
             test_grad(lambda x: sigmoid(x), lambda x: tf.sigmoid(x))
 
+    def test_concat(self):
+        with tf.Session() as s:
+            num_concat = 5
+            args_1d = []
+            args_2d = []
+            args_3d = []
+            args_4d = []
+            for n in range(num_concat):
+                args_1d.append(tf.constant(np.random.random(10/num_concat).reshape((10/num_concat))))
+                args_2d.append(tf.constant(np.random.random(100/num_concat).reshape((10, 10/num_concat))))
+                args_3d.append(tf.constant(np.random.random(1000/num_concat).reshape((10, 10, 10/num_concat))))
+                args_4d.append(tf.constant(np.random.random(10000/num_concat).reshape((10, 10, 10, 10/num_concat))))
+
+            tf_1d = tf.concat(0, args_1d)
+            tf_2d = tf.concat(1, args_2d)
+            tf_3d = tf.concat(2, args_3d)
+            tf_4d = tf.concat(3, args_4d)
+
+            ovl_1d = as_tensorflow(concat(*args_1d, concat_dim=0))
+            ovl_2d = as_tensorflow(concat(*args_2d, concat_dim=1))
+            ovl_3d = as_tensorflow(concat(*args_3d, concat_dim=2))
+            ovl_4d = as_tensorflow(concat(*args_4d, concat_dim=3))
+
+            assert np.all(np.equal(*s.run([tf_1d, ovl_1d])))
+            assert np.all(np.equal(*s.run([tf_2d, ovl_2d])))
+            assert np.all(np.equal(*s.run([tf_3d, ovl_3d])))
+            assert np.all(np.equal(*s.run([tf_4d, ovl_4d])))
+
+            grad_above_1d = tf.constant(np.random.random(10))
+            grad_above_2d = tf.constant(np.random.random(100).reshape((10, 10)))
+            grad_above_3d = tf.constant(np.random.random(1000).reshape((10, 10, 10)))
+            grad_above_4d = tf.constant(np.random.random(10000).reshape((10, 10, 10, 10)))
+
+            tf_grads_1d = tf.gradients(tf_1d, args_1d, grad_above_1d)
+            tf_grads_2d = tf.gradients(tf_2d, args_2d, grad_above_2d)
+            tf_grads_3d = tf.gradients(tf_3d, args_3d, grad_above_3d)
+            tf_grads_4d = tf.gradients(tf_4d, args_4d, grad_above_4d)
+
+            ovl_grads_1d = tf.gradients(ovl_1d, args_1d, grad_above_1d)
+            ovl_grads_2d = tf.gradients(ovl_2d, args_2d, grad_above_2d)
+            ovl_grads_3d = tf.gradients(ovl_3d, args_3d, grad_above_3d)
+            ovl_grads_4d = tf.gradients(ovl_4d, args_4d, grad_above_4d)
+
+            for grad_index in range(num_concat):
+                assert np.all(np.equal(*s.run([tf_grads_1d[grad_index], ovl_grads_1d[grad_index]])))
+                assert np.all(np.equal(*s.run([tf_grads_2d[grad_index], ovl_grads_2d[grad_index]])))
+                assert np.all(np.equal(*s.run([tf_grads_3d[grad_index], ovl_grads_3d[grad_index]])))
+                assert np.all(np.equal(*s.run([tf_grads_4d[grad_index], ovl_grads_4d[grad_index]])))
+
     def test_split(self):
         with tf.Session() as s:
             arg_1d = tf.constant(np.random.random(10))
@@ -157,287 +206,45 @@ class TestMath(unittest.TestCase):
             arg_4d = tf.constant(np.random.random(10000).reshape((10, 10, 10, 10)))
 
             num_split = 5
-            ovl_1d = s.run(as_tensorflow(split(arg_1d, split_dim=0, num_split=num_split)))
-            ovl_2d = s.run(as_tensorflow(split(arg_2d, split_dim=1, num_split=num_split)))
-            ovl_3d = s.run(as_tensorflow(split(arg_3d, split_dim=2, num_split=num_split)))
-            ovl_4d = s.run(as_tensorflow(split(arg_4d, split_dim=3, num_split=num_split)))
+            ovl_1d = as_tensorflow(split(arg_1d, split_dim=0, num_split=num_split))
+            ovl_2d = as_tensorflow(split(arg_2d, split_dim=1, num_split=num_split))
+            ovl_3d = as_tensorflow(split(arg_3d, split_dim=2, num_split=num_split))
+            ovl_4d = as_tensorflow(split(arg_4d, split_dim=3, num_split=num_split))
 
-            tf_1d = s.run(tf.split(0, num_split, arg_1d))
-            tf_2d = s.run(tf.split(1, num_split, arg_2d))
-            tf_3d = s.run(tf.split(2, num_split, arg_3d))
-            tf_4d = s.run(tf.split(3, num_split, arg_4d))
+            tf_1d = tf.split(0, num_split, arg_1d)
+            tf_2d = tf.split(1, num_split, arg_2d)
+            tf_3d = tf.split(2, num_split, arg_3d)
+            tf_4d = tf.split(3, num_split, arg_4d)
 
             for n in range(num_split):
-                assert np.all(np.equal(ovl_1d[n], tf_1d[n]))
-                assert np.all(np.equal(ovl_2d[n], tf_2d[n]))
-                assert np.all(np.equal(ovl_3d[n], tf_3d[n]))
-                assert np.all(np.equal(ovl_4d[n], tf_4d[n]))
+                assert np.all(np.equal(*s.run([ovl_1d[n], tf_1d[n]])))
+                assert np.all(np.equal(*s.run([ovl_2d[n], tf_2d[n]])))
+                assert np.all(np.equal(*s.run([ovl_3d[n], tf_3d[n]])))
+                assert np.all(np.equal(*s.run([ovl_4d[n], tf_4d[n]])))
 
-            # grads_above_4d = []
-            # for n in range(num_split):
-            #     grads_above_4d.append(tf.constant(np.random.random(10000/num_split).reshape((10, 10, 10, 10/num_split))))
-            #
-            # # tf_grad_4d = tf.gradients(tf.split(3, num_split, arg_4d), arg_4d, grads_above_4d)[0]
-            # tf_grad_0d = tf.gradients(tf.split(0, num_split, arg_1d), arg_1d)[0]
-            # ovl_split_0d = as_tensorflow(split(arg_1d, split_dim=0, num_split=num_split))
-            # ovl_grad_0d = tf.gradients(ovl_split_0d[0], arg_1d)[0]
+            grads_above_1d = []
+            grads_above_2d = []
+            grads_above_3d = []
+            grads_above_4d = []
+            for n in range(num_split):
+                grads_above_1d.append(tf.constant(np.random.random(10/num_split).reshape((10/num_split))))
+                grads_above_2d.append(tf.constant(np.random.random(100/num_split).reshape((10, 10/num_split))))
+                grads_above_3d.append(tf.constant(np.random.random(1000/num_split).reshape((10, 10, 10/num_split))))
+                grads_above_4d.append(tf.constant(np.random.random(10000/num_split).reshape((10, 10, 10, 10/num_split))))
 
+            tf_grad_1d = tf.gradients(tf_1d, arg_1d, grads_above_1d)[0]
+            ovl_grad_1d = tf.gradients(ovl_1d, arg_1d, grads_above_1d)[0]
+            assert np.all(np.equal(*s.run([tf_grad_1d, ovl_grad_1d])))
 
-    #
-    # class LSTMP(Operator):
-    #     def op(self, concat, c, forget_bias):
-    #         batches = concat.shape[0]
-    #         vec_len = concat.shape[1]/4
-    #
-    #         assert c.shape[0] == concat.shape[0]
-    #         assert c.shape[1] == vec_len
-    #         assert c.dtype == concat.dtype
-    #
-    #         pos = position_in([batches, vec_len])
-    #         cur_batch = pos[0]
-    #         cur_elem = pos[1]
-    #
-    #         i = concat[cur_batch, cur_elem]
-    #         j = concat[cur_batch, cur_elem + vec_len]
-    #         f = concat[cur_batch, cur_elem + 2*vec_len]
-    #         o = concat[cur_batch, cur_elem + 3*vec_len]
-    #         c_cur = c[cur_batch, cur_elem]
-    #
-    #         new_c = output_like(c)
-    #         new_h = output_like(c)
-    #
-    #         new_c_cur = c_cur*sig(f + forget_bias) + sig(i) * tanh(j)
-    #
-    #         new_c[pos] = new_c_cur
-    #         new_h[pos] = tanh(new_c_cur) * sig(o)
-    #
-    #         return new_c, new_h
-    #
-    #     def grad(self, concat, c, forget_bias, d_new_c, d_new_h):
-    #         batches = concat.shape[0]
-    #         vec_len = concat.shape[1]/4
-    #
-    #         assert c.shape[0] == concat.shape[0]
-    #         assert c.shape[1] == vec_len
-    #         assert c.dtype == concat.dtype
-    #
-    #         assert d_new_c.tensor_type == c.tensor_type
-    #         assert d_new_h.tensor_type == c.tensor_type
-    #
-    #         pos = position_in([batches, vec_len])
-    #         cur_batch = pos[0]
-    #         cur_elem = pos[1]
-    #
-    #         i = concat[cur_batch, cur_elem]
-    #         j = concat[cur_batch, cur_elem + vec_len]
-    #         f = concat[cur_batch, cur_elem + 2*vec_len]
-    #         o = concat[cur_batch, cur_elem + 3*vec_len]
-    #         c_cur = c[cur_batch, cur_elem]
-    #         new_c_cur = c_cur*sig(f + forget_bias) + sig(i) * tanh(j)
-    #
-    #         d_new_c_cur = d_new_c[cur_batch, cur_elem]
-    #         d_new_h_cur = d_new_h[cur_batch, cur_elem]
-    #
-    #         d_concat = output_like(concat)
-    #         d_c = output_like(c)
-    #
-    #         back_ch = d_new_c_cur + tanh_grad(new_c_cur)*sig(o)*d_new_h_cur
-    #         d_i = tanh(j)*sig_grad(i)*back_ch
-    #         d_j = sig(i)*tanh_grad(j)*back_ch
-    #         d_f = c_cur*sig_grad(f+forget_bias)*back_ch
-    #         d_c_cur = sig(f+forget_bias)*back_ch
-    #         d_o = tanh(new_c_cur)*sig_grad(o)*d_new_h_cur
-    #
-    #         d_concat[cur_batch, cur_elem] = d_i
-    #         d_concat[cur_batch, cur_elem+vec_len] = d_j
-    #         d_concat[cur_batch, cur_elem+2*vec_len] = d_f
-    #         d_concat[cur_batch, cur_elem+3*vec_len] = d_o
-    #         d_c[pos] = d_c_cur
-    #
-    #         return d_concat, d_c
-    #
-    #
-    # class LSTMP_jacobian(Operator):
-    #     def op(self, concat, c, forget_bias, d_concat, d_c):
-    #         batches = concat.shape[0]
-    #         vec_len = concat.shape[1]/4
-    #
-    #         assert c.shape[0] == concat.shape[0]
-    #         assert c.shape[1] == vec_len
-    #         assert c.dtype == concat.dtype
-    #
-    #         assert d_concat.tensor_type == concat.tensor_type
-    #         assert d_c.tensor_type == c.tensor_type
-    #
-    #         pos = position_in([batches, vec_len])
-    #         cur_batch = pos[0]
-    #         cur_elem = pos[1]
-    #
-    #         i = concat[cur_batch, cur_elem]
-    #         j = concat[cur_batch, cur_elem + vec_len]
-    #         f = concat[cur_batch, cur_elem + 2*vec_len]
-    #         o = concat[cur_batch, cur_elem + 3*vec_len]
-    #         c_cur = c[cur_batch, cur_elem]
-    #         new_c_cur = c_cur*sig(f + forget_bias) + sig(i) * tanh(j)
-    #
-    #         d_new_c = output_like(c)
-    #         d_new_h = output_like(c)
-    #
-    #         d_i = d_concat[cur_batch, cur_elem]
-    #         d_j = d_concat[cur_batch, cur_elem + vec_len]
-    #         d_f = d_concat[cur_batch, cur_elem + 2*vec_len]
-    #         d_o = d_concat[cur_batch, cur_elem + 3*vec_len]
-    #         d_c_cur = d_c[cur_batch, cur_elem]
-    #
-    #         d_new_c_cur = c_cur*sig_grad(f+forget_bias)*d_f + \
-    #             sig(f+forget_bias)*d_c_cur + \
-    #             tanh(j)*sig_grad(i)*d_i + \
-    #             sig(i)*tanh_grad(j)*d_j
-    #
-    #         d_new_h_cur = sig(o)*tanh_grad(new_c_cur)*d_new_c_cur + \
-    #             tanh(new_c_cur)*sig_grad(o)*d_o
-    #
-    #         d_new_c[pos] = d_new_c_cur
-    #         d_new_h[pos] = d_new_h_cur
-    #
-    #         return d_new_c, d_new_h
-    #
-    #
-    # class LSTMP_jacobian_adjoint(Operator):
-    #     def op(self, concat, c, forget_bias, d_new_c, d_new_h):
-    #         batches = concat.shape[0]
-    #         vec_len = concat.shape[1]/4
-    #
-    #         assert c.shape[0] == concat.shape[0]
-    #         assert c.shape[1] == vec_len
-    #         assert c.dtype == concat.dtype
-    #
-    #         assert d_new_c.tensor_type == c.tensor_type
-    #         assert d_new_h.tensor_type == c.tensor_type
-    #
-    #         pos = position_in([batches, vec_len])
-    #         cur_batch = pos[0]
-    #         cur_elem = pos[1]
-    #
-    #         i = concat[cur_batch, cur_elem]
-    #         j = concat[cur_batch, cur_elem + vec_len]
-    #         f = concat[cur_batch, cur_elem + 2*vec_len]
-    #         o = concat[cur_batch, cur_elem + 3*vec_len]
-    #         c_cur = c[cur_batch, cur_elem]
-    #         new_c_cur = c_cur*sig(f + forget_bias) + sig(i) * tanh(j)
-    #
-    #         d_new_c_cur = d_new_c[cur_batch, cur_elem]
-    #         d_new_h_cur = d_new_h[cur_batch, cur_elem]
-    #
-    #         d_concat = output_like(concat)
-    #         d_c = output_like(c)
-    #
-    #         back_ch = d_new_c_cur + tanh_grad(new_c_cur)*sig(o)*d_new_h_cur
-    #         d_i = tanh(j)*sig_grad(i)*back_ch
-    #         d_j = sig(i)*tanh_grad(j)*back_ch
-    #         d_f = c_cur*sig_grad(f+forget_bias)*back_ch
-    #         d_c_cur = sig(f+forget_bias)*back_ch
-    #         d_o = tanh(new_c_cur)*sig_grad(o)*d_new_h_cur
-    #
-    #         d_concat[cur_batch, cur_elem] = d_i
-    #         d_concat[cur_batch, cur_elem+vec_len] = d_j
-    #         d_concat[cur_batch, cur_elem+2*vec_len] = d_f
-    #         d_concat[cur_batch, cur_elem+3*vec_len] = d_o
-    #         d_c[pos] = d_c_cur
-    #
-    #         return d_concat, d_c
-    #
-    #
-    # class TestLSTMGradient(unittest.TestCase):
-    #     def test(self):
-    #         print('*** Running Test: ' + self.__class__.__name__ + ' function: ' + _getframe().f_code.co_name)
-    #         batches = 200
-    #         vec_len = 500
-    #         delta = 1e-3
-    #         forget = 0.0
-    #         adjoint_tests = 10
-    #
-    #         concat = np.random.normal(size=batches*4*vec_len).reshape((batches, 4*vec_len))
-    #         c = np.random.normal(size=batches*vec_len).reshape((batches, vec_len))
-    #
-    #         delta_c = delta*np.random.normal(size=batches*vec_len).reshape((batches, vec_len))
-    #         delta_concat = delta*np.random.normal(size=batches*4*vec_len).reshape((batches, 4*vec_len))
-    #
-    #         d_new_c = np.random.normal(size=batches*vec_len).reshape((batches, vec_len))
-    #         d_new_h = np.random.normal(size=batches*vec_len).reshape((batches, vec_len))
-    #
-    #         # tf grad test
-    #         with tf.Session() as sess:
-    #             concat_tf = tf.Variable(concat)
-    #             c_tf = tf.Variable(c)
-    #             i, j, f, o = tf.split(1, 4, concat_tf)
-    #
-    #             new_c_tf = c_tf * tf.sigmoid(f + forget) + tf.sigmoid(i) * tf.tanh(j)
-    #             new_h_tf = tf.tanh(new_c_tf) * tf.sigmoid(o)
-    #
-    #             new_c_ops, new_h_ops = LSTMP(concat_tf, c_tf, forget_bias=forget).as_tensorflow()
-    #
-    #             grad_tf = tf.gradients(new_c_tf, concat_tf)[0]
-    #             grad_ops = tf.gradients(new_c_ops, concat_tf)[0]
-    #
-    #             sess.run(tf.initialize_all_variables())
-    #             new_c_tf_eval, new_h_tf_eval = sess.run([new_c_tf, new_h_tf])
-    #             new_c_ops_eval, new_h_ops_eval = sess.run([new_c_ops, new_h_ops])
-    #
-    #             grad_tf_eval = sess.run(grad_tf)
-    #             grad_ops_eval = sess.run(grad_ops)
-    #
-    #         assert np.allclose(new_c_tf_eval, new_c_ops_eval)
-    #         assert np.allclose(new_h_tf_eval, new_h_ops_eval)
-    #
-    #         assert np.allclose(grad_tf_eval, grad_ops_eval)
-    #
-    #         # fwd test
-    #         with tf.Session() as sess:
-    #             i, j, f, o = tf.split(1, 4, concat)
-    #
-    #             new_c_tf = c * tf.sigmoid(f + forget) + tf.sigmoid(i) * tf.tanh(j)
-    #             new_h_tf = tf.tanh(new_c_tf) * tf.sigmoid(o)
-    #
-    #             new_c_eval, new_h_eval = sess.run([new_c_tf, new_h_tf])
-    #
-    #         new_c_ops, new_h_ops = LSTMP(concat, c, forget_bias=forget).evaluate_c()
-    #         assert np.allclose(new_c_eval, new_c_ops)
-    #         assert np.allclose(new_h_eval, new_h_ops)
-    #
-    #         # jacobian test
-    #         new_c0, new_h0 = LSTMP(concat, c, forget_bias=forget).evaluate_c()
-    #         new_c1, new_h1 = LSTMP(concat+delta_concat, c+delta_c, forget_bias=forget).evaluate_c()
-    #         d_c, d_h = LSTMP_jacobian(concat, c, delta_concat, delta_c, forget_bias=forget).evaluate_c()
-    #
-    #         if not np.allclose(d_c, new_c1-new_c0, rtol=1e-2, atol=1e-6):
-    #             comp = np.isclose(d_c, new_c1-new_c0, rtol=1e-2, atol=1e-6)
-    #             assert np.sum(comp).astype(np.float32)/(batches*vec_len) > 0.999
-    #         if not np.allclose(d_h, new_h1-new_h0, rtol=1e-2, atol=1e-6):
-    #             comp = np.isclose(d_h, new_h1-new_h0, rtol=1e-2, atol=1e-6)
-    #             assert np.sum(comp).astype(np.float32)/(batches*vec_len) > 0.999
-    #
-    #         # jacobian adjoint test
-    #         jacobian = LSTMP_jacobian(concat, c, delta_concat, delta_c, forget_bias=forget)
-    #         jacobian_adjoint = LSTMP_jacobian_adjoint(concat, c, d_new_c, d_new_h, forget_bias=forget)
-    #
-    #         lhs = []
-    #         rhs = []
-    #         for i in range(adjoint_tests):
-    #             np.copyto(concat, np.random.normal(size=batches*4*vec_len).reshape((batches, 4*vec_len)))
-    #             np.copyto(c, np.random.normal(size=batches*vec_len).reshape((batches, vec_len)))
-    #
-    #             np.copyto(delta_concat, delta*np.random.normal(size=batches*4*vec_len).reshape((batches, 4*vec_len)))
-    #
-    #             np.copyto(d_new_c, np.random.normal(size=batches*vec_len).reshape((batches, vec_len)))
-    #             np.copyto(d_new_h, np.random.normal(size=batches*vec_len).reshape((batches, vec_len)))
-    #
-    #             d_c, d_h = jacobian.evaluate_c()
-    #             d_concat_r, d_c_r = jacobian_adjoint.evaluate_c()
-    #
-    #             lhs.append(np.sum(d_new_h*d_h) + np.sum(d_new_c*d_c))
-    #             rhs.append(np.sum(delta_c*d_c_r) + np.sum(delta_concat*d_concat_r))
-    #
-    #         assert np.allclose(np.array(lhs), np.array(rhs))
-    #
-#             np.copyto(delta_c, delta*np.random.normal(size=batches*vec_len).reshape((batches, vec_len)))
+            tf_grad_2d = tf.gradients(tf_2d, arg_2d, grads_above_2d)[0]
+            ovl_grad_2d = tf.gradients(ovl_2d, arg_2d, grads_above_2d)[0]
+            print(s.run([tf_grad_2d, ovl_grad_2d]))
+            assert np.all(np.equal(*s.run([tf_grad_2d, ovl_grad_2d])))
+
+            tf_grad_3d = tf.gradients(tf_3d, arg_3d, grads_above_3d)[0]
+            ovl_grad_3d = tf.gradients(ovl_3d, arg_3d, grads_above_3d)[0]
+            assert np.all(np.equal(*s.run([tf_grad_3d, ovl_grad_3d])))
+
+            tf_grad_4d = tf.gradients(tf_4d, arg_4d, grads_above_4d)[0]
+            ovl_grad_4d = tf.gradients(ovl_4d, arg_4d, grads_above_4d)[0]
+            assert np.all(np.equal(*s.run([tf_grad_4d, ovl_grad_4d])))
