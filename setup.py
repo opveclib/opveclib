@@ -14,7 +14,7 @@ from opveclib.local import version
 setup(
     name='opveclib',
     version=version,
-    packages=['opveclib', 'opveclib.test', 'opveclib.examples'],
+    packages=['opveclib', 'opveclib.test', 'opveclib.examples', 'opveclib.stdops'],
     install_requires=['numpy >= 1.11.0', 'protobuf == 3.0.0b2', 'tensorflow==0.9.0', 'six >= 1.10.0'],
     package_data={
         'opveclib': ['dynamiclibop.h', 'dynamiclibop.cc',

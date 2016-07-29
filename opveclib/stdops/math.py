@@ -11,9 +11,7 @@
 from ..operator import operator, gradient, OperatorOutput
 from ..expression import output, output_like, position_in, \
     uint8, uint16, uint32, uint64
-from ..expression import tanh as expr_tanh, exp as expr_exp, logical_and as expr_logical_and, variable, if_, \
-    elif_, else_, \
-    cast, float64
+from ..expression import tanh as expr_tanh, exp as expr_exp, logical_and as expr_logical_and, variable, if_
 
 
 def _cwise_unary(arg, func):
