@@ -18,7 +18,7 @@ from .math import add, sub, mul, div, neg, tanh, sigmoid, split
 
 
 class TestMath(unittest.TestCase):
-    # clear_op_cache()
+    clear_op_cache()
 
     def test_binary_infix(self):
         """
@@ -173,15 +173,11 @@ class TestMath(unittest.TestCase):
                 assert np.all(np.equal(ovl_3d[n], tf_3d[n]))
                 assert np.all(np.equal(ovl_4d[n], tf_4d[n]))
 
-            grads_above_4d = []
-            for n in range(num_split):
-                grads_above_4d.append(tf.constant(np.random.random(10000/num_split).reshape((10, 10, 10, 10/num_split))))
-
-            # tf_grad_4d = tf.gradients(tf.split(3, num_split, arg_4d), arg_4d, grads_above_4d)[0]
-            tf_grad_0d = tf.gradients(tf.split(0, num_split, arg_1d), arg_1d)[0]
-            print('tf_grad: ', tf_grad_0d)
-            ovl_split_0d = as_tensorflow(split(arg_1d, split_dim=0, num_split=num_split))
-            print(ovl_split_0d[0].get_attr('out_shapes'))
-            ovl_grad_0d = tf.gradients(ovl_split_0d[0], arg_1d)[0]
-
-            print(s.run(tf_grad_0d) - s.run(ovl_grad_0d))
+            # grads_above_4d = []
+            # for n in range(num_split):
+            #     grads_above_4d.append(tf.constant(np.random.random(10000/num_split).reshape((10, 10, 10, 10/num_split))))
+            #
+            # # tf_grad_4d = tf.gradients(tf.split(3, num_split, arg_4d), arg_4d, grads_above_4d)[0]
+            # tf_grad_0d = tf.gradients(tf.split(0, num_split, arg_1d), arg_1d)[0]
+            # ovl_split_0d = as_tensorflow(split(arg_1d, split_dim=0, num_split=num_split))
+            # ovl_grad_0d = tf.gradients(ovl_split_0d[0], arg_1d)[0]
