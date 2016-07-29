@@ -14,11 +14,11 @@ import tensorflow as tf
 from ..operator import operator, evaluate, as_tensorflow
 from ..expression import position_in, output_like
 from ..local import clear_op_cache
-from .math import add, sub, mul, div, neg, tanh, sigmoid, split
+from .math import add, sub, mul, div, neg, tanh, sigmoid, split, concat
 
 
 class TestMath(unittest.TestCase):
-    clear_op_cache()
+    # clear_op_cache()
 
     def test_binary_infix(self):
         """
@@ -149,6 +149,34 @@ class TestMath(unittest.TestCase):
             test_grad(lambda x: tanh(x), lambda x: tf.tanh(x))
             test_grad(lambda x: sigmoid(x), lambda x: tf.sigmoid(x))
 
+    def test_concat(self):
+        with tf.Session() as s:
+            num_concat = 5
+            args_1d = []
+            args_2d = []
+            args_3d = []
+            args_4d = []
+            for n in range(num_concat):
+                args_1d.append(tf.constant(np.random.random(10/num_concat).reshape((10/num_concat))))
+                args_2d.append(tf.constant(np.random.random(30/num_concat).reshape((3, 10/num_concat))))
+                args_3d.append(tf.constant(np.random.random(1000/num_concat).reshape((10, 10, 10/num_concat))))
+                args_4d.append(tf.constant(np.random.random(10000/num_concat).reshape((10, 10, 10, 10/num_concat))))
+
+            tf_1d = tf.concat(0, args_1d)
+            tf_2d = tf.concat(1, args_2d)
+            tf_3d = tf.concat(2, args_3d)
+            tf_4d = tf.concat(3, args_4d)
+
+            ovl_1d = as_tensorflow(concat(*args_1d, concat_dim=0))
+            ovl_2d = as_tensorflow(concat(*args_2d, concat_dim=1))
+            ovl_3d = as_tensorflow(concat(*args_3d, concat_dim=2))
+            ovl_4d = as_tensorflow(concat(*args_4d, concat_dim=3))
+
+            assert np.all(np.equal(*s.run([tf_1d, ovl_1d])))
+            assert np.all(np.equal(*s.run([tf_2d, ovl_2d])))
+            assert np.all(np.equal(*s.run([tf_3d, ovl_3d])))
+            assert np.all(np.equal(*s.run([tf_4d, ovl_4d])))
+
     def test_split(self):
         with tf.Session() as s:
             arg_1d = tf.constant(np.random.random(10))
@@ -157,31 +185,48 @@ class TestMath(unittest.TestCase):
             arg_4d = tf.constant(np.random.random(10000).reshape((10, 10, 10, 10)))
 
             num_split = 5
-            ovl_1d = s.run(as_tensorflow(split(arg_1d, split_dim=0, num_split=num_split)))
-            ovl_2d = s.run(as_tensorflow(split(arg_2d, split_dim=1, num_split=num_split)))
-            ovl_3d = s.run(as_tensorflow(split(arg_3d, split_dim=2, num_split=num_split)))
-            ovl_4d = s.run(as_tensorflow(split(arg_4d, split_dim=3, num_split=num_split)))
+            ovl_1d = as_tensorflow(split(arg_1d, split_dim=0, num_split=num_split))
+            ovl_2d = as_tensorflow(split(arg_2d, split_dim=1, num_split=num_split))
+            ovl_3d = as_tensorflow(split(arg_3d, split_dim=2, num_split=num_split))
+            ovl_4d = as_tensorflow(split(arg_4d, split_dim=3, num_split=num_split))
 
-            tf_1d = s.run(tf.split(0, num_split, arg_1d))
-            tf_2d = s.run(tf.split(1, num_split, arg_2d))
-            tf_3d = s.run(tf.split(2, num_split, arg_3d))
-            tf_4d = s.run(tf.split(3, num_split, arg_4d))
+            tf_1d = tf.split(0, num_split, arg_1d)
+            tf_2d = tf.split(1, num_split, arg_2d)
+            tf_3d = tf.split(2, num_split, arg_3d)
+            tf_4d = tf.split(3, num_split, arg_4d)
 
             for n in range(num_split):
-                assert np.all(np.equal(ovl_1d[n], tf_1d[n]))
-                assert np.all(np.equal(ovl_2d[n], tf_2d[n]))
-                assert np.all(np.equal(ovl_3d[n], tf_3d[n]))
-                assert np.all(np.equal(ovl_4d[n], tf_4d[n]))
+                assert np.all(np.equal(*s.run([ovl_1d[n], tf_1d[n]])))
+                assert np.all(np.equal(*s.run([ovl_2d[n], tf_2d[n]])))
+                assert np.all(np.equal(*s.run([ovl_3d[n], tf_3d[n]])))
+                assert np.all(np.equal(*s.run([ovl_4d[n], tf_4d[n]])))
 
-            # grads_above_4d = []
-            # for n in range(num_split):
-            #     grads_above_4d.append(tf.constant(np.random.random(10000/num_split).reshape((10, 10, 10, 10/num_split))))
-            #
-            # # tf_grad_4d = tf.gradients(tf.split(3, num_split, arg_4d), arg_4d, grads_above_4d)[0]
-            # tf_grad_0d = tf.gradients(tf.split(0, num_split, arg_1d), arg_1d)[0]
-            # ovl_split_0d = as_tensorflow(split(arg_1d, split_dim=0, num_split=num_split))
-            # ovl_grad_0d = tf.gradients(ovl_split_0d[0], arg_1d)[0]
+            grads_above_1d = []
+            grads_above_2d = []
+            grads_above_3d = []
+            grads_above_4d = []
+            for n in range(num_split):
+                grads_above_1d.append(tf.constant(np.random.random(10/num_split).reshape((10/num_split))))
+                grads_above_2d.append(tf.constant(np.random.random(100/num_split).reshape((10, 10/num_split))))
+                grads_above_3d.append(tf.constant(np.random.random(1000/num_split).reshape((10, 10, 10/num_split))))
+                grads_above_4d.append(tf.constant(np.random.random(10000/num_split).reshape((10, 10, 10, 10/num_split))))
 
+            tf_grad_1d = tf.gradients(tf_1d, arg_1d, grads_above_1d)[0]
+            ovl_grad_1d = tf.gradients(ovl_1d, arg_1d, grads_above_1d)[0]
+            assert np.all(np.equal(*s.run([tf_grad_1d, ovl_grad_1d])))
+
+            tf_grad_2d = tf.gradients(tf_2d, arg_2d, grads_above_2d)[0]
+            ovl_grad_2d = tf.gradients(ovl_2d, arg_2d, grads_above_2d)[0]
+            print(s.run([tf_grad_2d, ovl_grad_2d]))
+            assert np.all(np.equal(*s.run([tf_grad_2d, ovl_grad_2d])))
+
+            tf_grad_3d = tf.gradients(tf_3d, arg_3d, grads_above_3d)[0]
+            ovl_grad_3d = tf.gradients(ovl_3d, arg_3d, grads_above_3d)[0]
+            assert np.all(np.equal(*s.run([tf_grad_3d, ovl_grad_3d])))
+
+            tf_grad_4d = tf.gradients(tf_4d, arg_4d, grads_above_4d)[0]
+            ovl_grad_4d = tf.gradients(ovl_4d, arg_4d, grads_above_4d)[0]
+            assert np.all(np.equal(*s.run([tf_grad_4d, ovl_grad_4d])))
 
     #
     # class LSTMP(Operator):
