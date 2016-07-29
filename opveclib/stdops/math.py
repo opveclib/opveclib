@@ -11,7 +11,7 @@
 from ..operator import operator, gradient, OperatorOutput
 from ..expression import output, output_like, position_in, \
     uint8, uint16, uint32, uint64
-from ..expression import tanh as expr_tanh, exp as expr_exp, logical_and as expr_logical_and, variable, if_
+from ..expression import tanh as expr_tanh, exp as expr_exp, logical_and as expr_logical_and, variable, if_, elif_
 
 
 def _cwise_unary(arg, func):
@@ -40,7 +40,7 @@ def neg(arg):
 
 @gradient(neg)
 @operator()
-def div_grad(arg, grad_above):
+def neg_grad(arg, grad_above):
     return _cwise_unary_grad(arg, grad_above, lambda x, dz: - dz)
 
 OperatorOutput.register_magic_method('neg', neg)
@@ -105,6 +105,57 @@ def split(arg, split_dim=None, num_split=None):
         outputs[n][pos] = arg[input_pos]
 
     return outputs
+
+
+@operator()
+def concat(*args, **constants):
+    concat_dim = constants['concat_dim']
+
+    if concat_dim > args[0].rank or concat_dim < 0:
+        raise ValueError('concat_dim must be less than or equal to the rank')
+    if len(args) <= 1:
+        raise TypeError('Must have more than 1 argument.')
+
+    concat_index_bounds = [0]
+    for arg in args:
+        if arg.dtype != args[0].dtype or arg.rank != args[0].rank:
+            raise TypeError('All arguments must be the same type and rank')
+
+        for dim, elements in enumerate(arg.shape):
+            if dim == concat_dim:
+                concat_index_bounds.append(concat_index_bounds[-1] + arg.shape[concat_dim])
+            else:
+                if elements != args[0].shape[dim]:
+                    raise ValueError('Arguments must have the same shapes on all axes but concat_dim.')
+
+    out_shape = args[0].shape
+    out_shape[concat_dim] = concat_index_bounds[-1]
+    out = output(out_shape, args[0].dtype)
+    pos = position_in(out_shape)
+
+    with if_(expr_logical_and(pos[concat_dim] >= concat_index_bounds[0], pos[concat_dim] < concat_index_bounds[1])):
+        out[pos] = args[0][pos]
+    for arg_n in range(1, len(args)):
+        with elif_(expr_logical_and(pos[concat_dim] >= concat_index_bounds[arg_n],
+                                    pos[concat_dim] < concat_index_bounds[arg_n+1])):
+
+            in_pos = []
+            for dim, cur_pos in enumerate(pos):
+                if dim == concat_dim:
+                    in_pos.append(cur_pos - concat_index_bounds[arg_n])
+                else:
+                    in_pos.append(cur_pos)
+
+            out[pos] = args[arg_n][in_pos]
+
+    return out
+
+
+@gradient(split)
+def split_grad(arg, *grads_above, **constants):
+    split_dim = constants['split_dim']
+    c = concat(*grads_above, concat_dim=split_dim)
+    return c
 
 
 def _broadcast_cwise_binary(lhs, rhs, fcn):

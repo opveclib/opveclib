@@ -364,7 +364,6 @@ class _OpGenerator(object):
             self.name = self.name
 
         self.grad_function = None
-        self.num_grad_args = None
 
     def __str__(self):
         return self.op_function.__name__
@@ -373,7 +372,7 @@ class _OpGenerator(object):
         func_args, func_varargs, func_keywords, func_defaults = inspect.getargspec(self.op_function)
         if func_defaults is None:
             input_names = func_args
-            constants = {}
+            constants = defined_constants
         else:
             input_names = func_args[:-len(func_defaults)]
             constants = dict(zip(func_args[-len(func_defaults):], func_defaults))
@@ -403,7 +402,7 @@ class _OpGenerator(object):
 
         num_inputs = len(input_types)
 
-        if len(input_names) != num_inputs:
+        if len(input_names) != num_inputs and func_varargs is None:
             err_msg = '\n'
             err_msg += self.name + ' function signature expects ' + str(len(input_names)) + \
                 ' input tensor argument(s):\n' + str(input_names) + '\n'
@@ -462,10 +461,6 @@ class _OpGenerator(object):
         if self.grad_function is None:
             grad_dag = None
         else:
-            if len(output_types) + len(input_names) != self.num_grad_args:
-                raise SyntaxError('Gradient function must have number of inputs equal to the sum of the number of '
-                                  'inputs and outputs of the operator function.')
-
             grad_inputs = []
             for t in input_types:
                 grad_inputs.append(_GradientPlaceholder(t.shape, t.dtype))
@@ -498,22 +493,15 @@ class _OpGenerator(object):
 
         return _Operator(expression_dag, output_types, inputs, grad_dag, self.name)
 
-    def add_grad(self, grad_function, num_grad_args):
+    def add_grad(self, grad_function):
         if self.grad_function is None:
             self.grad_function = grad_function
-            self.num_grad_args = num_grad_args
         else:
             raise ValueError('Gradient function is already defined for operator ' + str(self.name) + '.')
 
 
 def operator(forbid_none_valued_constants=True, name=None):
     def wrapper(op_function):
-        if inspect.getargspec(op_function).keywords is not None:
-            raise SyntaxError('Operator functions cannot accept keyword arguments without default values.')
-
-        if inspect.getargspec(op_function).varargs is not None:
-            raise NotImplementedError('Operator functions cannot accept varags.')
-
         return _OpGenerator(op_function, forbid_none_valued_constants, name)
     return wrapper
 
@@ -523,18 +511,7 @@ def gradient(op_function):
         raise TypeError('gradient decorator argument must be a function decorated as an operator')
 
     def wrapper(grad_function):
-        func_args, func_varargs, func_keywords, func_defaults = inspect.getargspec(op_function.op_function)
-        if func_defaults is None:
-            func_input_names = func_args
-            func_constants = {}
-        else:
-            num_func_defaults = len(func_defaults)
-            func_input_names = func_args[:-num_func_defaults]
-            func_constants = dict(zip(func_args[-num_func_defaults:], func_defaults))
-
         if isinstance(grad_function, _OpGenerator):
-            grad_args, grad_varargs, grad_keywords, grad_defaults = inspect.getargspec(grad_function.op_function)
-
             def resolved(*args, **defaults):
                 op = grad_function(*args, **defaults)
 
@@ -544,25 +521,9 @@ def gradient(op_function):
 
                 return op_outputs
         else:
-            grad_args, grad_varargs, grad_keywords, grad_defaults = inspect.getargspec(grad_function)
             resolved = grad_function
 
-        if grad_defaults is None:
-            grad_input_names = grad_args
-            grad_constants = {}
-        else:
-            num_grad_defaults = len(grad_defaults)
-            grad_input_names = grad_args[:-num_grad_defaults]
-            grad_constants = dict(zip(grad_args[-num_grad_defaults:], grad_defaults))
-
-        if func_constants != grad_constants:
-            raise SyntaxError('Constant argument names and default values must be identical for '
-                              'the op function and its gradient.')
-
-        if func_input_names != grad_input_names[:len(func_input_names)]:
-            raise SyntaxError('Gradient function must have same initial argument names as the op function.')
-
-        op_function.add_grad(resolved, len(grad_input_names))
+        op_function.add_grad(resolved)
         return resolved
 
     return wrapper
