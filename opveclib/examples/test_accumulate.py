@@ -150,7 +150,6 @@ def cumprod(x, axis=0):
 
 class TestAccumulate(unittest.TestCase):
     ops.clear_op_cache()
-
     def test(self):
         """
         Test the outputs of the operators to make sure they are consistent with the numpy implementation
@@ -186,14 +185,14 @@ class TestAccumulate(unittest.TestCase):
         import timeit
         import time
         logger = ops.logger
-        # logger = logging.getLogger('cumsum')
-        logger.setLevel(logging.DEBUG)
         iters = 10
         X = np.random.uniform(0, 1, size=(10000, 1000))
         # note, np.cumsum fails with memory error at input size 10 ^^ 6
         ref = np.cumsum(X, axis=0)
         # timeit returns seconds for 'number' iterations. For 10 iterations, multiply by 100 to get time in ms
-        np_time = 100 * timeit.timeit('np.cumsum(X, axis=0)', setup='import numpy as np; X = np.random.uniform(0, 1, size=(10000, 1000))', number=iters)
+        np_time = 100 * timeit.timeit('np.cumsum(X, axis=0)',
+                                      setup='import numpy as np; X = np.random.uniform(0, 1, size=(10000, 1000))',
+                                      number=iters)
         logger.debug(u'Best numpy time (ms): ' + str(np_time))
         cumsumOp = cumsum(X, axis=0)
         ovl_cpp, prof_cpp = ops.profile(cumsumOp, target_language='cpp', profiling_iterations=iters)
@@ -210,17 +209,23 @@ class TestAccumulate(unittest.TestCase):
         # ensure TF runs on GPU
         test_config=tf.ConfigProto(allow_soft_placement=False)
         test_config.graph_options.optimizer_options.opt_level = -1
+        if ops.cuda_enabled:
+            devices = ['/cpu:0', '/gpu:0']
+        else:
+            devices = ['/cpu:0']
         with tf.Session(config=test_config) as sess:
-            cumsum_tf = ops.as_tensorflow(cumsumOp)
-            sess.run(tf.initialize_all_variables())
-            cumsum_tf_result = sess.run(cumsum_tf)
-            assert np.allclose(ref, cumsum_tf_result)
-            prof_tf = np.zeros(iters)
-            for i in range(iters):
-                t0 = time.time()
-                sess.run(cumsum_tf.op)
-                t1 = time.time()
-                prof_tf[i] = t1 - t0
-            tf_time = np.min(prof_tf) * 1000.00
-            logger.debug(u'Best tf + ovl cumsum time  (ms): ' + str(tf_time))
+           for dev_string in devices:
+                with tf.device(dev_string):
+                    cumsum_tf = ops.as_tensorflow(cumsumOp)
+                    sess.run(tf.initialize_all_variables())
+                    cumsum_tf_result = sess.run(cumsum_tf)
+                    prof_tf = np.zeros(iters)
+                    for i in range(iters):
+                        t0 = time.time()
+                        sess.run(cumsum_tf.op)
+                        t1 = time.time()
+                        prof_tf[i] = t1 - t0
+                    tf_time = np.min(prof_tf) * 1000.00
+                    logger.debug(u'Best tf + ovl time  (ms) on ' + dev_string + ' :' + str(tf_time))
+                    assert np.allclose(ref, cumsum_tf_result)
         sess.close()

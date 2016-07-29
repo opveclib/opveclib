@@ -1158,8 +1158,10 @@ def profile(output_list, target_language='cpp', profiling_iterations=1):
         try:
             libtest = ctypes.cdll.LoadLibrary(testlib_path)
         except OSError:
+            import tensorflow as tf
             this_file_path = os.path.abspath(__file__)
             this_directory = os.path.split(this_file_path)[0]
+            tf_include = tf.sysconfig.get_include()
 
             # build the test framework library
             cc_path = os.path.join(this_directory, 'testcop.cc')
@@ -1169,6 +1171,7 @@ def profile(output_list, target_language='cpp', profiling_iterations=1):
                                          '-std=c++11', '-Ofast', '-Wextra',
                                          '-I'+this_directory,
                                          '-I'+cache_directory,
+                                         '-isystem', tf_include,
                                          '-o', testlib_path, cc_path],
                                         stderr=subprocess.STDOUT,
                                         universal_newlines=True)
@@ -1253,7 +1256,7 @@ def profile(output_list, target_language='cpp', profiling_iterations=1):
         name = _op_hash(op)
 
         # generate code
-        op_c_src, op_cuda_src, op_cuda_launch_template, op_c_generic, op_cuda_generic = \
+        op_c_src, op_cuda_src, op_c_generic, op_cuda_generic = \
             ExpressionDAG.generate(op, name)
 
         input_types, output_types = ExpressionDAG.io_types()
@@ -1346,7 +1349,7 @@ def _dag_to_tf(dag, inputs, grad_dags, grad_dag_arg_index_list):
         name = _op_hash(op)
 
         # generate code
-        op_c_src, op_cuda_src, op_cuda_launch_template, op_c_generic, op_cuda_generic = \
+        op_c_src, op_cuda_src, op_c_generic, op_cuda_generic = \
             ExpressionDAG.generate(op, name)
 
         cpu_op_lib = _make_generic_c(op_c_generic, name)

@@ -333,9 +333,9 @@ def run_tf(tensor_in_sizes, filter_in_sizes):
     ovl_cuda_time = np.min(list(prof.values())[0])
     assert np.allclose(ovlResult, ref)
     #TODO - cpp is really slow...
-    # ovlcppResult, profcpp = ops.profile(ovlOp, target_language='cpp', profiling_iterations=iters)
-    # ovl_cpp_time = np.min(list(profcpp.values())[0])
-    # assert np.allclose(ovlcppResult, ref)
+    ovlcppResult, profcpp = ops.profile(ovlOp, target_language='cpp', profiling_iterations=iters)
+    ovl_cpp_time = np.min(list(profcpp.values())[0])
+    assert np.allclose(ovlcppResult, ref)
 
     # ensure TF runs on GPU
     test_config=tf.ConfigProto(allow_soft_placement=False)

@@ -20,7 +20,8 @@ setup(
         'opveclib': ['dynamiclibop.h', 'dynamiclibop.cc',
                      'testcop.cc', 'testcudaop.cc',
                      'language.proto',
-                     'test/addcpu.cpp', 'test/addgpu.cu']
+                     'test/addcpu.cpp', 'test/addgpu.cu',
+                     'threadpool.h']
     },
     test_suite='nose2.collector.collector',
     license='Apache 2.0'

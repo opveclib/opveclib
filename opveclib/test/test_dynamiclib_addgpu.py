@@ -67,11 +67,11 @@ class DynamicLibAddGPUTest(unittest.TestCase):
             with tf.Session(config=test_config):
                 logger.debug('*** add2float')
                 with tf.device(dev_string):
-                    in0 = np.random.rand(3,5).astype(np.float32)
-                    in1 = np.random.rand(3,5).astype(np.float32)
-                    ones = np.ones((3,5), dtype=np.float32)
+                    in0 = np.random.rand(3,50).astype(np.float32)
+                    in1 = np.random.rand(3,50).astype(np.float32)
+                    ones = np.ones((3,50), dtype=np.float32)
                     output = _DynamicLibOp.module().dynamic_lib(inputs=[in0, in1],
-                                                                       out_shapes=[[3,5]],
+                                                                       out_shapes=[[3,50]],
                                                                        out_types=['float'],
                                                                        cpu_lib_path=cpulib,
                                                                        cpu_func_name="add2float",
@@ -85,10 +85,10 @@ class DynamicLibAddGPUTest(unittest.TestCase):
                         ref = np.add(ref,ones)
                     assert np.allclose(output[0].eval(), ref)
 
+                    in2 = np.random.rand(3,50).astype(np.float64)
                     logger.debug('*** addFloatDoubleFloat')
-                    in2 = np.random.rand(3,5).astype(np.float64)
                     output = _DynamicLibOp.module().dynamic_lib(inputs=[in0, in2, in1],
-                                                                       out_shapes=[[3,5]],
+                                                                       out_shapes=[[3,50]],
                                                                        out_types=['float'],
                                                                        cpu_lib_path= cpulib,
                                                                        cpu_func_name="addFloatDoubleFloat",
@@ -103,7 +103,7 @@ class DynamicLibAddGPUTest(unittest.TestCase):
 
                     logger.debug('*** sumAndSq')
                     output = _DynamicLibOp.module().dynamic_lib(inputs=[in0, in2],
-                                                                       out_shapes=[[3,5], [3,5]],
+                                                                       out_shapes=[[3,50], [3,50]],
                                                                        out_types=['float', 'float'],
                                                                        cpu_lib_path= cpulib,
                                                                        cpu_func_name="sumAndSq",
