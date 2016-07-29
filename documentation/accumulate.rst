@@ -3,7 +3,7 @@ Accumulate
 
 .. automodule:: examples.test_accumulate
 
-.. autoclass:: examples.Accumulate
+.. autoclass:: examples.accumulate
     :members: op
 
 .. autofunction:: examples.cumsum
