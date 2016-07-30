@@ -11,13 +11,9 @@
 import ctypes
 import string
 import re
-import os
-import subprocess
-import sys
 import six
 
 import numpy as np
-from tensorflow import logging
 from . import language_pb2 as lang
 
 

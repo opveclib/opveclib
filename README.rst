@@ -111,17 +111,8 @@ To run all the example code tests, run:
 
     nose2 -F opveclib.examples
 
-This will take 10-15 minutes on a GPU-enabled installation. 
+This will take 10-15 minutes on a GPU-enabled installation.
 
-Developers
--------------
-If you are an opveclib developer and need to make changes to language.proto, you will need to install the protoc compiler. 
-
-.. code-block:: console
-
-    sudo apt-get install protobuf-compiler
-    
-Note, this will install version 2.5 of protoc, which is only compatible with python 2. If you wish to use python 3, you will need version 3.0.0-beta-2 of protoc. It can be found and installed from here: https://github.com/google/protobuf/releases/
 
 Documentation
 -------------

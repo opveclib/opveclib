@@ -16,9 +16,7 @@ across a specified axis of the input tensor. This generic accumulation operator 
 
 import unittest
 import numpy as np
-import logging
 import opveclib as ops
-
 
 @ops.operator()
 def accumulate(x, inner_fcn=None, axis=None):
