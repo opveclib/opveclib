@@ -248,3 +248,39 @@ class TestMath(unittest.TestCase):
             tf_grad_4d = tf.gradients(tf_4d, arg_4d, grads_above_4d)[0]
             ovl_grad_4d = tf.gradients(ovl_4d, arg_4d, grads_above_4d)[0]
             assert np.all(np.equal(*s.run([tf_grad_4d, ovl_grad_4d])))
+
+    def test_lstm(self):
+
+        batches = 200
+        vec_len = 500
+        forget = 0.0
+
+        with tf.Session() as s:
+            concat_arg = tf.constant(np.random.normal(size=batches*4*vec_len).reshape((batches, 4*vec_len)))
+            c = tf.constant(np.random.normal(size=batches*vec_len).reshape((batches, vec_len)))
+
+            i, j, f, o = tf.split(1, 4, concat_arg)
+
+            new_c_tf = tf.mul(c,  tf.sigmoid(f + forget)) + tf.sigmoid(i) * tf.tanh(j)
+            new_h_tf = tf.tanh(new_c_tf) * tf.sigmoid(o)
+
+            i, j, f, o = split(concat_arg, split_dim=1, num_split=4)
+
+            new_c = mul(c,  sigmoid(f)) + sigmoid(i) * tanh(j)
+            new_h = tanh(new_c) * sigmoid(o)
+            new_c_ovl, new_h_ovl = as_tensorflow([new_c, new_h])
+
+            assert np.allclose(*s.run([new_c_tf, new_c_ovl]))
+            assert np.allclose(*s.run([new_h_tf, new_h_ovl]))
+
+            c_grad = tf.constant(np.random.normal(size=batches*vec_len).reshape((batches, vec_len)))
+            h_grad = tf.constant(np.random.normal(size=batches*vec_len).reshape((batches, vec_len)))
+
+            concat_grad_tf = tf.gradients([new_c_tf, new_h_tf], concat_arg, [c_grad, h_grad])[0]
+            concat_grad_ovl = tf.gradients([new_c_ovl, new_h_ovl], concat_arg, [c_grad, h_grad])[0]
+
+            c_grad_tf = tf.gradients([new_c_tf, new_h_tf], c, [c_grad, h_grad])[0]
+            c_grad_ovl = tf.gradients([new_c_ovl, new_h_ovl], c, [c_grad, h_grad])[0]
+
+            assert np.allclose(*s.run([concat_grad_tf, concat_grad_ovl]))
+            assert np.allclose(*s.run([c_grad_tf, c_grad_ovl]))
