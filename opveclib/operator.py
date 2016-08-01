@@ -372,6 +372,9 @@ class _OpGenerator(object):
 
         self.grad_function = None
 
+    def __doc__(self):
+        return self.op_function.__doc__
+
     def __str__(self):
         return self.op_function.__name__
 
@@ -524,7 +527,6 @@ class _OpGenerator(object):
             self.grad_function = grad_function
         else:
             raise ValueError('Gradient function is already defined for operator ' + str(self.name) + '.')
-
 
 def operator(forbid_none_valued_constants=True, name=None):
     def wrapper(op_function):

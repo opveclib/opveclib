@@ -217,13 +217,26 @@ class TestAccumulate(unittest.TestCase):
                     cumsum_tf = ops.as_tensorflow(cumsumOp)
                     sess.run(tf.initialize_all_variables())
                     cumsum_tf_result = sess.run(cumsum_tf)
-                    prof_tf = np.zeros(iters)
+                    prof_ovl = np.zeros(iters)
                     for i in range(iters):
                         t0 = time.time()
                         sess.run(cumsum_tf.op)
                         t1 = time.time()
-                        prof_tf[i] = t1 - t0
-                    tf_time = np.min(prof_tf) * 1000.00
+                        prof_ovl[i] = t1 - t0
+                    tf_time = np.min(prof_ovl) * 1000.00
                     logger.debug(u'Best tf + ovl time  (ms) on ' + dev_string + ' :' + str(tf_time))
                     assert np.allclose(ref, cumsum_tf_result)
+
+                    # TF cumsum
+                    tf_out = tf.cumsum(X, axis=0, exclusive=False, reverse=False)
+                    tf_result = tf_out.eval()
+                    assert np.allclose(ref, tf_result)
+                    prof_tf = np.zeros(iters)
+                    for i in range(iters):
+                        t0 = time.time()
+                        sess.run(tf_out.op)
+                        t1 = time.time()
+                        prof_tf[i] = t1 - t0
+                    tf_time = np.min(prof_tf) * 1000.00
+                    logger.debug(u'Best tf cumsum time  (ms) on ' + dev_string + ' :' + str(tf_time))
         sess.close()

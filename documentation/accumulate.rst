@@ -4,7 +4,8 @@ Accumulate
 .. automodule:: examples.test_accumulate
 
 .. autoclass:: examples.accumulate
-    :members: op
+       :members:
+       :undoc-members:
 
 .. autofunction:: examples.cumsum
 
