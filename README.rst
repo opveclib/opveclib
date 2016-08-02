@@ -115,6 +115,13 @@ This will take 10-15 minutes on a GPU-enabled installation.
 
 
 Documentation
--------------
+~~~~~~~~~~~~~~~~~~~~~~
 http://opveclib.readthedocs.io/
 
+Contributing
+~~~~~~~~~~~~
+
+.. toctree::
+   :maxdepth: 1
+
+   contributing
