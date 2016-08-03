@@ -327,9 +327,10 @@ def run_tf(tensor_in_sizes, filter_in_sizes):
 
     iters = 100
     ovlOp = conv_1d(ar1, ar2, mode='same', kernel_orientation='as-is', data_format='NEC')
-    ovlResult, prof = ops.profile(ovlOp, target_language='cuda', profiling_iterations=iters)
-    ovl_cuda_time = np.min(list(prof.values())[0])
-    assert np.allclose(ovlResult, ref)
+    if ops.cuda_enabled:
+        ovlResult, prof = ops.profile(ovlOp, target_language='cuda', profiling_iterations=iters)
+        ovl_cuda_time = np.min(list(prof.values())[0])
+        assert np.allclose(ovlResult, ref)
     #TODO - cpp is really slow...
     ovlcppResult, profcpp = ops.profile(ovlOp, target_language='cpp', profiling_iterations=iters)
     ovl_cpp_time = np.min(list(profcpp.values())[0])
