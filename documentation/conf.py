@@ -25,7 +25,6 @@ import types
 sys.path.insert(0, os.path.abspath('..'))
 import opveclib as op
 sys.path.insert(0, os.path.abspath('../opveclib'))
-import examples as ex
 
 # generate API documentation file from the package init file
 with open(os.path.abspath('./api.rst'), 'w') as api_file:

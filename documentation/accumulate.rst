@@ -3,9 +3,7 @@ Accumulate
 
 .. automodule:: examples.test_accumulate
 
-.. autoclass:: examples.accumulate
-       :members:
-       :undoc-members:
+.. autofunction:: examples.accumulate(x, inner_fcn=None, axis=None)
 
 .. autofunction:: examples.cumsum
 

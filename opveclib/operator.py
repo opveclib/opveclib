@@ -530,7 +530,11 @@ class _OpGenerator(object):
 
 def operator(forbid_none_valued_constants=True, name=None):
     def wrapper(op_function):
-        return _OpGenerator(op_function, forbid_none_valued_constants, name)
+        op = _OpGenerator(op_function, forbid_none_valued_constants, name)
+        op.__name__= op_function.__name__
+        op.__doc__= op_function.__doc__
+        return op
+
     return wrapper
 
 
