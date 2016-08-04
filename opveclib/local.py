@@ -19,6 +19,8 @@ version = '1.0.0-dev3'
 
 #: The log
 logger = logging.getLogger('opveclib')
+# for some strange reason, sphinx can't pull the docstring for this instance variable in the normal way
+logger.__doc__ = 'The opveclib logger'
 
 # set directories for cuda and operator cache
 cuda_directory = os.getenv('CUDA_HOME', '/usr/local/cuda')

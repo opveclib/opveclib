@@ -40,5 +40,5 @@ from .expression import if_, elif_, else_
 # @ Operator functions
 from .operator import operator, gradient, evaluate, profile, as_tensorflow
 
-# @ Localization functions
+# @ Local runtime environment functions
 from .local import version, logger, cuda_enabled, cache_directory, clear_op_cache
