@@ -284,20 +284,48 @@ class TestOperator(unittest.TestCase):
         merged_op_dag = _OperatorDAG(proto_dag=merged_proto_dag, inputs=op_dag.inputs, operators=[], grad_dags=[])
         assert np.allclose(evaluate(sum1), _evaluate_op_dag(merged_op_dag))
 
-    # def test_sum2_merge(self):
-    #     print('*** Running Test: ' + self.__class__.__name__ + ' function: ' + _getframe().f_code.co_name)
+    def test_sum2_merge(self):
+        print('*** Running Test: ' + self.__class__.__name__ + ' function: ' + _getframe().f_code.co_name)
+        in0 = np.random.random([5])
+        in1 = np.random.random([5])
+        in2 = np.random.random([5])
+        sum0 = add(in0, in1)
+        sum1 = add(sum0, in2)
+        o0, o1 = evaluate([sum0, sum1])
+        op_dag = _build_op_dag(sum0, sum1)
+        merged_proto_dag = _merge_op_dag(op_dag.proto_dag)
+        merged_op_dag = _OperatorDAG(proto_dag=merged_proto_dag, inputs=op_dag.inputs, operators=[], grad_dags=[])
+        m0, m1 = _evaluate_op_dag(merged_op_dag)
+        assert np.allclose(o0, m0) and np.allclose(o1, m1)
+
+    def test_split_add_mul_concatenate(self):
+        in0 = np.random.random([4, 5])
+        row0, row1, row2, row3 = split(in0)
+        sum0 = add(row0, row1)
+        sum1 = add(row2, row3)
+        prod0 = mul(sum0, sum1)
+        concat0 = concatenate(sum0, prod0, sum1)
+        o0 = evaluate(concat0)
+        op_dag = _build_op_dag(concat0)
+        merged_proto_dag = _merge_op_dag(op_dag.proto_dag)
+        merged_op_dag = _OperatorDAG(proto_dag=merged_proto_dag, inputs=op_dag.inputs, operators=[], grad_dags=[])
+        m0 = _evaluate_op_dag(merged_op_dag)
+        assert np.allclose(o0, m0)
+
+    # def test_add_tree(self):
     #     in0 = np.random.random([5])
     #     in1 = np.random.random([5])
     #     in2 = np.random.random([5])
-    #     sum0 = add(in0, in1)
-    #     sum1 = add(sum0, in2)
-    #     op_dag = _build_op_dag(sum0, sum1)
+    #     in3 = np.random.random([5])
+    #     sum0 = add(in1, in2)
+    #     sum1 = add(in0, sum0)
+    #     sum2 = add(in3, sum0)
+    #     o0, o1 = evaluate([sum1, sum2])
+    #     op_dag = _build_op_dag(sum1, sum2)
     #     merged_proto_dag = _merge_op_dag(op_dag.proto_dag)
     #     merged_op_dag = _OperatorDAG(proto_dag=merged_proto_dag, inputs=op_dag.inputs, operators=[], grad_dags=[])
-    #     o0, o1 = evaluate(sum0, sum1)
     #     m0, m1 = _evaluate_op_dag(merged_op_dag)
     #     assert np.allclose(o0, m0) and np.allclose(o1, m1)
-
 
 if __name__ == '__main__':
     clear_op_cache()
