@@ -25,7 +25,6 @@ import types
 sys.path.insert(0, os.path.abspath('..'))
 import opveclib as op
 sys.path.insert(0, os.path.abspath('../opveclib'))
-import examples as ex
 
 # generate API documentation file from the package init file
 with open(os.path.abspath('./api.rst'), 'w') as api_file:
@@ -52,6 +51,7 @@ with open(os.path.abspath('./api.rst'), 'w') as api_file:
 
             # generate documentation for all members of the public API
             if is_import and not is_comment:
+                module = split_line[split_line.index('from') + 1]
                 names = split_line[split_line.index('import') + 1:]
 
                 for name in names:
@@ -89,7 +89,7 @@ with open(os.path.abspath('./api.rst'), 'w') as api_file:
                                        '    :exclude-members: as_proto, from_proto, as_cstr, as_ctypes, as_numpy\n'
                                        '\n')
                     else:
-                        api_file.write('.. autodata:: opveclib.' + attr_name + '\n    :annotation:\n')
+                        api_file.write('.. autodata:: opveclib.' + module[1:] + '.' + attr_name + '\n    :annotation:\n')
 
 # -- General configuration ------------------------------------------------
 

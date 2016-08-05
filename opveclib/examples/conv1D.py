@@ -106,7 +106,7 @@ def conv_1d(x, v, kernel_orientation='as-is', stride=1, mode='same', data_format
         element_workers += 1
 
     workgroup_shape = [batch_workers, filter_workers, element_workers]
-    print('    workgroup_shape: ' + str(workgroup_shape))
+    ops.logger.debug(u'    workgroup_shape: ' + str(workgroup_shape))
     pos = ops.position_in(workgroup_shape)
     cur_batch_block = pos[0]
     cur_filter_block = pos[1]
@@ -294,7 +294,6 @@ def run_tf(tensor_in_sizes, filter_in_sizes):
                       strides=[1, 1, 1, 1],
                       padding="SAME",
                       data_format='NHWC')
-    # print('conv shape: ' + str(conv.get_shape().as_list()))
 
     # compare to OVL - need to convert input to 1-D - ie. input_rows = filter_rows = 1
     # also transpose initial data since filter index is last in TF and first in OVL
@@ -309,7 +308,7 @@ def run_tf(tensor_in_sizes, filter_in_sizes):
     num_elem = filter_in_sizes[1]
     num_chan = filter_in_sizes[2]
     ovl_filter_in_sizes = [num_filter, num_elem, num_chan]
-    print('input and filter sizes: ' + str(ovl_tensor_in_sizes) + ', ' + str(ovl_filter_in_sizes))
+    ops.logger.debug(u'input and filter sizes: ' + str(ovl_tensor_in_sizes) + ', ' + str(ovl_filter_in_sizes))
     ar1 = np.array(x1, dtype=np.float).reshape(ovl_tensor_in_sizes)
     # does not produce the correct results
     # ar2 = np.array(x2, dtype=np.float).reshape(ovl_filter_in_sizes, order='F')
@@ -327,15 +326,15 @@ def run_tf(tensor_in_sizes, filter_in_sizes):
     np_time = (t1-t0)*1000
 
     iters = 100
-    ovl_cpp_time = 0
     ovlOp = conv_1d(ar1, ar2, mode='same', kernel_orientation='as-is', data_format='NEC')
-    ovlResult, prof = ops.profile(ovlOp, target_language='cuda', profiling_iterations=iters)
-    ovl_cuda_time = np.min(list(prof.values())[0])
-    assert np.allclose(ovlResult, ref)
+    if ops.cuda_enabled:
+        ovlResult, prof = ops.profile(ovlOp, target_language='cuda', profiling_iterations=iters)
+        ovl_cuda_time = np.min(list(prof.values())[0])
+        assert np.allclose(ovlResult, ref)
     #TODO - cpp is really slow...
-    # ovlcppResult, profcpp = ops.profile(ovlOp, target_language='cpp', profiling_iterations=iters)
-    # ovl_cpp_time = np.min(list(profcpp.values())[0])
-    # assert np.allclose(ovlcppResult, ref)
+    ovlcppResult, profcpp = ops.profile(ovlOp, target_language='cpp', profiling_iterations=iters)
+    ovl_cpp_time = np.min(list(profcpp.values())[0])
+    assert np.allclose(ovlcppResult, ref)
 
     # ensure TF runs on GPU
     test_config=tf.ConfigProto(allow_soft_placement=False)
@@ -376,7 +375,7 @@ def run_tf(tensor_in_sizes, filter_in_sizes):
             assert np.allclose(tf_result, ref)
     sess.close()
     times = [np_time, ovl_cuda_time, ovl_cpp_time, ovl_tf_time, tf_time]
-    print('    time [np, OVL_cuda, OVL_cpp, OVL_TF, TF]: ' + str(times))
+    ops.logger.debug(u'    time [np, OVL_cuda, OVL_cpp, OVL_TF, TF]: ' + str(times))
 
 
 def run_tests():
@@ -408,7 +407,7 @@ def run_tests():
                 # print(prof)
                 # print(debug)
                 # print(op[0, 0, :])
-                print(k_ee, md, orientation, (t2-t1)*1000, np.min(list(prof.values())[0]))
+                ops.logger.debug(k_ee, md, orientation, (t2-t1)*1000, np.min(list(prof.values())[0]))
                 # assert np.allclose(result1, y1)
                 # assert np.allclose(result2, y2)
 

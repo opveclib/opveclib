@@ -26,9 +26,9 @@ environment to use OVL.
 
 Install TensorFlow
 ~~~~~~~~~~~~~~~~~~
-OVL depends on TensorFlow 0.9.0 and works with both the CPU and GPU versions. Installation instructions
+OVL depends on TensorFlow 0.10.0 and works with both the CPU and GPU versions. Installation instructions
 are available
-`here <https://www.tensorflow.org/versions/r0.9/get_started/os_setup.html#download-and-setup>`_.
+`here <https://www.tensorflow.org/versions/r0.10/get_started/os_setup.html#download-and-setup>`_.
 
 Note that the GPU version of TensorFlow requires the CUDA SDK 7.5 and cuDNN 4 to be installed on your system.
 Depending on how these dependencies are installed you may need to explicitly set the CUDA_HOME environment variable,
@@ -111,19 +111,17 @@ To run all the example code tests, run:
 
     nose2 -F opveclib.examples
 
-This will take 10-15 minutes on a GPU-enabled installation. 
+This will take 10-15 minutes on a GPU-enabled installation.
 
-Developers
--------------
-If you are an opveclib developer and need to make changes to language.proto, you will need to install the protoc compiler. 
-
-.. code-block:: console
-
-    sudo apt-get install protobuf-compiler
-    
-Note, this will install version 2.5 of protoc, which is only compatible with python 2. If you wish to use python 3, you will need version 3.0.0-beta-2 of protoc. It can be found and installed from here: https://github.com/google/protobuf/releases/
 
 Documentation
--------------
+~~~~~~~~~~~~~~~~~~~~~~
 http://opveclib.readthedocs.io/
 
+Contributing
+~~~~~~~~~~~~
+
+.. toctree::
+   :maxdepth: 1
+
+   contributing

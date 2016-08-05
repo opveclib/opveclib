@@ -4,11 +4,28 @@ Contributor's Guide
 Contribution Policy
 -------------------
 
+* Do not use a logging level above debug - library should be silent unless there is an error raised, or the user is
+   explicitly capturing debug level logs.
+* Do not use print statements. All debugging output should be made to the library's logger.
+* All functionality must be tested.
 
 Contributor License Agreement
 -----------------------------
 
-.. TODO
+TODO: link to CLA here
+
+Developers
+-------------
+
+If you are an opveclib developer and need to make changes to language.proto, you will need to install the protoc compiler.
+
+.. code-block:: console
+
+    sudo apt-get install protobuf-compiler
+
+Note, this will install version 2.5 of protoc, which is only compatible with python 2. If you wish to use python 3,
+you will need version 3.0.0-beta-2 of protoc. It can be found and installed from here:
+https://github.com/google/protobuf/releases/
 
 Local installation
 ------------------
@@ -23,13 +40,7 @@ On Ubuntu:
 
 For other OS installations see https://pypi.python.org/pypi/setuptools#installation-instructions.
 
-From your base opveclib directory run:
-
-.. code-block:: console
-
-    sudo python setup.py install
-
-Or to install a local version under your home directory directly from your source:
+To install a local version of opveclib under your home directory directly from your local source:
 
 .. code-block:: console
 
@@ -37,11 +48,14 @@ Or to install a local version under your home directory directly from your sourc
 
 Testing
 -------
-Tests can be run from the root opveclib directory as follows:
+Individual tests can be run on your local source from the root opveclib directory as follows:
 
 .. code-block:: console
 
-    ./runtests.sh
+    nose2 opveclib.test.test_clip
+    nose2 opveclib.examples.test_accumulate
+
+etc.
 
 Making Documentation
 --------------------

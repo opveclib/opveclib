@@ -47,7 +47,7 @@ typedef uint16_t
                   (std::vector<std::shared_ptr<const InputParameter>> inputs,
                   std::vector<std::shared_ptr<OutputParameter>> outputs,
                   cudaStream_t stream,
-                  uint16_t cuda_threads_per_block);
+                  uint16_t cuda_threads_per_block, uint16_t *err);
 
 struct TensorParam {
     void* data;
@@ -279,12 +279,12 @@ int32_t testCUDAOperator(const char *opLibPath, const char *opFuncName,
 
     // call the test library function
     // time the execution in milliseconds
-    int err = 1;
     cudaDeviceSynchronize();
+    uint16_t err = 0;
     for (size_t profiling_iter = 0; profiling_iter < profiling_iterations; profiling_iter++) {
         cudaStreamSynchronize(stream1);
         auto t1 = std::chrono::high_resolution_clock::now();
-        err = func_(inputs, outputs, stream1, cuda_threads_per_block);
+        func_(inputs, outputs, stream1, cuda_threads_per_block, &err);
         cudaStreamSynchronize(stream1);
         auto t2 = std::chrono::high_resolution_clock::now();
         std::chrono::duration<double, std::milli> dt_dur = t2 - t1;

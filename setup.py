@@ -14,13 +14,14 @@ from opveclib.local import version
 setup(
     name='opveclib',
     version=version,
-    packages=['opveclib', 'opveclib.test', 'opveclib.test_tensorflow', 'opveclib.examples'],
-    install_requires=['numpy >= 1.11.0', 'protobuf == 3.0.0b2', 'tensorflow==0.9.0', 'six >= 1.10.0'],
+    packages=['opveclib', 'opveclib.test', 'opveclib.examples', 'opveclib.stdops'],
+    install_requires=['numpy >= 1.11.0', 'protobuf == 3.0.0b2', 'tensorflow >= 0.10.0rc0', 'six >= 1.10.0'],
     package_data={
         'opveclib': ['dynamiclibop.h', 'dynamiclibop.cc',
                      'testcop.cc', 'testcudaop.cc',
                      'language.proto',
-                     'test/addcpu.cpp', 'test/addgpu.cu']
+                     'test/addcpu.cpp', 'test/addgpu.cu',
+                     'threadpool.h']
     },
     test_suite='nose2.collector.collector',
     license='Apache 2.0'

@@ -40,27 +40,27 @@ RUN curl -O https://bootstrap.pypa.io/get-pip.py && \
     python3 get-pip.py && \
     rm get-pip.py
 
+# install nose2 for python 3
+RUN pip3 install nose2
+
 # Install TensorFlow CPU version for both python2.7 and python 3.4.
-ENV TENSORFLOW_VERSION 0.9.0
+ENV TENSORFLOW_VERSION 0.10.0rc0
 RUN pip2 --no-cache-dir install --upgrade \
     https://storage.googleapis.com/tensorflow/linux/gpu/tensorflow-${TENSORFLOW_VERSION}-cp27-none-linux_x86_64.whl
 RUN pip3 --no-cache-dir install --upgrade \
     https://storage.googleapis.com/tensorflow/linux/gpu/tensorflow-${TENSORFLOW_VERSION}-cp34-cp34m-linux_x86_64.whl
 
-# install nose2 for python 3
-RUN pip3 install nose2
-
 # set default workdir
 WORKDIR /usr/opveclib
 
 # install protoc 3.0.0 and its C++ libraries
-RUN wget --no-check-certificate  https://github.com/google/protobuf/releases/download/v3.0.0-beta-2/protobuf-cpp-3.0.0-beta-2.tar.gz
-RUN tar xvf protobuf-cpp-3.0.0-beta-2.tar.gz 
-RUN cd protobuf-3.0.0-beta-2/
-RUN /usr/opveclib/protobuf-3.0.0-beta-2/configure
-RUN make
-RUN make install
-RUN ldconfig
+#RUN wget --no-check-certificate  https://github.com/google/protobuf/releases/download/v3.0.0-beta-2/protobuf-cpp-3.0.0-beta-2.tar.gz
+#RUN tar xvf protobuf-cpp-3.0.0-beta-2.tar.gz
+#RUN cd protobuf-3.0.0-beta-2/
+#RUN /usr/opveclib/protobuf-3.0.0-beta-2/configure
+#RUN make
+#RUN make install
+#RUN ldconfig
 
 # copy opveclib source that was already cloned from github via jenkins
 ENV CUDA_HOME=/usr/local/cuda

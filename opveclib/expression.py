@@ -11,13 +11,9 @@
 import ctypes
 import string
 import re
-import os
-import subprocess
-import sys
 import six
 
 import numpy as np
-from tensorflow import logging
 from . import language_pb2 as lang
 
 
@@ -578,11 +574,14 @@ class ExpressionDAG(object):
         |#define abs_8(x) abs(x);
         |#define abs_16(x) abs(x);
         |
-        |uint16_t ${function_name}(${args_str}){
-        |    for(uint32_t worker_index=0; worker_index < ${num_workers}; worker_index++){
+        |void ${function_name}(${args_str},
+        |                      uint32_t block_size, uint32_t thread_index){
+        |    uint32_t start = thread_index * block_size;
+        |    uint32_t end = start + block_size;
+        |    if (end > ${num_workers}) end = ${num_workers};
+        |    for(uint32_t worker_index=start; worker_index < end; worker_index++){
         |${expression_src}
         |    }
-        |    return 0;
         |}
         |"""
         c_src = string.Template(c_src).substitute(locals())
@@ -621,120 +620,120 @@ class ExpressionDAG(object):
 
         # Generate cuda launcher interface for executing cuda kernels as c function call
         # note that this is slow since it initiates a new CUDA context and is generally only useful for testing
-        allocate_and_copy = ''
-        copy_and_free = ''
-        device_ptrs = []
-        for inp in inputs:
-            host_ptr = 'in'+str(inp.proto_expr.io_index)
-            device_ptr = 'd_'+host_ptr
-            device_ptrs.append(device_ptr)
-            tipe = inp.dtype.as_cstr()
-            elements = inp.size
-            cur_alloc = """
-            |    size_t ${host_ptr}_size = ${elements}*sizeof(${tipe});
-            |    CUDA_SAFE_CALL(cuMemAlloc(&${device_ptr}, ${host_ptr}_size));
-            |    CUDA_SAFE_CALL(cuMemcpyHtoD(${device_ptr}, ${host_ptr}, ${host_ptr}_size));
-            |"""
-            allocate_and_copy += string.Template(cur_alloc).substitute(locals())
-
-            cur_free = """
-            |    CUDA_SAFE_CALL(cuMemFree(${device_ptr}));
-            """
-            copy_and_free += string.Template(cur_free).substitute(locals())
-
-        for outp in outputs:
-            host_ptr = 'out'+str(outp.proto_expr.io_index)
-            device_ptr = 'd_'+host_ptr
-            device_ptrs.append(device_ptr)
-
-            tipe = outp.dtype.as_cstr()
-            elements = outp.size
-            cur_alloc = """
-            |    size_t ${host_ptr}_size = ${elements}*sizeof(${tipe});
-            |    CUDA_SAFE_CALL(cuMemAlloc(&${device_ptr}, ${host_ptr}_size));
-            """
-            allocate_and_copy += string.Template(cur_alloc).substitute(locals())
-
-            cur_free = """
-            |    CUDA_SAFE_CALL(cuMemcpyDtoH(${host_ptr}, ${device_ptr}, ${host_ptr}_size));
-            |    CUDA_SAFE_CALL(cuMemFree(${device_ptr}));
-            """
-            copy_and_free += string.Template(cur_free).substitute(locals())
-
-        device_ptrs_string = _list_to_str(device_ptrs)
-
-        device_args = []
-        for ptr in device_ptrs:
-            device_args.append('&'+ptr)
-        device_args_string = _list_to_str(device_args)
-
-        ptx_placeholder = '${ptx_string}'
-        cuda_launch_template = """
-        |//Generated Code
-        |//modified version of NVIDIA's 'SAXPY' example for running ptx compiled by nvrtc:
-        |// http://docs.nvidia.com/cuda/nvrtc/index.html#example-saxpy
-        |
-        |#include <cuda.h>
-        |#include <iostream>
-        |#include <stdint.h>
-        |
-        |#define CUDA_SAFE_CALL(x)                                         \\
-        |    do {                                                          \\
-        |        CUresult result = x;                                      \\
-        |        if (result != CUDA_SUCCESS) {                             \\
-        |            const char *msg;                                      \\
-        |            cuGetErrorName(result, &msg);                         \\
-        |            std::cerr << "\\nerror: " #x " failed with error "     \\
-        |                      << msg << '\\n';                             \\
-        |            exit(1);                                              \\
-        |        }                                                         \\
-        |    } while(0)
-        |
-        |extern "C" uint16_t ${function_name}(${args_str}, uint16_t threads_per_block)
-        |{
-        |    //begin previously compiled ptx string
-        |    const char * ptx = R"(${ptx_placeholder})";
-        |    //end previously compiled ptx string
-        |
-        |    //obtain function handle
-        |    CUdevice cuDevice;
-        |    CUcontext context;
-        |    CUmodule module;
-        |    CUfunction kernel;
-        |    CUDA_SAFE_CALL(cuInit(0));
-        |    CUDA_SAFE_CALL(cuDeviceGet(&cuDevice, 0));
-        |    CUDA_SAFE_CALL(cuCtxCreate(&context, 0, cuDevice));
-        |    CUDA_SAFE_CALL(cuModuleLoadDataEx(&module, ptx, 0, 0, 0));
-        |    CUDA_SAFE_CALL(cuModuleGetFunction(&kernel, module, "${function_name}"));
-        |
-        |    //allocate memory on and copy inputs to the device
-        |    CUdeviceptr ${device_ptrs_string};
-        |
-        ${allocate_and_copy}
-        |
-        |    uint32_t num_blocks = ${num_workers} / threads_per_block;
-        |    if(${num_workers} % threads_per_block > 0){ num_blocks += 1;}
-        |
-        |    void *args[] = {${device_args_string}};
-        |    CUDA_SAFE_CALL(
-        |    cuLaunchKernel(kernel,
-        |                   num_blocks, 1, 1,   // grid dim
-        |                   threads_per_block, 1, 1,    // block dim
-        |                   0, NULL,             // shared mem and stream
-        |                   args, 0));           // arguments
-        |    CUDA_SAFE_CALL(cuCtxSynchronize());
-        |
-        |    // copy outputs to host and free device memory
-        ${copy_and_free}
-        |
-        |    CUDA_SAFE_CALL(cuModuleUnload(module));
-        |    CUDA_SAFE_CALL(cuCtxDestroy(context));
-        |
-        |    return 0;
-        |}
-        |"""
-        cuda_launch_template = string.Template(cuda_launch_template).substitute(locals())
-        cuda_launch_template = _strip_margin(cuda_launch_template)
+        # allocate_and_copy = ''
+        # copy_and_free = ''
+        # device_ptrs = []
+        # for inp in inputs:
+        #     host_ptr = 'in'+str(inp.proto_expr.io_index)
+        #     device_ptr = 'd_'+host_ptr
+        #     device_ptrs.append(device_ptr)
+        #     tipe = inp.dtype.as_cstr()
+        #     elements = inp.size
+        #     cur_alloc = """
+        #     |    size_t ${host_ptr}_size = ${elements}*sizeof(${tipe});
+        #     |    CUDA_SAFE_CALL(cuMemAlloc(&${device_ptr}, ${host_ptr}_size));
+        #     |    CUDA_SAFE_CALL(cuMemcpyHtoD(${device_ptr}, ${host_ptr}, ${host_ptr}_size));
+        #     |"""
+        #     allocate_and_copy += string.Template(cur_alloc).substitute(locals())
+        #
+        #     cur_free = """
+        #     |    CUDA_SAFE_CALL(cuMemFree(${device_ptr}));
+        #     """
+        #     copy_and_free += string.Template(cur_free).substitute(locals())
+        #
+        # for outp in outputs:
+        #     host_ptr = 'out'+str(outp.proto_expr.io_index)
+        #     device_ptr = 'd_'+host_ptr
+        #     device_ptrs.append(device_ptr)
+        #
+        #     tipe = outp.dtype.as_cstr()
+        #     elements = outp.size
+        #     cur_alloc = """
+        #     |    size_t ${host_ptr}_size = ${elements}*sizeof(${tipe});
+        #     |    CUDA_SAFE_CALL(cuMemAlloc(&${device_ptr}, ${host_ptr}_size));
+        #     """
+        #     allocate_and_copy += string.Template(cur_alloc).substitute(locals())
+        #
+        #     cur_free = """
+        #     |    CUDA_SAFE_CALL(cuMemcpyDtoH(${host_ptr}, ${device_ptr}, ${host_ptr}_size));
+        #     |    CUDA_SAFE_CALL(cuMemFree(${device_ptr}));
+        #     """
+        #     copy_and_free += string.Template(cur_free).substitute(locals())
+        #
+        # device_ptrs_string = _list_to_str(device_ptrs)
+        #
+        # device_args = []
+        # for ptr in device_ptrs:
+        #     device_args.append('&'+ptr)
+        # device_args_string = _list_to_str(device_args)
+        #
+        # ptx_placeholder = '${ptx_string}'
+        # cuda_launch_template = """
+        # |//Generated Code
+        # |//modified version of NVIDIA's 'SAXPY' example for running ptx compiled by nvrtc:
+        # |// http://docs.nvidia.com/cuda/nvrtc/index.html#example-saxpy
+        # |
+        # |#include <cuda.h>
+        # |#include <iostream>
+        # |#include <stdint.h>
+        # |
+        # |#define CUDA_SAFE_CALL(x)                                         \\
+        # |    do {                                                          \\
+        # |        CUresult result = x;                                      \\
+        # |        if (result != CUDA_SUCCESS) {                             \\
+        # |            const char *msg;                                      \\
+        # |            cuGetErrorName(result, &msg);                         \\
+        # |            std::cerr << "\\nerror: " #x " failed with error "     \\
+        # |                      << msg << '\\n';                             \\
+        # |            exit(1);                                              \\
+        # |        }                                                         \\
+        # |    } while(0)
+        # |
+        # |extern "C" uint16_t ${function_name}(${args_str}, uint16_t threads_per_block)
+        # |{
+        # |    //begin previously compiled ptx string
+        # |    const char * ptx = R"(${ptx_placeholder})";
+        # |    //end previously compiled ptx string
+        # |
+        # |    //obtain function handle
+        # |    CUdevice cuDevice;
+        # |    CUcontext context;
+        # |    CUmodule module;
+        # |    CUfunction kernel;
+        # |    CUDA_SAFE_CALL(cuInit(0));
+        # |    CUDA_SAFE_CALL(cuDeviceGet(&cuDevice, 0));
+        # |    CUDA_SAFE_CALL(cuCtxCreate(&context, 0, cuDevice));
+        # |    CUDA_SAFE_CALL(cuModuleLoadDataEx(&module, ptx, 0, 0, 0));
+        # |    CUDA_SAFE_CALL(cuModuleGetFunction(&kernel, module, "${function_name}"));
+        # |
+        # |    //allocate memory on and copy inputs to the device
+        # |    CUdeviceptr ${device_ptrs_string};
+        # |
+        # ${allocate_and_copy}
+        # |
+        # |    uint32_t num_blocks = ${num_workers} / threads_per_block;
+        # |    if(${num_workers} % threads_per_block > 0){ num_blocks += 1;}
+        # |
+        # |    void *args[] = {${device_args_string}};
+        # |    CUDA_SAFE_CALL(
+        # |    cuLaunchKernel(kernel,
+        # |                   num_blocks, 1, 1,   // grid dim
+        # |                   threads_per_block, 1, 1,    // block dim
+        # |                   0, NULL,             // shared mem and stream
+        # |                   args, 0));           // arguments
+        # |    CUDA_SAFE_CALL(cuCtxSynchronize());
+        # |
+        # |    // copy outputs to host and free device memory
+        # ${copy_and_free}
+        # |
+        # |    CUDA_SAFE_CALL(cuModuleUnload(module));
+        # |    CUDA_SAFE_CALL(cuCtxDestroy(context));
+        # |
+        # |    return 0;
+        # |}
+        # |"""
+        # cuda_launch_template = string.Template(cuda_launch_template).substitute(locals())
+        # cuda_launch_template = _strip_margin(cuda_launch_template)
 
         # Generate the c generic parameter interface for unpacking polymorphic io parameters
         generic_args = []
@@ -747,7 +746,7 @@ class ExpressionDAG(object):
             tipe = inp.dtype.as_cstr()
 
             io_ptrs += string.Template("""
-                |    if(inputs[${cur_index}]->length() != ${elements}) return 1;
+                |    if(inputs[${cur_index}]->length() != ${elements}) { *err = 1; return; }
                 |    union u_in${cur_index}{
                 |       const ${tipe} *p_arb_len;
                 |       const ${tipe} (*p_fixed_len)[${elements}];
@@ -764,7 +763,7 @@ class ExpressionDAG(object):
             tipe = outp.dtype.as_cstr()
 
             io_ptrs += string.Template("""
-                |    if(outputs[${cur_index}]->length() != ${elements}) return 1;
+                |    if(outputs[${cur_index}]->length() != ${elements}) { *err = 1; return; }
                 |    union u_out${cur_index}{
                 |       ${tipe} *p_arb_len;
                 |       ${tipe} (*p_fixed_len)[${elements}];
@@ -782,14 +781,18 @@ class ExpressionDAG(object):
         |${c_src}
         |
         |extern "C"
-        |uint16_t ${function_name}_generic_cpp(std::vector<std::shared_ptr<const InputParameter>> inputs, std::vector<std::shared_ptr<OutputParameter>> outputs){
+        |void ${function_name}_generic_cpp(std::vector<std::shared_ptr<const InputParameter>> inputs,
+        |                                  std::vector<std::shared_ptr<OutputParameter>> outputs,
+        |                                  uint32_t num_threads, uint32_t thread_index, uint16_t* err){
         |    //check that the number of inputs and outputs is correct
-        |    if(inputs.size() != ${num_inputs}){ return 1; }
-        |    if(outputs.size() != ${num_outputs}){ return 1; }
+        |    if(inputs.size() != ${num_inputs}){ *err = 1; return; }
+        |    if(outputs.size() != ${num_outputs}){ *err = 1; return; }
         |
         |    //check that the size of inputs and outputs is correct, and cast them as pointers to arrays
         ${io_ptrs}
-        |    return ${function_name}(${args});
+        |    uint32_t block_size = ${num_workers} / num_threads;
+        |    if(${num_workers} % num_threads > 0) block_size += 1;
+        |    return ${function_name}(${args}, block_size, thread_index);
         |}
         |"""
         c_generic = string.Template(c_generic).substitute(locals())
@@ -805,10 +808,12 @@ class ExpressionDAG(object):
         |${cuda_function}
         |
         |extern "C"
-        |uint16_t ${function_name}_generic_cuda(std::vector<std::shared_ptr<const InputParameter>> inputs, std::vector<std::shared_ptr<OutputParameter>> outputs, CUstream stream, uint16_t threads_per_block){
+        |void ${function_name}_generic_cuda(std::vector<std::shared_ptr<const InputParameter>> inputs,
+        |                                   std::vector<std::shared_ptr<OutputParameter>> outputs,
+        |                                   CUstream stream, uint16_t threads_per_block, uint16_t* err){
         |    //check that the number of inputs and outputs is correct
-        |    if(inputs.size() != ${num_inputs}){ return 1; }
-        |    if(outputs.size() != ${num_outputs}){ return 1; }
+        |    if(inputs.size() != ${num_inputs}){ *err = 1; return; }
+        |    if(outputs.size() != ${num_outputs}){ *err = 1; return; }
         |
         |    //check that the size of inputs and outputs is correct, and cast them as pointers to arrays
         ${io_ptrs}
@@ -816,7 +821,6 @@ class ExpressionDAG(object):
         |    uint32_t num_blocks = ${num_workers} / threads_per_block;
         |    if(${num_workers} % threads_per_block > 0) num_blocks += 1;
         |    ${function_name}<<<num_blocks, threads_per_block, 0, stream>>>(${args});
-        |    return 0;
         |}
         """
         cuda_generic = string.Template(cuda_generic).substitute(locals())
@@ -824,7 +828,7 @@ class ExpressionDAG(object):
 
         # Generate the cuda generic parameter interface for unpacking polymorphic io parameters
 
-        return c_src, cuda_src, cuda_launch_template, c_generic, cuda_generic
+        return c_src, cuda_src, c_generic, cuda_generic
 
     @staticmethod
     def expr_index(expr):
@@ -1174,6 +1178,20 @@ def output(*args):
 
     :param args: args the define a TensorType, can be either a TensorType or a shape and a DType
     :return: a tensor expression which refers to the newly defined output tensor
+
+    :Example:
+
+    Create a new output tensor ``out`` based on the ``TensorType`` of input tensor ``in0`` ::
+
+        out = output(in0.tensor_type)
+
+    :Example:
+
+    Create a new output tensor ``out`` based on the ``shape`` of input tensor ``in0`` and the ``DType`` of input tensor
+    ``in1``::
+
+        out = output(in0.shape, in1.dtype)
+
     """
 
     tensor_type = _tensor_type_polymorhpic(*args)

@@ -18,6 +18,8 @@
 #include "tensorflow/core/platform/logging.h"
 #include "tensorflow/core/framework/op.h"
 #include "tensorflow/core/framework/op_kernel.h"
+#include "tensorflow/core/framework/device_base.h"
+#include "threadpool.h"
 
 #if GOOGLE_CUDA
 
@@ -38,6 +40,7 @@ REGISTER_OP("DynamicLib")
     .Attr("cpu_func_name: string")
     .Attr("cpu_lib_path: string")
     .Attr("serialized_grad_dag: string")
+    .Attr("grad_dag_arg_index: list(int)")
     .Attr("cuda_threads_per_block: int")
     .Attr("out_shapes: list(shape)")
     .Attr("in_types: list({float, double}) >= 0")
@@ -75,7 +78,8 @@ class DynamicLibLaunch<CPUDevice>  {
  public:
     typedef uint16_t
         (*FUNPTR)(std::vector<std::shared_ptr<const InputParameter>> inputs,
-                  std::vector<std::shared_ptr<OutputParameter>> outputs);
+                  std::vector<std::shared_ptr<OutputParameter>> outputs,
+                  int num_threads, int thread_idx, uint16_t *err);
     DynamicLibLaunch(OpKernelConstruction* context,
                      const string& cpu_func_name, const string& cpu_lib_path,
                      const string&, const string&,
@@ -101,7 +105,18 @@ class DynamicLibLaunch<CPUDevice>  {
     void Run(OpKernelContext* context, const CPUDevice&,
              std::vector<std::shared_ptr<const InputParameter>> inputs,
              std::vector<std::shared_ptr<OutputParameter>> outputs) {
-        uint16_t err = func_(inputs, outputs);
+        const int num_threads = context->device()->tensorflow_cpu_worker_threads()->workers->NumThreads();
+        uint16_t err = 0;
+        // ThreadPool destructor is what joins all the threads and waits for completion, so we
+        // scope it as a local variable and when it goes out of scope, all the work is done and result
+        // can be used
+        {
+            thread::ThreadPool thread_pool(Env::Default(), "dynamiclibop", num_threads);
+            for (int thread = 0; thread < num_threads; thread++) {
+                auto fn_work = std::bind(func_, inputs, outputs, num_threads, thread, &err);
+                thread_pool.Schedule(fn_work);
+            }
+        }
         OP_REQUIRES(context, err == 0,
             errors::InvalidArgument("External function execution error code: ",
                                     err));
@@ -120,7 +135,7 @@ class DynamicLibLaunch<GPUDevice>  {
         (*FUNPTR)(std::vector<std::shared_ptr<const InputParameter>> inputs,
                   std::vector<std::shared_ptr<OutputParameter>> outputs,
                   CUstream stream,
-                  int cuda_threads_per_block);
+                  int cuda_threads_per_block, uint16_t *err);
     DynamicLibLaunch(OpKernelConstruction* context,
                      const string&, const string&,
                      const string& gpu_func_name, const string& gpu_lib_path,
@@ -149,8 +164,9 @@ class DynamicLibLaunch<GPUDevice>  {
              std::vector<std::shared_ptr<const InputParameter>> inputs,
              std::vector<std::shared_ptr<OutputParameter>> outputs) {
         // call the DynamicLib library functions
-        uint16_t err = func_(inputs, outputs, d.stream(),
-                             cuda_threads_per_block_);
+        uint16_t err = 0;
+        func_(inputs, outputs, d.stream(),
+                             cuda_threads_per_block_, &err);
         OP_REQUIRES(context, err == 0,
             errors::InvalidArgument("External function execution error code: ",
                                     err));
