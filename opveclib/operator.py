@@ -1163,7 +1163,7 @@ def _is_pointwise(expr_dag) :
 _IndicesInfo = namedtuple('_UsageOfOutIndex', ['used_only_in_to', 'used_only_in_to_io',
                                                'used_in_general', 'used_in_general_io',
                                                'external_inputs_for_to', 'external_inputs_for_to_io',
-                                               'external_outputs_for_from',
+                                               'outputs_for_from_after_merge',
                                                'new_out_indices', 'input_to_ouput_index'])
 
 def _get_indices_info(proto_op_dag, to_op_index, from_op_index):
@@ -1182,12 +1182,14 @@ def _get_indices_info(proto_op_dag, to_op_index, from_op_index):
     :param from_op_index: The from-operator index within the operator dag.
     :return: Index information.
     """
-    used_indices_io = set()
-    external_inputs_for_to_io = set()
     references  = proto_op_dag.references
     ops         = proto_op_dag.operators
     outs        = proto_op_dag.dag_outputs
-    external_outputs = dict() # key is the operator index and the value is the set of output indices.
+
+    used_indices_io             = set()
+    external_inputs_for_to_io   = set()
+    external_outputs            = dict() # Key is the operator index and the value is the set of output indices.
+
     for out in outs:
         if out.op_index not in external_outputs:
             external_outputs[out.op_index] = set()
@@ -1243,9 +1245,11 @@ def _get_indices_info(proto_op_dag, to_op_index, from_op_index):
         if i in external_inputs_for_to_io:
             external_inputs_for_to.add(input_index)
 
-    external_outputs_for_from = set()
-    if from_op_index in external_outputs:
-        external_outputs_for_from |= external_outputs[from_op_index]
+    # external_outputs_for_from = set()
+    # if from_op_index in external_outputs:
+    #     external_outputs_for_from |= external_outputs[from_op_index]
+
+    outputs_for_from_after_merge = set()
 
     return _IndicesInfo(used_only_in_to=used_only_in_to,
                         used_only_in_to_io=used_only_in_to_io,
@@ -1253,7 +1257,7 @@ def _get_indices_info(proto_op_dag, to_op_index, from_op_index):
                         used_in_general_io=used_in_general_io,
                         external_inputs_for_to=external_inputs_for_to,
                         external_inputs_for_to_io=external_inputs_for_to_io,
-                        external_outputs_for_from=external_outputs_for_from,
+                        outputs_for_from_after_merge=outputs_for_from_after_merge,
                         new_out_indices=new_out_indices,  # mapping from old to new output indices for from op
                         input_to_ouput_index=input_to_ouput_index)
 
@@ -1292,6 +1296,8 @@ def _merge_expr_dags(to_expr_dag, from_expr_dag, indices_info): # used/unused re
     # - For tensors ONLY used in the 'to' op replace the OUTPUT by VARIABLE and ASSIGN_TENSOR by ASSIGN_VARIABLE.
     # - For tensors used in the 'to' op AND in another op add VARIABLE and ASSIGN_VARIABLE.
     # ******************************************************************************************************************
+    input_count = 0
+    output_count = 0
 
     for i, expr in enumerate(from_expr_dag.expressions):
 
@@ -1338,6 +1344,19 @@ def _merge_expr_dags(to_expr_dag, from_expr_dag, indices_info): # used/unused re
         # Copy the original expression.
         head_expr = merged_expr_dag.expressions.add()
         head_expr.CopyFrom(from_expr_dag.expressions[i])
+
+        # Set the io_index in the sequence of the INPUT definitions. This assumes that inputs have been re-ordered
+        # according to their signature.
+        if head_expr.code == lang.INPUT:
+            head_expr.io_index = input_count
+            input_count += 1
+
+        # Set the io_index in the sequence of the OUTPUT definitions. This assumes that the outputs have been re-ordered
+        # according to their signature.
+        if head_expr.code == lang.OUTPUT:
+            head_expr.io_index = output_count
+            output_count += 1
+
         # Set references for expression.
         operand_indices = []
         for iRef in from_expr_dag.references[i].operand_indices:
@@ -1430,8 +1449,8 @@ def _merge_expr_dags(to_expr_dag, from_expr_dag, indices_info): # used/unused re
     merge_pos_index = _get_position_index(merged_expr_dag)
     offset          = len(merged_expr_dag.expressions)
     offsets         = np.empty(len(to_expr_dag.expressions), dtype=int)
-    input_count     = len(_get_input_indices(from_expr_dag))
-    output_count    = len(_get_output_indices(merged_expr_dag))
+    #input_count     = len(_get_input_indices(from_expr_dag))
+    #output_count    = len(_get_output_indices(merged_expr_dag))
     offsets.fill(offset)
     outputs_for_to  = _get_output_indices(to_expr_dag)
 
@@ -1500,9 +1519,9 @@ def _merge_op_dag(proto_op_dag):
         new_out_indices             = indices_info.new_out_indices
         #input_to_output_index       = indices_info.input_to_ouput_index
         external_inputs_for_to_io   = indices_info.external_inputs_for_to_io
-        external_outputs_for_from   = indices_info.external_outputs_for_from
+        outputs_for_from_after_merge= indices_info.outputs_for_from_after_merge
         #input_from_num              = len(_get_input_indices(ops[from_op_index]))
-        from_out_num                = len(external_outputs_for_from)# Only external outputs!
+        #from_out_after_merge_num    = len(outputs_for_from_after_merge)# Only external outputs!
         output_from_wout_to_num     = len(_get_output_indices(ops[from_op_index])) - len(indices_info.used_only_in_to)
 
         # Build up the newly merged operator dag.
@@ -1571,9 +1590,11 @@ def _merge_op_dag(proto_op_dag):
         for i, dag_output in enumerate(merged_op_dag.dag_outputs):
             proto_out = lang.OperatorDAG.DAGOutputReference()
             op_index = dag_output.op_index
-            proto_out.op_output_index = dag_output.op_output_index
+            proto_out.op_output_index = dag_output.op_output_index # TODO: Fixme
             if op_index == to_op_index:
-                proto_out.op_output_index += from_out_num
+                proto_out.op_output_index += output_from_wout_to_num
+            if op_index == from_op_index:
+                proto_out.op_output_index -= len(indices_info.used_only_in_to)
 
             if op_index > to_op_index:
                 op_index -= 1
