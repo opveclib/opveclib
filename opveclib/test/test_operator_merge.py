@@ -272,21 +272,31 @@ class TestOperator(unittest.TestCase):
         assert np.allclose(in0, evaluate(cropped))
         assert euqal_set_merge_refs([], merge_info.merge_refs)
 
-    # def test_sum_merge(self):
+    def test_sum_merge(self):
+        print('*** Running Test: ' + self.__class__.__name__ + ' function: ' + _getframe().f_code.co_name)
+        in0 = np.random.random([5])
+        in1 = np.random.random([5])
+        in2 = np.random.random([5])
+        sum0 = add(in0, in1)
+        sum1 = add(sum0, in2)
+        op_dag = _build_op_dag(sum1)
+        merged_proto_dag = _merge_op_dag(op_dag.proto_dag)
+        merged_op_dag = _OperatorDAG(proto_dag=merged_proto_dag, inputs=op_dag.inputs, operators=[], grad_dags=[])
+        assert np.allclose(evaluate(sum1), _evaluate_op_dag(merged_op_dag))
+
+    # def test_sum2_merge(self):
     #     print('*** Running Test: ' + self.__class__.__name__ + ' function: ' + _getframe().f_code.co_name)
     #     in0 = np.random.random([5])
     #     in1 = np.random.random([5])
     #     in2 = np.random.random([5])
     #     sum0 = add(in0, in1)
     #     sum1 = add(sum0, in2)
-    #     op_dag = _build_op_dag(sum1)
+    #     op_dag = _build_op_dag(sum0, sum1)
     #     merged_proto_dag = _merge_op_dag(op_dag.proto_dag)
     #     merged_op_dag = _OperatorDAG(proto_dag=merged_proto_dag, inputs=op_dag.inputs, operators=[], grad_dags=[])
-    #     sum1_value = evaluate(sum1)
-    #     merged_sum1_value = _evaluate_op_dag(merged_op_dag)
-    #     #print(sum1_value)
-    #     #print(merged_sum1_value)
-    #     #assert np.allclose(sum1_value, merged_sum1_value)
+    #     o0, o1 = evaluate(sum0, sum1)
+    #     m0, m1 = _evaluate_op_dag(merged_op_dag)
+    #     assert np.allclose(o0, m0) and np.allclose(o1, m1)
 
 
 if __name__ == '__main__':
