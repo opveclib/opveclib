@@ -1677,7 +1677,7 @@ def _make_generic_cuda(src, name):
     return generic_cuda_so_path
 
 
-def evaluate(output_list, target_language='cpp'):
+def evaluate(output_list, target_language='cpp', opt_level=0):
     """
     Evaluate a collection of OVL operator, mainly used for testing. This function uses a test operator
     function for running the generated generic version of the operator so it does not depend on an external
@@ -1685,27 +1685,29 @@ def evaluate(output_list, target_language='cpp'):
 
     :param output_list: The outputs to evaluate
     :param target_language: 'cpp' or 'cuda'
+    :param opt_level: Optimization level.
 
     :return:  A list of numpy arrays for each operator output in output_list
     """
-    evaluated_outputs = profile(output_list, target_language=target_language, profiling_iterations=1)[0]
+    evaluated_outputs = profile(output_list, target_language=target_language,
+                                profiling_iterations=1, opt_level=opt_level)[0]
 
     if len(evaluated_outputs) == 1:
         return evaluated_outputs[0]
     else:
         return evaluated_outputs
 
-def _evaluate_op_dag(op_dag, target_language='cpp'):
-    evaluated_outputs = _profile_op_dag(op_dag, target_language=target_language, profiling_iterations=1)[0]
-    if len(evaluated_outputs) == 1:
-        return evaluated_outputs[0]
-    else:
-        return evaluated_outputs
+# def _evaluate_op_dag(op_dag, target_language='cpp'):
+#     evaluated_outputs = _profile_op_dag(op_dag, target_language=target_language, profiling_iterations=1)[0]
+#     if len(evaluated_outputs) == 1:
+#         return evaluated_outputs[0]
+#     else:
+#         return evaluated_outputs
+#
+# def profile(output_list, target_language='cpp', profiling_iterations=1):
+#     return _profile_op_dag(_build_op_dag(*output_list), target_language=target_language, profiling_iterations=profiling_iterations)
 
-def profile(output_list, target_language='cpp', profiling_iterations=1):
-    return _profile_op_dag(_build_op_dag(*output_list), target_language=target_language, profiling_iterations=profiling_iterations)
-
-def _profile_op_dag(op_dag, target_language, profiling_iterations):
+def profile(output_list, target_language, profiling_iterations, opt_level):
     """
     Evaluate a collection of OVL operator, mainly used for testing. This function uses a test operator
     function for running the generated generic version of the operator so it does not depend on an external
@@ -1840,8 +1842,10 @@ def _profile_op_dag(op_dag, target_language, profiling_iterations):
     else:
         raise ValueError(invalid_language)
 
-    #op_dag = _build_op_dag(*output_list)
+    op_dag = _build_op_dag(*output_list)
     dag = op_dag.proto_dag
+    if opt_level >= 3:
+        dag = _merge_op_dag(dag)
     inputs = op_dag.inputs
 
     output_buffers = []

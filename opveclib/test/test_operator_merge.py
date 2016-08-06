@@ -12,7 +12,7 @@ from __future__ import print_function
 import unittest
 import numpy as np
 from sys import _getframe
-from ..operator import operator, evaluate, _get_merge_refs_for_op_dag, _build_op_dag, _MergeRef, _merge_op_dag, _OperatorDAG, _evaluate_op_dag
+from ..operator import operator, evaluate, _get_merge_refs_for_op_dag, _build_op_dag, _MergeRef, _OperatorDAG
 from ..expression import position_in, output, variable, arange, output_like, if_, elif_, else_, cast
 from ..local import clear_op_cache
 from ..stdops.math import sigmoid, tanh, mul, split
@@ -281,10 +281,7 @@ class TestOperator(unittest.TestCase):
         in2 = np.random.random([5])
         sum0 = test_add(in0, in1)
         sum1 = test_add(sum0, in2)
-        op_dag = _build_op_dag(sum1)
-        merged_proto_dag = _merge_op_dag(op_dag.proto_dag)
-        merged_op_dag = _OperatorDAG(proto_dag=merged_proto_dag, inputs=op_dag.inputs, operators=[], grad_dags=[])
-        assert np.allclose(evaluate(sum1), _evaluate_op_dag(merged_op_dag))
+        assert np.allclose(evaluate(sum1, opt_level=0), evaluate(sum1, opt_level=3))
 
     def test_sum2_merge(self):
         print('*** Running Test: ' + self.__class__.__name__ + ' function: ' + _getframe().f_code.co_name)
@@ -293,11 +290,8 @@ class TestOperator(unittest.TestCase):
         in2 = np.random.random([5])
         sum0 = test_add(in0, in1)
         sum1 = test_add(sum0, in2)
-        o0, o1 = evaluate([sum0, sum1])
-        op_dag = _build_op_dag(sum0, sum1)
-        merged_proto_dag = _merge_op_dag(op_dag.proto_dag)
-        merged_op_dag = _OperatorDAG(proto_dag=merged_proto_dag, inputs=op_dag.inputs, operators=[], grad_dags=[])
-        m0, m1 = _evaluate_op_dag(merged_op_dag)
+        o0, o1 = evaluate([sum0, sum1], opt_level=0)
+        m0, m1 = evaluate([sum0, sum1], opt_level=3)
         assert np.allclose(o0, m0) and np.allclose(o1, m1)
 
     def test_split_add_mul_concatenate(self):
@@ -307,11 +301,8 @@ class TestOperator(unittest.TestCase):
         sum1 = test_add(row2, row3)
         prod0 = test_mul(sum0, sum1)
         concat0 = test_concatenate(sum0, prod0, sum1)
-        o0 = evaluate(concat0)
-        op_dag = _build_op_dag(concat0)
-        merged_proto_dag = _merge_op_dag(op_dag.proto_dag)
-        merged_op_dag = _OperatorDAG(proto_dag=merged_proto_dag, inputs=op_dag.inputs, operators=[], grad_dags=[])
-        m0 = _evaluate_op_dag(merged_op_dag)
+        o0 = evaluate(concat0, opt_level=0)
+        m0 = evaluate(concat0, opt_level=3)
         assert np.allclose(o0, m0)
 
     def test_add_tree(self):
@@ -322,11 +313,8 @@ class TestOperator(unittest.TestCase):
         sum0 = test_add(in1, in2)
         sum1 = test_add(in0, sum0)
         sum2 = test_add(in3, sum0)
-        o0, o1 = evaluate([sum1, sum2])
-        op_dag = _build_op_dag(sum1, sum2)
-        merged_proto_dag = _merge_op_dag(op_dag.proto_dag)
-        merged_op_dag = _OperatorDAG(proto_dag=merged_proto_dag, inputs=op_dag.inputs, operators=[], grad_dags=[])
-        m0, m1 = _evaluate_op_dag(merged_op_dag)
+        o0, o1 = evaluate([sum1, sum2], opt_level=0)
+        m0, m1 = evaluate([sum1, sum2], opt_level=3)
         assert np.allclose(o0, m0) and np.allclose(o1, m1)
 
     def test_lstm(self):
@@ -337,11 +325,8 @@ class TestOperator(unittest.TestCase):
         i, j, f, o = split(concat_arg, split_dim=1, num_split=4)
         new_c = mul(c, sigmoid(f)) + sigmoid(i) * tanh(j)
         new_h = tanh(new_c) * sigmoid(o)
-        o0, o1 = evaluate([new_c, new_h])
-        op_dag = _build_op_dag(new_c, new_h)
-        merged_proto_dag = _merge_op_dag(op_dag.proto_dag)
-        merged_op_dag = _OperatorDAG(proto_dag=merged_proto_dag, inputs=op_dag.inputs, operators=[], grad_dags=[])
-        m0, m1 = _evaluate_op_dag(merged_op_dag)
+        o0, o1 = evaluate([new_c, new_h], opt_level=0)
+        m0, m1 = evaluate([new_c, new_h], opt_level=3)
         assert np.allclose(o0, m0) and np.allclose(o1, m1)
 
 if __name__ == '__main__':
