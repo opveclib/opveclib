@@ -15,12 +15,12 @@ from sys import _getframe
 from ..operator import operator, evaluate, _get_merge_refs_for_op_dag, _build_op_dag, _MergeRef, _merge_op_dag, _OperatorDAG, _evaluate_op_dag
 from ..expression import position_in, output, variable, arange, output_like, if_, elif_, else_, cast
 from ..local import clear_op_cache
-#from ..math import add, sub, mul, div, neg, tanh, sigmoid, split, concat
+from ..stdops.math import sigmoid, tanh, mul, split
 
 
 # Define operators that are used in multiple test cases.
 @operator()
-def add(in0, in1):
+def test_add(in0, in1):
     assert in0.shape == in1.shape
     dim         = in0.shape
     i           = position_in(dim)
@@ -29,7 +29,7 @@ def add(in0, in1):
     return sumVal
 
 @operator()
-def mul(in0, in1):
+def test_mul(in0, in1):
     assert in0.shape == in1.shape
     dim         = in0.shape
     i           = position_in(dim)
@@ -38,7 +38,7 @@ def mul(in0, in1):
     return prodVal
 
 @operator()
-def cumsumRows(in0):
+def test_cum_sum_rows(in0):
     assert len(in0.shape) == 2 # assume 2D
     nRow    = in0.shape[0]
     nCol    = in0.shape[1]
@@ -51,7 +51,7 @@ def cumsumRows(in0):
     return cumsum
 
 @operator()
-def cumsumCols(in0):
+def test_cum_sum_cols(in0):
     assert len(in0.shape) == 2
     nRow        = in0.shape[0]
     nCol        = in0.shape[1]
@@ -65,7 +65,7 @@ def cumsumCols(in0):
 
 
 @operator()
-def split(in0):
+def test_split(in0):
     assert in0.shape[0] == 4
     nCol = in0.shape[1]
     iCol = position_in(nCol)
@@ -81,7 +81,7 @@ def split(in0):
 
 
 @operator()
-def concatenate(op0, op1, op2):
+def test_concatenate(op0, op1, op2):
     assert op0.shape == op1.shape
     assert op1.shape == op2.shape
     nCol    = op0.shape[0]
@@ -93,7 +93,7 @@ def concatenate(op0, op1, op2):
     return concat
 
 @operator()
-def matmul(in0, in1):
+def test_mat_mul(in0, in1):
     assert len(in0.shape) == 2
     assert len(in1.shape) == 2
     assert in0.shape[1] == in1.shape[0] # Columns of the 1st matrix must be equal to the rows of the 2nd matrix.
@@ -112,7 +112,7 @@ def matmul(in0, in1):
 
 # This is wasteful on threads but easy code
 @operator()
-def pad(in0, n=None):
+def test_pad(in0, n=None):
     assert len(in0.shape) == 2
     nRowIn  = in0.shape[0]
     nColIn  = in0.shape[1]
@@ -143,7 +143,7 @@ def pad(in0, n=None):
     return out
 
 @operator()
-def crop(in0, n=None):
+def test_crop(in0, n=None):
     assert len(in0.shape) == 2  # Assume 2D
     assert in0.shape[0] > 2*n   # Need to have at least 2n+1 values to be able to remove 2n values.
     assert in0.shape[1] > 2*n   # DITTO.
@@ -175,11 +175,11 @@ class TestOperator(unittest.TestCase):
     def test_merge_split_concatenate(self):
         print('*** Running Test: ' + self.__class__.__name__ + ' function: ' + _getframe().f_code.co_name)
         in0 = np.random.random([4, 5])              # op-index  in-arg-index  out-arg-index
-        row0, row1, row2, row3 = split(in0)         #   0           0           0, 1, 2, 3
-        sum0    = add(row0, row1)                   #   1           0, 1        0
-        sum1    = add(row2, row3)                   #   2           0, 1        0
-        prod0   = mul(sum0, sum1)                   #   3           0, 1        0
-        out0    = concatenate(sum0, prod0, sum1)    #   4           0, 1, 2     0
+        row0, row1, row2, row3 = test_split(in0)         #   0           0           0, 1, 2, 3
+        sum0    = test_add(row0, row1)                   #   1           0, 1        0
+        sum1    = test_add(row2, row3)                   #   2           0, 1        0
+        prod0   = test_mul(sum0, sum1)                   #   3           0, 1        0
+        out0    = test_concatenate(sum0, prod0, sum1)    #   4           0, 1, 2     0
         op_dag = _build_op_dag(out0)
         merge_refs = []
         merge_refs.append(_MergeRef(to_op_index=4, to_in_expr_index=0, to_in_arg_index=0,
@@ -206,10 +206,10 @@ class TestOperator(unittest.TestCase):
     def test_multiple_outputs(self):
         print('*** Running Test: ' + self.__class__.__name__ + ' function: ' + _getframe().f_code.co_name)
         in0     = np.random.random([4, 4])  # op-index      in-arg-index    out-arg-index
-        mmm0            = matmul(in0, in0)  #   0               0, 1            0
-        s0, s1, s2, s3  = split(mmm0)       #   1               0               0, 1, 2, 3
-        sum0            = add(s0, s1)       #   2               0, 1            0
-        sum1            = add(s2, s3)       #   3               0, 1            0
+        mmm0            = test_mat_mul(in0, in0)  #   0               0, 1            0
+        s0, s1, s2, s3  = test_split(mmm0)       #   1               0               0, 1, 2, 3
+        sum0            = test_add(s0, s1)       #   2               0, 1            0
+        sum1            = test_add(s2, s3)       #   3               0, 1            0
 
         op_dag  = _build_op_dag(sum0, sum1)
         merge_refs = []
@@ -224,8 +224,8 @@ class TestOperator(unittest.TestCase):
     def test_cumsum_nested(self):
         print('*** Running Test: ' + self.__class__.__name__ + ' function: ' + _getframe().f_code.co_name)
         in0         = np.random.random([3, 5])  # op-index      in-arg-index    out-arg-index
-        cRow0       = cumsumRows(in0)           #   0               0               0
-        cRow1       = cumsumRows(cRow0)         #   1               0               0
+        cRow0       = test_cum_sum_rows(in0)           #   0               0               0
+        cRow1       = test_cum_sum_rows(cRow0)         #   1               0               0
         op_dag      = _build_op_dag(cRow1)
         # For cumsumRows(cumsumRows(in0)) we merge using a temporary array for the output of the first cumsumRows!
         merge_refs = []
@@ -237,8 +237,8 @@ class TestOperator(unittest.TestCase):
     # No merging because of different workgroup shapes.
     def test_cumsum(self):
         print('*** Running Test: ' + self.__class__.__name__ + ' function: ' + _getframe().f_code.co_name)
-        cRow        = cumsumRows(np.random.random([3, 5]))
-        cCol        = cumsumCols(cRow)
+        cRow        = test_cum_sum_rows(np.random.random([3, 5]))
+        cCol        = test_cum_sum_cols(cRow)
         op_dag      = _build_op_dag(cCol)
         merge_info  = _get_merge_refs_for_op_dag(op_dag.proto_dag)
         assert euqal_set_merge_refs([], merge_info.merge_refs)
@@ -246,8 +246,8 @@ class TestOperator(unittest.TestCase):
     # No merging because of different access pattern.
     def test_cumsum_sym(self):
         print('*** Running Test: ' + self.__class__.__name__ + ' function: ' + _getframe().f_code.co_name)
-        cRow        = cumsumRows(np.random.random([3, 3]))
-        cCol        = cumsumCols(cRow)
+        cRow        = test_cum_sum_rows(np.random.random([3, 3]))
+        cCol        = test_cum_sum_cols(cRow)
         op_dag      = _build_op_dag(cCol)
         merge_info  = _get_merge_refs_for_op_dag(op_dag.proto_dag)
         assert euqal_set_merge_refs([], merge_info.merge_refs)
@@ -257,8 +257,8 @@ class TestOperator(unittest.TestCase):
         print('*** Running Test: ' + self.__class__.__name__ + ' function: ' + _getframe().f_code.co_name)
         in0     = np.random.random([3, 5])
         in1     = np.random.random([5, 2])
-        mmm     = matmul(in0, in1)
-        cCol    = cumsumCols(mmm)
+        mmm     = test_mat_mul(in0, in1)
+        cCol    = test_cum_sum_cols(mmm)
         op_dag  = _build_op_dag(cCol)
         merge_info = _get_merge_refs_for_op_dag(op_dag.proto_dag)
         assert euqal_set_merge_refs([], merge_info.merge_refs)
@@ -267,8 +267,8 @@ class TestOperator(unittest.TestCase):
     def test_pad_crop(self):
         print('*** Running Test: ' + self.__class__.__name__ + ' function: ' + _getframe().f_code.co_name)
         in0         = np.random.random([3, 5])
-        padded      = pad(in0, n=2)
-        cropped     = crop(padded, n=2)
+        padded      = test_pad(in0, n=2)
+        cropped     = test_crop(padded, n=2)
         op_dag      = _build_op_dag(cropped)
         merge_info  = _get_merge_refs_for_op_dag(op_dag.proto_dag)
         assert np.allclose(in0, evaluate(cropped))
@@ -279,8 +279,8 @@ class TestOperator(unittest.TestCase):
         in0 = np.random.random([5])
         in1 = np.random.random([5])
         in2 = np.random.random([5])
-        sum0 = add(in0, in1)
-        sum1 = add(sum0, in2)
+        sum0 = test_add(in0, in1)
+        sum1 = test_add(sum0, in2)
         op_dag = _build_op_dag(sum1)
         merged_proto_dag = _merge_op_dag(op_dag.proto_dag)
         merged_op_dag = _OperatorDAG(proto_dag=merged_proto_dag, inputs=op_dag.inputs, operators=[], grad_dags=[])
@@ -291,8 +291,8 @@ class TestOperator(unittest.TestCase):
         in0 = np.random.random([5])
         in1 = np.random.random([5])
         in2 = np.random.random([5])
-        sum0 = add(in0, in1)
-        sum1 = add(sum0, in2)
+        sum0 = test_add(in0, in1)
+        sum1 = test_add(sum0, in2)
         o0, o1 = evaluate([sum0, sum1])
         op_dag = _build_op_dag(sum0, sum1)
         merged_proto_dag = _merge_op_dag(op_dag.proto_dag)
@@ -302,11 +302,11 @@ class TestOperator(unittest.TestCase):
 
     def test_split_add_mul_concatenate(self):
         in0 = np.random.random([4, 5])
-        row0, row1, row2, row3 = split(in0)
-        sum0 = add(row0, row1)
-        sum1 = add(row2, row3)
-        prod0 = mul(sum0, sum1)
-        concat0 = concatenate(sum0, prod0, sum1)
+        row0, row1, row2, row3 = test_split(in0)
+        sum0 = test_add(row0, row1)
+        sum1 = test_add(row2, row3)
+        prod0 = test_mul(sum0, sum1)
+        concat0 = test_concatenate(sum0, prod0, sum1)
         o0 = evaluate(concat0)
         op_dag = _build_op_dag(concat0)
         merged_proto_dag = _merge_op_dag(op_dag.proto_dag)
@@ -319,9 +319,9 @@ class TestOperator(unittest.TestCase):
         in1 = np.random.random([5])
         in2 = np.random.random([5])
         in3 = np.random.random([5])
-        sum0 = add(in1, in2)
-        sum1 = add(in0, sum0)
-        sum2 = add(in3, sum0)
+        sum0 = test_add(in1, in2)
+        sum1 = test_add(in0, sum0)
+        sum2 = test_add(in3, sum0)
         o0, o1 = evaluate([sum1, sum2])
         op_dag = _build_op_dag(sum1, sum2)
         merged_proto_dag = _merge_op_dag(op_dag.proto_dag)
@@ -329,6 +329,20 @@ class TestOperator(unittest.TestCase):
         m0, m1 = _evaluate_op_dag(merged_op_dag)
         assert np.allclose(o0, m0) and np.allclose(o1, m1)
 
+    def test_lstm(self):
+        batches = 2
+        vec_len = 5
+        concat_arg = np.random.normal(size=batches * 4 * vec_len).reshape((batches, 4 * vec_len))
+        c = np.random.normal(size=batches * vec_len).reshape((batches, vec_len))
+        i, j, f, o = split(concat_arg, split_dim=1, num_split=4)
+        new_c = mul(c, sigmoid(f)) + sigmoid(i) * tanh(j)
+        new_h = tanh(new_c) * sigmoid(o)
+        o0, o1 = evaluate([new_c, new_h])
+        op_dag = _build_op_dag(new_c, new_h)
+        merged_proto_dag = _merge_op_dag(op_dag.proto_dag)
+        merged_op_dag = _OperatorDAG(proto_dag=merged_proto_dag, inputs=op_dag.inputs, operators=[], grad_dags=[])
+        m0, m1 = _evaluate_op_dag(merged_op_dag)
+        assert np.allclose(o0, m0) and np.allclose(o1, m1)
 
 if __name__ == '__main__':
     clear_op_cache()
