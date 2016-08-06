@@ -24,5 +24,10 @@ setup(
                      'threadpool.h']
     },
     test_suite='nose2.collector.collector',
-    license='Apache 2.0'
+    license='Apache 2.0',
+    description='Operator Vectorization Library',
+    long_description='',
+    url='https://github.com/hewlettpackardlabs/opveclib/',
+    author='Hewlett Packard Labs',
+    author_email='',
 )
