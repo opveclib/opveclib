@@ -200,8 +200,7 @@ class TestOperator(unittest.TestCase):
                                     from_op_index=0, from_out_expr_index=2, from_out_arg_index=0)) # add-row0
         merge_refs.append(_MergeRef(to_op_index=1, to_in_expr_index=0, to_in_arg_index=1,
                                     from_op_index=0, from_out_expr_index=3, from_out_arg_index=1)) # add-row1
-        merge_info = _get_merge_refs_for_op_dag(op_dag.proto_dag)
-        assert euqal_set_merge_refs(merge_refs, merge_info.merge_refs)
+        assert euqal_set_merge_refs(merge_refs, _get_merge_refs_for_op_dag(op_dag.proto_dag))
 
     def test_multiple_outputs(self):
         print('*** Running Test: ' + self.__class__.__name__ + ' function: ' + _getframe().f_code.co_name)
@@ -217,8 +216,7 @@ class TestOperator(unittest.TestCase):
         merge_refs.append(_MergeRef(to_op_index=3, to_in_expr_index=0, to_in_arg_index=1, from_op_index=1, from_out_expr_index=5, from_out_arg_index=3))  # split-sum1
         merge_refs.append(_MergeRef(to_op_index=2, to_in_expr_index=0, to_in_arg_index=0, from_op_index=1, from_out_expr_index=2, from_out_arg_index=0))  # split-sum0
         merge_refs.append(_MergeRef(to_op_index=2, to_in_expr_index=0, to_in_arg_index=1, from_op_index=1, from_out_expr_index=3, from_out_arg_index=1))  # split-sum1
-        merge_info = _get_merge_refs_for_op_dag(op_dag.proto_dag)
-        assert euqal_set_merge_refs(merge_refs, merge_info.merge_refs)
+        assert euqal_set_merge_refs(merge_refs, _get_merge_refs_for_op_dag(op_dag.proto_dag))
 
     # # Merging is possible but we need to insert a buffer.
     def test_cumsum_nested(self):
@@ -231,8 +229,7 @@ class TestOperator(unittest.TestCase):
         merge_refs = []
         merge_refs.append(_MergeRef(to_op_index=1, to_in_expr_index=0, to_in_arg_index=0,
                                     from_op_index=0, from_out_expr_index=4, from_out_arg_index=0))  # cRow1-cRow0
-        merge_info  = _get_merge_refs_for_op_dag(op_dag.proto_dag)
-        assert euqal_set_merge_refs(merge_refs, merge_info.merge_refs)
+        assert euqal_set_merge_refs(merge_refs, _get_merge_refs_for_op_dag(op_dag.proto_dag))
 
     # No merging because of different workgroup shapes.
     def test_cumsum(self):
@@ -240,8 +237,7 @@ class TestOperator(unittest.TestCase):
         cRow        = test_cum_sum_rows(np.random.random([3, 5]))
         cCol        = test_cum_sum_cols(cRow)
         op_dag      = _build_op_dag(cCol)
-        merge_info  = _get_merge_refs_for_op_dag(op_dag.proto_dag)
-        assert euqal_set_merge_refs([], merge_info.merge_refs)
+        assert euqal_set_merge_refs([], _get_merge_refs_for_op_dag(op_dag.proto_dag))
 
     # No merging because of different access pattern.
     def test_cumsum_sym(self):
@@ -249,8 +245,7 @@ class TestOperator(unittest.TestCase):
         cRow        = test_cum_sum_rows(np.random.random([3, 3]))
         cCol        = test_cum_sum_cols(cRow)
         op_dag      = _build_op_dag(cCol)
-        merge_info  = _get_merge_refs_for_op_dag(op_dag.proto_dag)
-        assert euqal_set_merge_refs([], merge_info.merge_refs)
+        assert euqal_set_merge_refs([], _get_merge_refs_for_op_dag(op_dag.proto_dag))
 
     # No merging because of different workgroup shapes.
     def test_matmul(self):
@@ -260,8 +255,7 @@ class TestOperator(unittest.TestCase):
         mmm     = test_mat_mul(in0, in1)
         cCol    = test_cum_sum_cols(mmm)
         op_dag  = _build_op_dag(cCol)
-        merge_info = _get_merge_refs_for_op_dag(op_dag.proto_dag)
-        assert euqal_set_merge_refs([], merge_info.merge_refs)
+        assert euqal_set_merge_refs([], _get_merge_refs_for_op_dag(op_dag.proto_dag))
 
     # No merging because of different workgroup shapes.
     def test_pad_crop(self):
@@ -270,9 +264,8 @@ class TestOperator(unittest.TestCase):
         padded      = test_pad(in0, n=2)
         cropped     = test_crop(padded, n=2)
         op_dag      = _build_op_dag(cropped)
-        merge_info  = _get_merge_refs_for_op_dag(op_dag.proto_dag)
         assert np.allclose(in0, evaluate(cropped))
-        assert euqal_set_merge_refs([], merge_info.merge_refs)
+        assert euqal_set_merge_refs([], _get_merge_refs_for_op_dag(op_dag.proto_dag))
 
     def test_sum_merge(self):
         print('*** Running Test: ' + self.__class__.__name__ + ' function: ' + _getframe().f_code.co_name)

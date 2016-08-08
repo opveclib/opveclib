@@ -693,6 +693,7 @@ def _build_op_dag(*outputs):
     dag = _OperatorDAG(proto_dag=op_dag, inputs=dag_inputs, operators=sorted_ops, grad_dags=grad_dags)
     return dag
 
+
 def _get_expr_indices(expr_dag, expr_code):
     """
     Get indices of all read/write expression in the expression dag which is represented as a list.
@@ -705,6 +706,7 @@ def _get_expr_indices(expr_dag, expr_code):
         if expr.code == expr_code:
             expr_indices.append(iExp)
     return expr_indices
+
 
 def _get_output_indices(expr_dag):
     """
@@ -726,7 +728,7 @@ def _get_input_indices(expr_dag):
 
 def _get_position_index(expr_dag):
     """
-    Returns the position index within this expr_dag. Returns -1 if none is found.
+    Returns the position index within this expr_dag. Checks that there is one and only one POSITION expression.
     :param expr_dag: The expression dag.
     :return: The index of the position within the expression dag.
     """
@@ -734,36 +736,39 @@ def _get_position_index(expr_dag):
     assert len(pos_indices) == 1 # There is only one position definition
     return pos_indices[0]
 
-def _get_output_io_index(expr_dag, iOut):
+
+def _get_output_io_index(expr_dag, out_expr_index):
     """
-    Assumes that the OUTPUT expression are in the order of the return order.
-    :param expr_dag:
-    :param iOut:
-    :return:
+    Assumes that OUTPUT expressions appear in return order.
+    :param expr_dag: The expression dag.
+    :param out_expr_index: The index of the output in the expression dag.
+    :return: The output argument index. Returns -1 if iOut is not an output and there are no outputs before.
     """
+    assert expr_dag.expressions[out_expr_index].code == lang.OUTPUT
     io_index = -1
-    for i in range(iOut, 0, -1):
-        if expr_dag.expressions[i].code==lang.OUTPUT:
+    for i in range(out_expr_index, 0, -1):
+        if expr_dag.expressions[i].code == lang.OUTPUT:
             io_index += 1
     return io_index
 
 
-def _get_output_shape(expr_dag, iOut):
+def _get_output_shape(expr_dag, out_arg_index):
     """
-    Returns the shape of the iOut-th output in the expression dag.
+    Returns the shape of the 'out_arg_index'-th output in the expression dag.
     :param expr_dag: expression dag
-    :param iOut: output index. Must be >=0 and < number of outputs.
+    :param out_arg_index: output index. Must be >=0 and < number of outputs.
     :return: shape of the output.
     """
     outs = _get_output_indices(expr_dag)
-    assert iOut < len(outs)
-    return expr_dag.expressions[outs[iOut]].tensor_type.shape
+    assert out_arg_index < len(outs)
+    return expr_dag.expressions[outs[out_arg_index]].tensor_type.shape
+
 
 def _get_tensor_read_indices(expr_dag):
     """
     Get indices for the READ_TENSOR expression code.
     :param expr_dag: The expression dag.
-    :return: A list of indices with READ_TENSOR expressions.
+    :return: A list of indices with a READ_TENSOR expression.
     """
     return _get_expr_indices(expr_dag, lang.READ_TENSOR)
 
@@ -779,14 +784,14 @@ def _get_tensor_assign_indices(expr_dag):
 
 def _get_indices_connected_to_expr_index(exp_dag, expr_indices, expr_index):
     """
-    Get indices from expr_indices that can be traced back to expr_index.  A typical use case is to see if a READ_TENSOR
-    or ASSIGN_TENSOR expression is linked to an input or output tensor of an operation.
+    Filter 'expr_indices' if they can be traced back to 'expr_index'. Typical use cases are:
+    Does a READ_TENSOR expression have connection to an input or output tensor?
+    Does an ASSIGN_TENSOR expression have connection to an output tensor?
     :param exp_dag: The expression dag.
-    :param expr_indices: The expression indices to test if they have a connection to expr_index.
-    :param expr_index: An expr_index in the dag. Assumes expr_index>=0 and expr_index<len(exp_dag.expressions._values).
-    :return: A sub-list of expr_indices that contains only those indices of expressions that are connected to the
-    expression at the index expr_index. We DO NOT guarantee for the returned indices to be in the same order than the
-    indices in expr_indices.
+    :param expr_indices: Expression indices to be tested if they have a connection to expr_index.
+    :param expr_index: An expr_index in the dag.
+    :return: A sub-list of 'expr_indices' that contains only those indices of expressions that are connected to the
+    expression at the index 'expr_index'. Returned indices may not be in the same order than indices in 'expr_indices'.
     """
     connected_indices = set()
     indices = []
@@ -828,15 +833,16 @@ def _get_indices_connected_to_expr_indices(exp_dag, from_expr_indices, to_expr_i
                     break
                 else:
                     indices.append(op_index)
+
     return list(connected_indices)
 
 
 def _get_tensor_read_indices_for_expr_index(expr_dag, expr_index):
     """
-    Returns a list of all TENSOR_READs for the expr_index, which usually is an input/output tensor.
-    An input tensor can only be read but not assigned to in ovl.
+    Returns a list of all TENSOR_READs for the expr_index, which usually is the index of an input/output tensor. An
+    input tensor can only be read but not assigned to in ovl.
     :param expr_dag: The expression dag.
-    :param expr_index: Usually the index of an input/output tensor.
+    :param expr_index: Usually the index in the expression dag of an input/output tensor.
     :return: A list of all expression indices that are TENSOR_READs and are connected to expr_index.
     """
     read_indices = _get_tensor_read_indices(expr_dag)
@@ -845,15 +851,14 @@ def _get_tensor_read_indices_for_expr_index(expr_dag, expr_index):
 
 def _get_indices_of_sub_expr_wout_position(expr_dag, expr_index):
     """
-    Returns a list of all indices starting the traversal within expr_dag at expr_index and ending the traversal either
-    at expression without inputs or the POSITION expression. The index for the POSITION EXPRESSION is not included in
-    the returned set.
+    Returns a list of all indices traversing the expression dag from expr_index to either an expression without inputs
+    or a POSITION expression. The index for the POSITION expression is not included in the returned set.
     :param expr_dag: The expression dag.
-    :param expr_index: The start index for traversal toward the inputs in the expression dag.
+    :param expr_index: The start index for the traversal toward inputs in the expression dag.
     :return: A set with all indices of the traversal.
     """
     sub_expr_indices = set()
-    indices     = [expr_index]
+    indices = [expr_index]
     while len(indices) > 0:
         i = indices.pop(0)
         # Stop at position.
@@ -862,90 +867,113 @@ def _get_indices_of_sub_expr_wout_position(expr_dag, expr_index):
         if i not in sub_expr_indices:
             sub_expr_indices.add(i)
             indices.extend(expr_dag.references[i].operand_indices)
+
     return sub_expr_indices
 
 
 def _get_indices_of_sub_expr(expr_dag, expr_index):
     """
-    Get all indices in expr_dag starting from expr_index when following the input references. Indices are of the sub-DAG
-    before expr_index.
+    Get all indices in expression dag starting from 'expr_index' following input references.
     :param expr_dag: The expression dag.
-    :param expr_index: The index within the expression dag that shall be traversed toward the inputs.
+    :param expr_index: Start the traversal toward inputs from here.
     :return: A set with all indices of the traversal starting from expr_index.
     """
     sub_expr_indices = set()
-    indices     = [expr_index]
+    indices = [expr_index]
     while len(indices) > 0:
         i = indices.pop(0)
         if i not in sub_expr_indices:
             sub_expr_indices.add(i)
             indices.extend(expr_dag.references[i].operand_indices)
+
     return sub_expr_indices
 
 
 def _get_tensor_assign_indices_for_expr_index(expr_dag, expr_index):
     """
-    Returns a list of all TENSOR_ASSIGNs for teh expr_index, which usually is an input/output tensor.
+    Returns a list of all TENSOR_ASSIGNs for the expression dag, which usually an assign to an OUTPUT tensor.
     One output can have multiple writes but never a read. That is not allowed in ovl.
     :param expr_dag: The expression dag.
-    :param expr_index: Usually the index of an input/output tensor.
-    :return: A list of all expression indices that are TENSOR_ASSIGNs and are connected to expr_index.
+    :param expr_index: Usually the index of an OUTPUT tensor.
+    :return: A list of all expression indices that are TENSOR_ASSIGN's and are connected to 'expr_index'.
     """
     write_indices = _get_tensor_assign_indices(expr_dag)
     return _get_indices_connected_to_expr_index(expr_dag, write_indices, expr_index)
 
-def _refs_pos(expr_dag, expr_index):
-    """
-    Returns True if the input references of expr_index have a POSITION code among them otherwise False.
-    :param expr_dag: The expression dag.
-    :param expr_index: The expression index to inspect.
-    :return: True if POSITION code is among the input references otherwise False.
-    """
-    for op_index in expr_dag.references[expr_index].operand_indices:
-        expr = expr_dag.expressions[op_index]
-        if expr.code == lang.POSITION:
-            return True
-
-    return False
-
 
 def _match_index_in_expr_dags(expr_dag0, expr_index0, expr_dag1, expr_index1):
     """
-    Compare the indexing by matching the sub-expression trees in expr_dag0 and expr_dag1. This captures also more
-    complex indexing patterns as given by mod, shift etc.
+    Compare the indexing by matching the sub-expression trees in 'expr_dag0' and 'expr_dag1'. This resolves complex
+    indexing including mod, shift, etc.
     :param expr_dag0: The first expression dag.
-    :param expr_index0: The index that refers to the READ_TENSOR or ASSIGN_TENSOR statement in the first dag.
+    :param expr_index0: The index that refers to READ_TENSOR or ASSIGN_TENSOR in the first expression dag.
     :param expr_dag1: The second expression dag.
-    :param expr_index1: The index that refers to the READ_TENSOR or ASSIGN_TENSOR statement in the second dag.
+    :param expr_index1: The index that refers to READ_TENSOR or ASSIGN_TENSOR in the second expression dag.
     :return: True if the codes of all expressions match, otherwise False.
     """
     op_indices0 = expr_dag0.references[expr_index0].operand_indices
     op_indices1 = expr_dag1.references[expr_index1].operand_indices
-    assert len(op_indices0) > 1 # Must have sub-expression tree for index at pos 1
-    assert len(op_indices1) > 1 # Must have sub-expression tree for index at pos 1
-    index0  = op_indices0[1]
-    index1  = op_indices1[1]
-    indices = [(index0, index1)] # Initialize the indices with the index expression in both sub-trees.
+
+    # Must have position 1 in operand_indices.
+    assert len(op_indices0) > 1
+    assert len(op_indices1) > 1
+
+    index0 = op_indices0[1]
+    index1 = op_indices1[1]
+
+    # Initialize the indices with the index expression in both sub-trees.
+    indices = [(index0, index1)]
+
     while len(indices) > 0:
         multi_index = indices.pop(0)
-        index0      = multi_index[0]
-        index1      = multi_index[1]
-        expr0       = expr_dag0.expressions[index0]
-        expr1       = expr_dag1.expressions[index1]
+        index0 = multi_index[0]
+        index1 = multi_index[1]
+        expr0 = expr_dag0.expressions[index0]
+        expr1 = expr_dag1.expressions[index1]
 
+        # Check for the same expression code.
         if expr0.code != expr1.code:
             return False
 
+        # For constants check that the have the same value.
         if expr0.code == lang.CONST_SCALAR:
-            if expr0.sint64_data != expr1.sint64_data:
+
+            dtype0 = expr0.dtype
+            dtype1 = expr1.dtype
+
+            if dtype0 != dtype1:
                 return False
 
+            if dtype0 == lang.UINT64:
+                if expr0.uint64_data != expr1.uint64_data:
+                    return False
+            elif dtype0 == lang.INT64:
+                if expr0.sint64_data != expr1.sint64_data:
+                    return False
+            elif dtype0 == lang.FLOAT64:
+                if expr0.double_data != expr1.double_data:
+                    return False
+            elif dtype0 == lang.FLOAT32:
+                if expr0.float_data != expr1.float_data:
+                    return False
+            elif dtype0 == lang.UINT32 or dtype0 == lang.UINT16 or dtype0 == lang.UINT8:
+                if expr0.uint32_data != expr1.uint32_data:
+                    return False
+            elif dtype0 == lang.INT32 or dtype0 == lang.INT16 or dtype0 == lang.INT8:
+                if expr0.sint32_data != expr1.sint32_data:
+                    return False
+            else:
+                raise TypeError('Cannot match unknown data type'+dtype0)
+
+        # Continue with the expressions of this expression for each dag toward inputs.
         op_indices0 = expr_dag0.references[index0].operand_indices
         op_indices1 = expr_dag1.references[index1].operand_indices
 
+        # The number of referenced inputs must match.
         if len(op_indices0) != len(op_indices1):
             return False
 
+        # Add all inputs to the queue of to be processed expressions.
         for i in range(len(op_indices0)):
             indices.append((op_indices0[i], op_indices1[i]))
 
@@ -954,10 +982,11 @@ def _match_index_in_expr_dags(expr_dag0, expr_index0, expr_dag1, expr_index1):
 
 def _eliminate_duplicates(l):
     """
-    Removes duplicates from a list while maintaining the order of elements (stable).
+    Removes duplicates from a list while maintaining the order of the elements (stable).
     :param l: The input list.
-    :return: List where duplicates were removed.
+    :return: List with removed duplicates.
     """
+
     # TODO: Improve this implementation of making lists unique while maintaining the original order (stable).
     duplicate = [False] * len(l)
     for i1 in range(len(l)):
@@ -972,26 +1001,31 @@ def _eliminate_duplicates(l):
     return unique
 
 
-class _MergeRef(namedtuple('_MergeRef', ['to_op_index', 'to_in_expr_index', 'to_in_arg_index',
-                                         'from_op_index', 'from_out_expr_index', 'from_out_arg_index'])):
+class _MergeRef(namedtuple('_MergeRef', ['to_op_index', 'to_in_expr_index', 'to_in_arg_index', 'from_op_index',
+                                         'from_out_expr_index', 'from_out_arg_index'])):
     """
-    Merge reference referring to the indices in the operation dag to/from indices and the input/output argument index
-    as defined in the signature of the operation. This input/output argument index has a correspondence in the
-    expression dag of the operator.
-    :param to_op_index: As from the programmers view this is a to operation with arguments supplied by a from operation.
-    :param to_in_expr_index: Index of input expression in expression dag.
-    :param to_in_arg_index: The index of the input argument in the to operation.
-    :param from_op_index: The operation that arguments are supplied from.
-    :param from_out_expr_index: Index of output expression in expression dag.
-    :param from_out_arg_index: The index of the output argument of the from operation.
-    :return: A to merge reference.
+    Merge reference refer to indices in the operation dag. The 'to_op_index' and 'from_op_index' encode a dependency
+    between an output tensor of the from-op that is used as input tensor in the to-op. The 'to_in_expr_index' refers to
+    the INPUT expression definition within the expression dag of the to-op. The 'to_in_arg_index' contains the input
+    argument index as defined in the signature of the to-op. The 'from_out_expr_index' refers to the OUTPUT expression
+    definition within the expression dag of the from-op. The 'from_out_arg_index' is the output argument index of the
+    tensor in the from-op.
+    :param to_op_index: The index of the to-op in the operator dag.
+    :param to_in_expr_index: The index of the INPUT expression defining the tensor in the expression dag of the to-op.
+    :param to_in_arg_index: The index of the input argument of this tensor in the to-op.
+    :param from_op_index: The index of the from-op in the operator dag.
+    :param from_out_expr_index: The index of the OUTPUT expression defining the tensor in the expression dag of the
+    from-op.
+    :param from_out_arg_index: The index of the output argument of the from-op.
+    :return: A merge reference.
     """
     __slots__ = () # empty slots
+
     def same(self, ref):
         """
-        Two merge reference are the same if all their indices match. This method does NOT measure object equality.
+        Two merge reference are the same if all their indices match. This method does NOT test for object equality.
         :param ref: The other merge reference.
-        :return: True if they are the same or False otherwise.
+        :return: True if they are the same, otherwise false.
         """
         return self.to_op_index == ref.to_op_index \
                and self.to_in_expr_index == ref.to_in_expr_index \
@@ -999,8 +1033,6 @@ class _MergeRef(namedtuple('_MergeRef', ['to_op_index', 'to_in_expr_index', 'to_
                and self.from_op_index == ref.from_op_index \
                and self.from_out_expr_index == ref.from_out_expr_index \
                and self.from_out_arg_index == ref.from_out_arg_index
-
-_MergeInfo = namedtuple('_MergeInfo', ['merge_refs', 'merge_names'])
 
 
 def _get_merge_refs_for_op_dag(proto_op_dag):
@@ -1012,15 +1044,14 @@ def _get_merge_refs_for_op_dag(proto_op_dag):
     contains a list of merge_names of operator names (ambiguous) together with argument indices as strings which is ONLY
     useful for debugging.
     """
-    ops     = proto_op_dag.operators     # get operators, each operator contains an expression dag
-    outs    = proto_op_dag.dag_outputs
-    refs    = proto_op_dag.references    # references of the operator dag
+    ops = proto_op_dag.operators     # get operators, each operator contains an expression dag
+    outs = proto_op_dag.dag_outputs
+    refs = proto_op_dag.references    # references of the operator dag
 
     # Walk the dag from each output to inputs and compute information about merging of ops.
-    inputs      = []    # List (ab)used as queue.
-    staged      = set() # Set that holds ops staged for processing.
-    merge_refs  = []    # Holds the indices of ops in tuples.
-    merge_names = []    # For debugging hold the name of ops (those are not unique).
+    inputs = []
+    staged = set()
+    merge_refs = []    # Holds the indices of ops in tuples.
 
     # For each output tensor of the operator dag.
     for output in outs:
@@ -1031,10 +1062,10 @@ def _get_merge_refs_for_op_dag(proto_op_dag):
         staged.add(output_index)        # mark this operator index as staged.
 
         while len(inputs) > 0:
-            to_op_index         = inputs.pop(0)
-            to_exp_dag          = ops[to_op_index]
-            to_ref              = refs[to_op_index]
-            to_workgroup_shape  = to_exp_dag.workgroup_shape
+            to_op_index = inputs.pop(0)
+            to_exp_dag = ops[to_op_index]
+            to_ref = refs[to_op_index]
+            to_workgroup_shape = to_exp_dag.workgroup_shape
 
             for to_in_arg_index, input in enumerate(to_ref.input_refs):
                 from_op_index = input.op_index
@@ -1048,13 +1079,13 @@ def _get_merge_refs_for_op_dag(proto_op_dag):
                     staged.add(from_op_index)
                     inputs.append(from_op_index)
 
-                expr                    = to_exp_dag.expressions[input.dag_input_index]
-                from_exp_dag            = ops[from_op_index]
-                from_workgroup_shape    = from_exp_dag.workgroup_shape
-                input_shape_of_out      = expr.tensor_type.shape
-                output_indices          = _get_output_indices(from_exp_dag)
-                output_index            = output_indices[input.op_output_index]
-                output_shape_of_in      = _get_output_shape(from_exp_dag, input.op_output_index)
+                expr = to_exp_dag.expressions[input.dag_input_index]
+                from_exp_dag = ops[from_op_index]
+                from_workgroup_shape = from_exp_dag.workgroup_shape
+                input_shape_of_out = expr.tensor_type.shape
+                output_indices = _get_output_indices(from_exp_dag)
+                output_index = output_indices[input.op_output_index]
+                output_shape_of_in = _get_output_shape(from_exp_dag, input.op_output_index)
 
                 match = to_workgroup_shape == from_workgroup_shape
                 assert input_shape_of_out == output_shape_of_in # Must always match in well defined dags.
@@ -1091,80 +1122,72 @@ def _get_merge_refs_for_op_dag(proto_op_dag):
                                             from_op_index=from_op_index,
                                             from_out_expr_index=output_index,
                                             from_out_arg_index=input.op_output_index))
-                merge_names.append((to_exp_dag.name + ' in [%d]' % to_in_arg_index,
-                                    from_exp_dag.name + ' out [%d]' % input.op_output_index))
 
     # Eliminate duplicates in merge_refs and merge_names.
-    merge_refs  = _eliminate_duplicates(merge_refs)
-    merge_names = _eliminate_duplicates(merge_names)
-    return _MergeInfo(merge_refs=merge_refs, merge_names=merge_names)
+    return _eliminate_duplicates(merge_refs)
 
 
 def _group_merge_refs(proto_op_dag, merge_refs):
     """
-    Takes the protbuf representation of the operator dag together with the merge information and converts it into
-    grouped merge information that is pairs of to,from operator indices.
+    Takes the protbuf representation of the operator dag together with the merge references and converts them into
+    grouped merge references, which is pairs of (to-op-index, from-op-index).
+    Two ops can be merged if:
+      - All inputs of the to-op come from one and the same from-op.
+      - OR inputs can come from external inputs.
     :param proto_op_dag: the protobuf representation of the operator dag.
-    :param merge_refs: merge information.
-    :return: pairs of to,from operator indices.
+    :param merge_refs: merge references.
+    :return: pairs of (to-op-index, from-op-index).
     """
-    # Builds up a set with (to_op_index, from_op_index, from_out_arg_index) as elements.
+
+    # Create a set with triplets (to_op_index, from_op_index, from_out_arg_index) as elements.
     merge_group_info = set()
     for merge_ref in merge_refs:
         merge_group_info.add((merge_ref.to_op_index, merge_ref.from_op_index, merge_ref.from_out_arg_index))
 
     group_merge_refs = []
-    # For each op find if all inputs and ensure that these come from one and the same op in the merge list, or they
-    # can come as external input.
+
     for i, reference in enumerate(proto_op_dag.references):
         if len(reference.input_refs) == 0:
             continue
 
-        from_op_index   = reference.input_refs[0].op_index
+        from_op_index = reference.input_refs[0].op_index
 
-        if from_op_index == i: # Input is in refs and has an reference as leaf node with op_index = 0.
+        # Input is in refs and has an reference as leaf node with op_index = 0.
+        if from_op_index == i:
             continue
 
-        to_op_index     = i
-        do_group        = True
+        to_op_index = i
+        do_group = True
 
-        for in_ref in reference.input_refs: # Look at all inputs.
-            if in_ref.is_leaf: # If ref is an input, then continue.
+        for in_ref in reference.input_refs:
+            # If ref is an external input, then continue.
+            if in_ref.is_leaf:
                 continue
 
-            if in_ref.op_index != from_op_index: # Comes from another op.
+            # The input comes from another op, we cannot merge in this case.
+            if in_ref.op_index != from_op_index:
                 do_group = False
                 break
 
+            # This input tensor cannot be merged because it does not appear in the merge info.
             from_out_arg_index = in_ref.op_output_index
             if (to_op_index, from_op_index, from_out_arg_index) not in merge_group_info:
                 do_group = False
                 break
 
+        # If we can group append the tuple to the list.
         if do_group:
             group_merge_refs.append((to_op_index, from_op_index))
 
     return group_merge_refs
 
 
-def _is_pointwise(expr_dag) :
-    """
-    An expression dag is point-wise if it does not contain a range statement. This may be a bit too strict, in general.
-    We will refine this later.
-    :param expr_dag: The expression dag.
-    :return: True if there is no range statement, otherwise False.
-    """
-    for expr in expr_dag.expressions:
-        if expr.code == lang.RANGE:
-            return False
-    return True
+_IndicesInfo = namedtuple('_IndicesInfo', ['used_only_in_to', 'used_only_in_to_io',
+                                           'used_in_general', 'used_in_general_io',
+                                           'external_inputs_for_to', 'external_inputs_for_to_io',
+                                           'outputs_removed_in_from',
+                                           'new_out_indices', 'input_to_ouput_index'])
 
-
-_IndicesInfo = namedtuple('_UsageOfOutIndex', ['used_only_in_to', 'used_only_in_to_io',
-                                               'used_in_general', 'used_in_general_io',
-                                               'external_inputs_for_to', 'external_inputs_for_to_io',
-                                               'outputs_removed_in_from',
-                                               'new_out_indices', 'input_to_ouput_index'])
 
 def _get_indices_info(proto_op_dag, to_op_index, from_op_index):
     """
@@ -1182,13 +1205,13 @@ def _get_indices_info(proto_op_dag, to_op_index, from_op_index):
     :param from_op_index: The from-operator index within the operator dag.
     :return: Index information.
     """
-    references  = proto_op_dag.references
-    ops         = proto_op_dag.operators
-    outs        = proto_op_dag.dag_outputs
+    references = proto_op_dag.references
+    ops = proto_op_dag.operators
+    outs = proto_op_dag.dag_outputs
 
-    used_indices_io             = set()
-    external_inputs_for_to_io   = set()
-    external_outputs            = dict() # Key is the operator index and the value is the set of output indices.
+    used_indices_io = set()
+    external_inputs_for_to_io = set()
+    external_outputs = dict() # Key is the operator index and the value is the set of output indices.
 
     for out in outs:
         if out.op_index not in external_outputs:
@@ -1217,11 +1240,13 @@ def _get_indices_info(proto_op_dag, to_op_index, from_op_index):
 
     used_only_in_to_io = used_indices_io - used_in_general_io
 
-    out_indices     = _get_output_indices(ops[from_op_index])
+    out_indices = _get_output_indices(ops[from_op_index])
     used_only_in_to = set()
     used_in_general = set()
+
+    # Mapping of from-op output indices to their new output index.
     new_out_indices = list()
-    new_out_index   = 0
+    new_out_index = 0
     for i in range(0, len(out_indices)):
         if i in used_only_in_to_io:
             used_only_in_to.add(out_indices[i])
@@ -1234,10 +1259,11 @@ def _get_indices_info(proto_op_dag, to_op_index, from_op_index):
             new_out_indices.append(new_out_index)
             new_out_index += 1
 
-    input_to_ouput_index = dict()
+    # Mapping from input to output indices.
+    input_to_output_index = dict()
     for i, ref in enumerate(references[to_op_index].input_refs):
         if ref.op_index == from_op_index:
-            input_to_ouput_index[i] = ref.op_output_index
+            input_to_output_index[i] = ref.op_output_index
 
     external_inputs_for_to = set()
     input_indices = _get_input_indices(ops[to_op_index])
@@ -1248,7 +1274,8 @@ def _get_indices_info(proto_op_dag, to_op_index, from_op_index):
     outputs_removed_in_from = set()
     outputs_removed_in_from |= used_only_in_to_io
     if from_op_index in external_outputs:
-        outputs_removed_in_from -= external_outputs[from_op_index] # Minus all those used as external outputs.
+        # Exclude all those indices that are used as external output.
+        outputs_removed_in_from -= external_outputs[from_op_index]
 
     return _IndicesInfo(used_only_in_to=used_only_in_to,
                         used_only_in_to_io=used_only_in_to_io,
@@ -1257,37 +1284,94 @@ def _get_indices_info(proto_op_dag, to_op_index, from_op_index):
                         external_inputs_for_to=external_inputs_for_to,
                         external_inputs_for_to_io=external_inputs_for_to_io,
                         outputs_removed_in_from=outputs_removed_in_from,
-                        new_out_indices=new_out_indices,  # mapping from old to new output indices for from op
-                        input_to_ouput_index=input_to_ouput_index)
+                        new_out_indices=new_out_indices,
+                        input_to_ouput_index=input_to_output_index)
 
 
-def _merge_expr_dags(to_expr_dag, from_expr_dag, indices_info): # used/unused refers to op dag (not expression dag)
+def _add_variable_const_expr(merged_expr_dag, old_expr):
     """
-    Merges two expression dags.
+    Adds a VARIABLE expression together with a CONST_SCALAR expression.
+    :param merged_expr_dag: The merged expression dag.
+    :param old_expr: The old expression used to read-out the data type.
+    :return: None.
+    """
+    old_dtype = old_expr.tensor_type.dtype
+
+    const_scalar = lang.Expression()
+    const_scalar.code = lang.CONST_SCALAR
+    const_scalar.dtype = old_dtype
+
+    var = lang.Expression()
+    var.code = lang.VARIABLE
+    var.dtype = old_dtype
+
+    # Set the initial value.
+    if old_dtype == lang.FLOAT64:
+        const_scalar.double_data.append(0)
+    elif old_dtype == lang.FLOAT32 or old_dtype == lang.FLOAT16:
+        const_scalar.float_data.append(0)
+    elif old_dtype == lang.UINT64:
+        const_scalar.uint64_data.append(0)
+    elif old_dtype == lang.INT64:
+        const_scalar.sint64_data.append(0)
+    elif old_dtype == lang.UINT32 or old_dtype == lang.UINT16 or old_dtype == lang.UINT8:
+        const_scalar.uint32_data.append(0)
+    elif old_dtype == lang.INT32 or old_dtype == lang.INT16 or old_dtype == lang.INT8:
+        const_scalar.sint32_data.append(0)
+    else:
+        raise TypeError('Tried to add variable for unknown type '+old_dtype)
+
+    head_expr = merged_expr_dag.expressions.add()
+    head_expr.CopyFrom(const_scalar)
+    merged_expr_dag.references.add()
+
+    head_expr = merged_expr_dag.expressions.add()
+    head_expr.CopyFrom(var)
+
+    # The VARIABLE expression refers to the CONST_SCALAR expression.
+    merged_expr_dag.references.add().operand_indices.extend([len(merged_expr_dag.references) - 2])
+
+
+def _merge_expr_dags(to_expr_dag, from_expr_dag, indices_info):
+    """
+    Merges two expression dags. Two expression dags are merged using the following:
+    A) For the 'from_exp_dag' we do:
+        - For tensors not used in the to-op leave them as is.
+        - For tensors ONLY used in the to-op we replace the OUTPUT expression by VARIABLE expression and the
+        ASSIGN_TENSOR expression by an ASSIGN_VARIABLE expression.
+        - For tensors used in the to-op AND in another op we add a VARIABLE expression and an ASSIGN_VARIABLE expression.
+    B) For the 'to_expr_dag' we do:
+        - We replace READ_TENSOR expressions that refer to reads from tensors in the to-op through a READ_VARIABLE
+        expression. Notice that there are several other READ_TENSOR expressions, e.g. reading the POSITION value or
+        reading from external inputs that can not be replaced.
     :param to_expr_dag: The expression dag of the to-operator.
     :param from_expr_dag: The expression dag of the from-operator.
-    :param indices_info: The index information.
+    :param indices_info: The index information used for the merge.
     :return: The merged expression dag.
     """
-    used_only_in_to         = indices_info.used_only_in_to
-    used_in_general         = indices_info.used_in_general
-    input_to_ouput_index    = indices_info.input_to_ouput_index
-    external_inputs_for_to  = indices_info.external_inputs_for_to
+    used_only_in_to = indices_info.used_only_in_to
+    used_in_general = indices_info.used_in_general
+    input_to_output_index = indices_info.input_to_ouput_index
+    external_inputs_for_to = indices_info.external_inputs_for_to
 
-    merged_expr_dag         = lang.ExpressionDAG()
-    assign_indices          = _get_tensor_assign_indices(from_expr_dag)
-    del_indices             = set()
-    only_assign_indices     = _get_indices_connected_to_expr_indices(from_expr_dag, assign_indices, used_only_in_to)
-    general_assign_indices  = _get_indices_connected_to_expr_indices(from_expr_dag, assign_indices, used_in_general)
+    merged_expr_dag = lang.ExpressionDAG()
+    assign_indices = _get_tensor_assign_indices(from_expr_dag)
+    del_indices = set()
+    only_assign_indices = _get_indices_connected_to_expr_indices(from_expr_dag, assign_indices, used_only_in_to)
+    general_assign_indices = _get_indices_connected_to_expr_indices(from_expr_dag, assign_indices, used_in_general)
 
     for only_index in only_assign_indices:
-        index_index = from_expr_dag.references[only_index].operand_indices[1]  # Purge the index but not the assign
+        # Purge the index of the ASSIGN_TENSOR expression but not the ASSIGN_TENSOR expression itself.
+        index_index = from_expr_dag.references[only_index].operand_indices[1]
         del_indices |= _get_indices_of_sub_expr_wout_position(from_expr_dag, index_index)
 
-    # offset per index of expressions in the from expression dag.
-    offsets                 = np.zeros(len(from_expr_dag.expressions), dtype=int)
-    offset                  = 0
-    output_to_expr_index    = dict()
+    # Offset per index of expressions of from-op's expression dag.
+    offsets = np.zeros(len(from_expr_dag.expressions), dtype=int)
+    offset = 0
+    output_to_expr_index = dict()
+    # Counters for the number of inputs and outputs of the merged op.
+    input_count = 0
+    output_count = 0
 
     # ******************************************************************************************************************
     # For the 'from' expression dag do:
@@ -1295,39 +1379,24 @@ def _merge_expr_dags(to_expr_dag, from_expr_dag, indices_info): # used/unused re
     # - For tensors ONLY used in the 'to' op replace the OUTPUT by VARIABLE and ASSIGN_TENSOR by ASSIGN_VARIABLE.
     # - For tensors used in the 'to' op AND in another op add VARIABLE and ASSIGN_VARIABLE.
     # ******************************************************************************************************************
-    input_count = 0
-    output_count = 0
-
     for i, expr in enumerate(from_expr_dag.expressions):
 
-        # Do not copy this expression.
+        # Do not copy expressions contained in the del_indices set.
         if i in del_indices:
             offset -= 1
             offsets[i] = offset
             continue
 
-        # Replace the OUTPUT expression by a VARIABLE expression
+        # Replace the OUTPUT expression by a VARIABLE expression.
         if i in used_only_in_to:
-            head_expr = merged_expr_dag.expressions.add()
-            const_scalar = lang.Expression()
-            const_scalar.code = lang.CONST_SCALAR  # TODO: Add the correct data type.
-            const_scalar.dtype = lang.FLOAT64
-            const_scalar.double_data.append(0)
-            head_expr.CopyFrom(const_scalar)
-            merged_expr_dag.references.add()  # No reference
-            head_expr = merged_expr_dag.expressions.add()
-            var = lang.Expression()
-            var.code = lang.VARIABLE
-            var.dtype = lang.FLOAT64
-            head_expr.CopyFrom(var)
-            merged_expr_dag.references.add().operand_indices.extend([len(merged_expr_dag.references)-2])  # refer to scalar
+            _add_variable_const_expr(merged_expr_dag, expr)
             offset += 1
             io = _get_output_io_index(from_expr_dag, i)
-            output_to_expr_index[io] = len(merged_expr_dag.expressions._values) - 1
+            output_to_expr_index[io] = len(merged_expr_dag.expressions) - 1
             offsets[i] = offset
             continue
 
-        # Replace ASSIGN_TENSOR by ASSIGN_VARIABLE.
+        # Replace the ASSIGN_TENSOR expression by an ASSIGN_VARIABLE expression.
         if i in only_assign_indices:
             head_expr = merged_expr_dag.expressions.add()
             var_assign = lang.Expression()
@@ -1344,19 +1413,19 @@ def _merge_expr_dags(to_expr_dag, from_expr_dag, indices_info): # used/unused re
         head_expr = merged_expr_dag.expressions.add()
         head_expr.CopyFrom(from_expr_dag.expressions[i])
 
-        # Set the io_index in the sequence of the INPUT definitions. This assumes that inputs have been re-ordered
-        # according to their signature.
+        # Set the io_index in the sequence of the INPUT definitions. This assumes that input definitions appear
+        # according to the order in the signature.
         if head_expr.code == lang.INPUT:
             head_expr.io_index = input_count
             input_count += 1
 
-        # Set the io_index in the sequence of the OUTPUT definitions. This assumes that the outputs have been re-ordered
-        # according to their signature.
+        # Set the io_index in the sequence of the OUTPUT definitions. This assumes that output definitions appear
+        # in the order of the return statement.
         if head_expr.code == lang.OUTPUT:
             head_expr.io_index = output_count
             output_count += 1
 
-        # Set references for expression.
+        # Set updated references for the original expression.
         operand_indices = []
         for iRef in from_expr_dag.references[i].operand_indices:
             operand_indices.append(int(offsets[iRef]) + iRef)
@@ -1364,43 +1433,34 @@ def _merge_expr_dags(to_expr_dag, from_expr_dag, indices_info): # used/unused re
 
         # Add a VARIABLE expression to the OUTPUT expression.
         if i in used_in_general:
-            offsets[i] = offset # Refer to the output expression!
-            head_expr = merged_expr_dag.expressions.add()
-            const_scalar = lang.Expression()
-            const_scalar.code = lang.CONST_SCALAR  # TODO: Add the correct data type.
-            const_scalar.dtype = lang.FLOAT64
-            const_scalar.double_data.append(0)
-            head_expr.CopyFrom(const_scalar)
-            merged_expr_dag.references.add()  # add zero references bump up the offset
-            offset += 1
-            head_expr = merged_expr_dag.expressions.add()
-            var = lang.Expression()
-            var.code = lang.VARIABLE
-            var.dtype = lang.FLOAT64
-            head_expr.CopyFrom(var)
-            merged_expr_dag.references.add().operand_indices.extend([len(merged_expr_dag.references)-2])  # reference the scalar expression
-            offset += 1
+            # Set the offset HERE as opposed to the end to refer to the OUTPUT expression and not the VARIABLE
+            # expression!
+            offsets[i] = offset
+            _add_variable_const_expr(merged_expr_dag, expr)
+            offset += 2
             io = _get_output_io_index(from_expr_dag, i)
-            output_to_expr_index[io] = len(merged_expr_dag.expressions._values) - 1
+            output_to_expr_index[io] = len(merged_expr_dag.expressions) - 1
             continue
 
         # Add an ASSIGN_VARIABLE.
         if i in general_assign_indices:
-            offsets[i] = offset # Refer to the ASSIGN_TENSOR expression.
+            # Set the offset HERE as opposed to the end to refer to the ASSIGN_TENSOR expression and not the
+            # ASSIGN_VARIABLE expression!
+            offsets[i] = offset
             head_expr = merged_expr_dag.expressions.add()
             var_assign = lang.Expression()
             var_assign.code = lang.ASSIGN_VARIABLE
             head_expr.CopyFrom(var_assign)
             i0 = from_expr_dag.references[i].operand_indices[0]
             i1 = from_expr_dag.references[i].operand_indices[2]
-            #operand_indices = [int(offsets[i0]) + i0, int(offsets[i1]) + i1]
-            # Find output number of i0
+            # Find output argument index for output at expression index i0.
             io = _get_output_io_index(from_expr_dag, i0)
             operand_indices = [output_to_expr_index[io], int(offsets[i1]) + i1]
             merged_expr_dag.references.add().operand_indices.extend(operand_indices)
             offset += 1
             continue
 
+        # In all other cases set the offset here.
         offsets[i] = offset
 
     # ******************************************************************************************************************
@@ -1410,8 +1470,8 @@ def _merge_expr_dags(to_expr_dag, from_expr_dag, indices_info): # used/unused re
     # - Reads from external input variables.
     # - Reads that appear within ASSIGN_TENSOR statements.
     # ******************************************************************************************************************
-    to_pos_index        = _get_position_index(to_expr_dag)
-    input_indices       = _get_input_indices(to_expr_dag)
+    to_pos_index = _get_position_index(to_expr_dag)
+    input_indices = _get_input_indices(to_expr_dag)
     expr_to_input_index = dict()
     for input_index in input_indices:
         expr_to_input_index[input_index] = to_expr_dag.expressions[input_index].io_index
@@ -1421,6 +1481,7 @@ def _merge_expr_dags(to_expr_dag, from_expr_dag, indices_info): # used/unused re
     del_indices = set()
     del_indices.add(to_pos_index)
     del_indices |= input_indices
+    # Get all TENSOR_READ indices.
     read_indices = set(_get_tensor_read_indices(to_expr_dag))
     for read_index in read_indices:
         tensor_input_index = to_expr_dag.references[read_index].operand_indices[0]
@@ -1446,10 +1507,8 @@ def _merge_expr_dags(to_expr_dag, from_expr_dag, indices_info): # used/unused re
     read_indices -= delete_from_read
 
     merge_pos_index = _get_position_index(merged_expr_dag)
-    offset          = len(merged_expr_dag.expressions)
-    offsets         = np.empty(len(to_expr_dag.expressions), dtype=int)
-    #input_count     = len(_get_input_indices(from_expr_dag))
-    #output_count    = len(_get_output_indices(merged_expr_dag))
+    offset = len(merged_expr_dag.expressions)
+    offsets = np.empty(len(to_expr_dag.expressions), dtype=int)
     offsets.fill(offset)
     outputs_for_to  = _get_output_indices(to_expr_dag)
 
@@ -1474,7 +1533,7 @@ def _merge_expr_dags(to_expr_dag, from_expr_dag, indices_info): # used/unused re
                     operand_indices.append(merge_pos_index)
                 elif iRef in read_indices:
                     input_index = to_expr_dag.references[iRef].operand_indices[0]  # reference to tensor
-                    operand_indices.append(output_to_expr_index[input_to_ouput_index[expr_to_input_index[input_index]]])
+                    operand_indices.append(output_to_expr_index[input_to_output_index[expr_to_input_index[input_index]]])
                 else:
                     operand_indices.append(int(offsets[iRef]) + iRef)
 
@@ -1488,36 +1547,38 @@ def _merge_expr_dags(to_expr_dag, from_expr_dag, indices_info): # used/unused re
 
     return merged_expr_dag
 
+
 def _merge_op_dag(proto_op_dag):
     """
     Merges the operator dag by decreasing the depth of the operator dag and increasing the depth of the expression dag.
     :param op_dag: The protobuf format of the operator dag.
     :return: A merged operator dag in protobuf format.
     """
-    merged_op_dag       = proto_op_dag # Get a reference to proto_op_dag
-    merge_info          = _get_merge_refs_for_op_dag(merged_op_dag)
-    group_merge_refs    = _group_merge_refs(merged_op_dag, merge_info.merge_refs)
+
+    # Initialize the merged op-dag and the merge refs and their grouping.
+    merged_op_dag = proto_op_dag
+    group_merge_refs = _group_merge_refs(merged_op_dag, _get_merge_refs_for_op_dag(merged_op_dag))
 
     # While we can merge ops in the dag.
     while len(group_merge_refs) > 0:
-        ops                     = merged_op_dag.operators
-        refs                    = merged_op_dag.references
-        merge_ref               = group_merge_refs.pop(0)
-        to_op_index             = merge_ref[0]
-        from_op_index           = merge_ref[1]
+        ops = merged_op_dag.operators
+        refs = merged_op_dag.references
+        merge_ref = group_merge_refs.pop(0)
+        to_op_index = merge_ref[0]
+        from_op_index = merge_ref[1]
 
         logger.debug('Merging ' + ops[from_op_index].name + ' and ' + ops[to_op_index].name)
 
-        indices_info            = _get_indices_info(merged_op_dag, to_op_index, from_op_index)
-        merged_expr_dag         = _merge_expr_dags(ops[to_op_index], ops[from_op_index], indices_info)
+        indices_info = _get_indices_info(merged_op_dag, to_op_index, from_op_index)
+        merged_expr_dag = _merge_expr_dags(ops[to_op_index], ops[from_op_index], indices_info)
 
-        new_out_indices             = indices_info.new_out_indices
-        external_inputs_for_to_io   = indices_info.external_inputs_for_to_io
-        outputs_removed_in_from     = indices_info.outputs_removed_in_from
-        output_from_wout_to_num     = len(_get_output_indices(ops[from_op_index])) - len(indices_info.used_only_in_to)
+        new_out_indices = indices_info.new_out_indices
+        external_inputs_for_to_io = indices_info.external_inputs_for_to_io
+        outputs_removed_in_from = indices_info.outputs_removed_in_from
+        output_from_wout_to_num = len(_get_output_indices(ops[from_op_index])) - len(indices_info.used_only_in_to)
 
         # Build up the newly merged operator dag.
-        new_merged_op_dag   = lang.OperatorDAG()
+        new_merged_op_dag = lang.OperatorDAG()
 
         # Update the operators.
         for i, op in enumerate(ops):
@@ -1528,7 +1589,7 @@ def _merge_op_dag(proto_op_dag):
             elif i != to_op_index:
                 new_merged_op_dag.operators.add().CopyFrom(op)
 
-        # Update the input references for operators.
+        # Update the input references to operators.
         for i, ref in enumerate(refs):
             # Exclude references for the to-operator.
             if i == to_op_index:
@@ -1539,10 +1600,11 @@ def _merge_op_dag(proto_op_dag):
 
             for in_ref in ref.input_refs:
 
-                proto_ref                   = lang.OperatorDAG.OperatorInputReference()
-                proto_ref.is_leaf           = in_ref.is_leaf
-                op_index                    = in_ref.op_index
-                proto_ref.dag_input_index   = in_ref.dag_input_index # Input index is the same input from the op dag.
+                proto_ref = lang.OperatorDAG.OperatorInputReference()
+                proto_ref.is_leaf = in_ref.is_leaf
+                op_index = in_ref.op_index
+                # Input index is the same input from the op dag.
+                proto_ref.dag_input_index = in_ref.dag_input_index
 
                 if op_index == from_op_index:
                     proto_ref.op_output_index = new_out_indices[in_ref.op_output_index]
@@ -1560,9 +1622,10 @@ def _merge_op_dag(proto_op_dag):
                 ref_list.input_refs.add().CopyFrom(proto_ref)
 
             if i == from_op_index:
-                for input_index, in_ref in enumerate(refs[to_op_index].input_refs): # uses to_op_index!!
-                    # Add the input reference only if this input of the 'to-op' has not been mapped to an output of the
-                    # 'from-op'.
+                # Uses the to_op_index in refs to ge the input_refs!
+                for input_index, in_ref in enumerate(refs[to_op_index].input_refs):
+                    # Add the input reference only if this input of the 'to-op' has not yet been mapped to an output of
+                    # the 'from-op'.
                     if input_index in external_inputs_for_to_io:
                         proto_ref = lang.OperatorDAG.OperatorInputReference()
                         proto_ref.is_leaf = in_ref.is_leaf
@@ -1578,7 +1641,7 @@ def _merge_op_dag(proto_op_dag):
 
             new_merged_op_dag.references.add().CopyFrom(ref_list)
 
-        # Never change the order of outputs!!
+        # Create the outputs of the merged op.
         for i, dag_output in enumerate(merged_op_dag.dag_outputs):
             proto_out = lang.OperatorDAG.DAGOutputReference()
             op_index = dag_output.op_index
@@ -1602,17 +1665,15 @@ def _merge_op_dag(proto_op_dag):
             new_merged_op_dag.dag_outputs.add().CopyFrom(proto_out)
 
         merged_op_dag = new_merged_op_dag
-        merge_info = _get_merge_refs_for_op_dag(merged_op_dag)
-        group_merge_refs = _group_merge_refs(merged_op_dag, merge_info.merge_refs)
+        group_merge_refs = _group_merge_refs(merged_op_dag, _get_merge_refs_for_op_dag(merged_op_dag))
 
-    # No changes to the input types.
-    if merged_op_dag is not proto_op_dag: # no merge occurred because we have only one op.
+    # Copy the input types only if the merged op dag differs from the initially provided op dag.
+    if merged_op_dag is not proto_op_dag:
         for dag_input in proto_op_dag.dag_input_types:
             proto_type = TensorType.like(dag_input).as_proto()
             merged_op_dag.dag_input_types.add().CopyFrom(proto_type)
 
     return merged_op_dag
-
 
 
 def _make_generic_c(src, name):
@@ -1706,6 +1767,7 @@ def evaluate(output_list, target_language='cpp', opt_level=0):
 #
 # def profile(output_list, target_language='cpp', profiling_iterations=1):
 #     return _profile_op_dag(_build_op_dag(*output_list), target_language=target_language, profiling_iterations=profiling_iterations)
+
 
 def profile(output_list, target_language, profiling_iterations, opt_level):
     """
