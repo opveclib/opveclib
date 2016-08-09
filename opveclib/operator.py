@@ -19,6 +19,7 @@ from collections import namedtuple
 import opcode
 import inspect
 from dis import findlinestarts
+import six
 import numpy as np
 from numpy.ctypeslib import ndpointer
 
@@ -534,7 +535,14 @@ class _OpGenerator(object):
 def operator(forbid_none_valued_constants=True, name=None):
     def wrapper(op_function):
         # Use disassembler to check for reassignments to variables inside the op function
-        # six.get_function
+
+        # define compatibility function for python 2 and 3 bytecodes
+        def bytecode_to_int(x):
+            if six.PY2:
+                return ord(x)
+            elif six.PY3:
+                return x
+
         co = op_function.__code__
         code = co.co_code
         linestarts = dict(findlinestarts(co))
@@ -550,7 +558,7 @@ def operator(forbid_none_valued_constants=True, name=None):
             is_assignment = False
             is_variable = False
             has_lshift = False
-            cur_op_code = ord(code[i])
+            cur_op_code = bytecode_to_int(code[i])
             if i in linestarts:
                 list_line_code_n = i
                 last_line_index = linestarts[i]
@@ -560,10 +568,10 @@ def operator(forbid_none_valued_constants=True, name=None):
                 j = list_line_code_n + 1 # go forwards in block to find all LOAD_ATTR
                 while j < i and not is_variable:
                     cj = code[j]
-                    opj = ord(cj)
+                    opj = bytecode_to_int(cj)
                     j += 1
                     if opj >= opcode.HAVE_ARGUMENT:
-                        opargj = ord(code[j]) + ord(code[j+1])*256 + extended_argj
+                        opargj = bytecode_to_int(code[j]) + bytecode_to_int(code[j+1])*256 + extended_argj
                         extended_argj = 0
                         j += 2
                         if opj == opcode.EXTENDED_ARG:
@@ -578,7 +586,7 @@ def operator(forbid_none_valued_constants=True, name=None):
 
             i += 1
             if cur_op_code >= opcode.HAVE_ARGUMENT:
-                oparg = ord(code[i]) + ord(code[i+1])*256 + extended_arg
+                oparg = bytecode_to_int(code[i]) + bytecode_to_int(code[i+1])*256 + extended_arg
                 extended_arg = 0
                 i += 2
 

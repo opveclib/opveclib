@@ -11,7 +11,7 @@
 import unittest
 import numpy as np
 from ..operator import operator, _build_op_dag, evaluate
-from ..expression import position_in, output_like
+from ..expression import position_in, output_like, variable
 from ..local import clear_op_cache
 
 
@@ -242,3 +242,24 @@ class TestOperator(unittest.TestCase):
             pass
         else:
             assert False
+
+
+class TestA(unittest.TestCase):
+
+    def test_reassign(self):
+        print('testing')
+        try:
+            @operator()
+            def bad(data_in):
+                out = output_like(data_in)
+                pos = position_in(data_in)
+
+                a = variable(0, dtype=data_in.dtype)
+                a = 2
+
+                out[pos] = a
+                return out
+        except SyntaxError:
+            pass
+        else:
+            raise AssertionError
