@@ -12,11 +12,13 @@
 import ctypes
 import hashlib
 import os
-import inspect
 import subprocess
 import string
 import re
 from collections import namedtuple
+import opcode
+import inspect
+from dis import findlinestarts
 import numpy as np
 from numpy.ctypeslib import ndpointer
 
@@ -229,7 +231,7 @@ class _GradientPlaceholder(object):
         self.dtype = dtype
 
 
-class _Operator(object): # TODO: Check if this class is used anywhere and remove it and all associated instances.
+class _Operator(object):
     """
     Class which is extended to define a new operator and its gradient.
     """
@@ -528,11 +530,80 @@ class _OpGenerator(object):
         else:
             raise ValueError('Gradient function is already defined for operator ' + str(self.name) + '.')
 
+
 def operator(forbid_none_valued_constants=True, name=None):
     def wrapper(op_function):
+        # Use disassembler to check for reassignments to variables inside the op function
+        # six.get_function
+        co = op_function.__code__
+        code = co.co_code
+        linestarts = dict(findlinestarts(co))
+
+        extended_arg = 0
+        extended_argj = 0
+        list_line_code_n = 0
+        last_line_index = 0
+        op_last = 0
+        variable_names = set()
+        i = 0
+        while i < len(code):
+            is_assignment = False
+            is_variable = False
+            has_lshift = False
+            cur_op_code = ord(code[i])
+            if i in linestarts:
+                list_line_code_n = i
+                last_line_index = linestarts[i]
+
+            if cur_op_code == opcode.opmap['STORE_FAST']:
+                is_assignment = True
+                j = list_line_code_n + 1 # go forwards in block to find all LOAD_ATTR
+                while j < i and not is_variable:
+                    cj = code[j]
+                    opj = ord(cj)
+                    j += 1
+                    if opj >= opcode.HAVE_ARGUMENT:
+                        opargj = ord(code[j]) + ord(code[j+1])*256 + extended_argj
+                        extended_argj = 0
+                        j += 2
+                        if opj == opcode.EXTENDED_ARG:
+                            extended_argj = opargj*65536
+                        elif opj == opcode.opmap['LOAD_ATTR']:
+                            hasname = opj in opcode.hasname
+                            named_var = co.co_names[opargj] == 'variable'
+                            is_variable = hasname and named_var
+
+                # check to see if prior op code is lshift
+                has_lshift = op_last == opcode.opmap['INPLACE_LSHIFT']
+
+            i += 1
+            if cur_op_code >= opcode.HAVE_ARGUMENT:
+                oparg = ord(code[i]) + ord(code[i+1])*256 + extended_arg
+                extended_arg = 0
+                i += 2
+
+                if cur_op_code == opcode.EXTENDED_ARG:
+                    extended_arg = oparg*65536
+                elif cur_op_code in opcode.haslocal:
+                    variable_name = co.co_varnames[oparg]
+                    func_name = co.co_name
+
+                    if is_assignment:
+                        if variable_name in variable_names and not has_lshift:
+
+                            s = '  File "' + co.co_filename + '", line ' + str(last_line_index)
+
+                            raise SyntaxError('Cannot reassign to symbol "' + variable_name + '" in operator "' +
+                                              func_name + '" because it refers to an OVL variable. Use the <<= operator'
+                                                          ' to assign to OVL variables. \n' + s)
+                        elif is_variable:
+                            variable_names.add(variable_name)
+
+            op_last = cur_op_code
+
         op = _OpGenerator(op_function, forbid_none_valued_constants, name)
-        op.__name__= op_function.__name__
-        op.__doc__= op_function.__doc__
+        op.__name__ = op_function.__name__
+        op.__doc__ = op_function.__doc__
         return op
 
     return wrapper
@@ -733,7 +804,7 @@ def _get_position_index(expr_dag):
     :return: The index of the position within the expression dag.
     """
     pos_indices = _get_expr_indices(expr_dag, lang.POSITION)
-    assert len(pos_indices) == 1 # There is only one position definition
+    assert len(pos_indices) == 1  # There is only one position definition
     return pos_indices[0]
 
 
