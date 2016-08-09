@@ -1738,7 +1738,7 @@ def _make_generic_cuda(src, name):
     return generic_cuda_so_path
 
 
-def evaluate(output_list, target_language='cpp', opt_level=0):
+def evaluate(output_list, target_language='cpp', opt_level=3):
     """
     Evaluate a collection of OVL operator, mainly used for testing. This function uses a test operator
     function for running the generated generic version of the operator so it does not depend on an external
