@@ -11,7 +11,6 @@
 from __future__ import print_function
 import unittest
 import numpy as np
-from sys import _getframe
 from ..operator import operator, evaluate, _get_merge_refs_for_op_dag, _build_op_dag, _MergeRef, _OperatorDAG
 from ..expression import position_in, output, variable, arange, output_like, if_, elif_, else_, cast
 from ..local import clear_op_cache
@@ -173,7 +172,6 @@ class TestOperator(unittest.TestCase):
 
     # Tests merging across split and concatenate
     def test_merge_split_concatenate(self):
-        print('*** Running Test: ' + self.__class__.__name__ + ' function: ' + _getframe().f_code.co_name)
         in0 = np.random.random([4, 5])              # op-index  in-arg-index  out-arg-index
         row0, row1, row2, row3 = test_split(in0)         #   0           0           0, 1, 2, 3
         sum0    = test_add(row0, row1)                   #   1           0, 1        0
@@ -203,7 +201,6 @@ class TestOperator(unittest.TestCase):
         assert euqal_set_merge_refs(merge_refs, _get_merge_refs_for_op_dag(op_dag.proto_dag))
 
     def test_multiple_outputs(self):
-        print('*** Running Test: ' + self.__class__.__name__ + ' function: ' + _getframe().f_code.co_name)
         in0     = np.random.random([4, 4])  # op-index      in-arg-index    out-arg-index
         mmm0            = test_mat_mul(in0, in0)  #   0               0, 1            0
         s0, s1, s2, s3  = test_split(mmm0)       #   1               0               0, 1, 2, 3
@@ -220,7 +217,6 @@ class TestOperator(unittest.TestCase):
 
     # # Merging is possible but we need to insert a buffer.
     def test_cumsum_nested(self):
-        print('*** Running Test: ' + self.__class__.__name__ + ' function: ' + _getframe().f_code.co_name)
         in0         = np.random.random([3, 5])  # op-index      in-arg-index    out-arg-index
         cRow0       = test_cum_sum_rows(in0)           #   0               0               0
         cRow1       = test_cum_sum_rows(cRow0)         #   1               0               0
@@ -233,7 +229,6 @@ class TestOperator(unittest.TestCase):
 
     # No merging because of different workgroup shapes.
     def test_cumsum(self):
-        print('*** Running Test: ' + self.__class__.__name__ + ' function: ' + _getframe().f_code.co_name)
         cRow        = test_cum_sum_rows(np.random.random([3, 5]))
         cCol        = test_cum_sum_cols(cRow)
         op_dag      = _build_op_dag(cCol)
@@ -241,7 +236,6 @@ class TestOperator(unittest.TestCase):
 
     # No merging because of different access pattern.
     def test_cumsum_sym(self):
-        print('*** Running Test: ' + self.__class__.__name__ + ' function: ' + _getframe().f_code.co_name)
         cRow        = test_cum_sum_rows(np.random.random([3, 3]))
         cCol        = test_cum_sum_cols(cRow)
         op_dag      = _build_op_dag(cCol)
@@ -249,7 +243,6 @@ class TestOperator(unittest.TestCase):
 
     # No merging because of different workgroup shapes.
     def test_matmul(self):
-        print('*** Running Test: ' + self.__class__.__name__ + ' function: ' + _getframe().f_code.co_name)
         in0     = np.random.random([3, 5])
         in1     = np.random.random([5, 2])
         mmm     = test_mat_mul(in0, in1)
@@ -259,7 +252,6 @@ class TestOperator(unittest.TestCase):
 
     # No merging because of different workgroup shapes.
     def test_pad_crop(self):
-        print('*** Running Test: ' + self.__class__.__name__ + ' function: ' + _getframe().f_code.co_name)
         in0         = np.random.random([3, 5])
         padded      = test_pad(in0, n=2)
         cropped     = test_crop(padded, n=2)
@@ -268,7 +260,6 @@ class TestOperator(unittest.TestCase):
         assert euqal_set_merge_refs([], _get_merge_refs_for_op_dag(op_dag.proto_dag))
 
     def test_sum_merge(self):
-        print('*** Running Test: ' + self.__class__.__name__ + ' function: ' + _getframe().f_code.co_name)
         in0 = np.random.random([5])
         in1 = np.random.random([5])
         in2 = np.random.random([5])
@@ -277,7 +268,6 @@ class TestOperator(unittest.TestCase):
         assert np.allclose(evaluate(sum1, opt_level=0), evaluate(sum1, opt_level=3))
 
     def test_sum2_merge(self):
-        print('*** Running Test: ' + self.__class__.__name__ + ' function: ' + _getframe().f_code.co_name)
         in0 = np.random.random([5])
         in1 = np.random.random([5])
         in2 = np.random.random([5])
