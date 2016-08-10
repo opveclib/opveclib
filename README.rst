@@ -15,14 +15,11 @@ The key abstraction of the OVL programming model is a parallel *for*, or *map*. 
 workgroup and a worker function which is applied over the indices of that workgroup. Each worker knows its
 indices within the workgroup and can read (write) from (to) any point in the input (output) tensors.
 
-Current Build Status
---------------------
-TODO: Provide link to Jenkins status here.
-
 Installation instructions
 -------------------------
 OVL is currently tested and supported under Ubuntu 14.04. These instructions will prepare an Ubuntu
-environment to use OVL.
+environment to use OVL. OVL supports both python 2.7 and python 3.4.
+
 
 Install TensorFlow
 ~~~~~~~~~~~~~~~~~~
@@ -50,15 +47,7 @@ You may also need to make sure the CUDA libraries are on your library path, typi
 Install the Operator Vectorization Library
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-First, if you do not have pip >= 8.1.1 installed, install or upgrade it. You can check the installed version
-by running:
-
-.. code-block:: console
-
-    pip --version
-
-
-If it is not installed or you have a version lower than 8.1.1 installed, upgrade it:
+First, install the latest version of pip:
 
 .. code-block:: console
 
@@ -115,13 +104,19 @@ This will take 10-15 minutes on a GPU-enabled installation.
 
 
 Documentation
-~~~~~~~~~~~~~~~~~~~~~~
+-------------
 http://opveclib.readthedocs.io/
 
+
+Current Build Status
+--------------------
+TODO: Provide link to Jenkins status here.
+
+
 Contributing
-~~~~~~~~~~~~
+------------
 
 .. toctree::
    :maxdepth: 1
-
+   
    contributing
