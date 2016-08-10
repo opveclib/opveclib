@@ -1856,9 +1856,10 @@ def profile(output_list, target_language, profiling_iterations, opt_level):
     execution runtime. This also means that this function only works for operators whose inputs are numpy arrays.
 
     :param output_list: The outputs to evaluate
-    :param profiling_iterations: Number of times to run this operator for profiling purposes.
-        Must be a positive int.
     :param target_language: 'cpp' or 'cuda'
+    :param profiling_iterations: Number of times to run this operator for profiling purposes.
+     Must be a positive int.
+    :param opt_level: optimization level
 
     :return:  A tuple containing a list of numpy arrays for each operator output in output_list, and a dictionary of
         numpy arrays containing the execution times for each operator in the operator DAG.

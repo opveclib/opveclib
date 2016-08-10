@@ -115,8 +115,4 @@ TODO: Provide link to Jenkins status here.
 
 Contributing
 ------------
-
-.. toctree::
-   :maxdepth: 1
-   
-   contributing
+:ref:`contributor-label`
