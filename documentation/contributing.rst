@@ -1,3 +1,5 @@
+.. _contributor-label:
+
 Contributor's Guide
 ===================
 
