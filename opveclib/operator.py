@@ -1088,10 +1088,16 @@ def _get_merge_refs_for_op_dag(proto_op_dag):
                 output_shape_of_in = _get_output_shape(from_exp_dag, input.op_output_index)
 
                 match = to_workgroup_shape == from_workgroup_shape
-                assert input_shape_of_out == output_shape_of_in # Must always match in well defined dags.
-
                 if not match:
                     logger.debug('Non-matching workgroup shapes for %s input [%d] and %s output [%d].'
+                                 % (to_exp_dag.name, to_in_arg_index, from_exp_dag.name, input.op_output_index))
+                    continue
+
+                #assert input_shape_of_out == output_shape_of_in # Must always match in well defined dags.
+                # Because of broadcasting that we currently do not handle.
+                match = input_shape_of_out == output_shape_of_in
+                if not match:
+                    logger.debug('Non-matching tensor shapes (boradcasting) for %s input [%d] and %s output [%d].'
                                  % (to_exp_dag.name, to_in_arg_index, from_exp_dag.name, input.op_output_index))
                     continue
 
