@@ -11,11 +11,10 @@
 from __future__ import print_function
 import unittest
 import numpy as np
-from ..operator import operator, evaluate, _get_merge_refs_for_op_dag, _build_op_dag, _MergeRef, _OperatorDAG
-from ..expression import position_in, output, variable, arange, output_like, if_, elif_, else_, cast
+from ..operator import operator, evaluate, _get_merge_refs_for_op_dag, _build_op_dag, _MergeRef
+from ..expression import position_in, output, variable, arange, output_like, if_, elif_, else_
 from ..local import clear_op_cache
 from ..stdops.math import sigmoid, tanh, mul, split
-
 
 # Define operators that are used in multiple test cases.
 @operator()
@@ -27,6 +26,7 @@ def test_add(in0, in1):
     sumVal[i]   = in0[i] + in1[i]
     return sumVal
 
+
 @operator()
 def test_mul(in0, in1):
     assert in0.shape == in1.shape
@@ -35,6 +35,7 @@ def test_mul(in0, in1):
     prodVal     = output(dim, in0.dtype)
     prodVal[i]  = in0[i] * in1[i]
     return prodVal
+
 
 @operator()
 def test_cum_sum_rows(in0):
@@ -48,6 +49,7 @@ def test_cum_sum_rows(in0):
         accum <<= accum + in0[iRow, iCol]
         cumsum[iRow, iCol] = accum
     return cumsum
+
 
 @operator()
 def test_cum_sum_cols(in0):
@@ -91,6 +93,7 @@ def test_concatenate(op0, op1, op2):
     concat[2, iCol] = op2[iCol]
     return concat
 
+
 @operator()
 def test_mat_mul(in0, in1):
     assert len(in0.shape) == 2
@@ -108,6 +111,7 @@ def test_mat_mul(in0, in1):
         accum <<= in0[iRow, iWork] * in1[iWork, iCol]
     out[iRow, iCol] = accum
     return out
+
 
 # This is wasteful on threads but easy code
 @operator()
@@ -141,6 +145,7 @@ def test_pad(in0, n=None):
     out[iRow, iCol] = in0[iRowIn, iColIn]
     return out
 
+
 @operator()
 def test_crop(in0, n=None):
     assert len(in0.shape) == 2  # Assume 2D
@@ -154,6 +159,7 @@ def test_crop(in0, n=None):
     out     = output([nRow, nCol], in0.dtype)
     out[iRow, iCol] = in0[n+iRow, n+iCol]
     return out
+
 
 # Ignores order. It is a comparison of sets.
 def euqal_set_merge_refs(refs_be, refs_is):
@@ -311,6 +317,79 @@ class TestOperator(unittest.TestCase):
         o0, o1 = evaluate([new_c, new_h], opt_level=0)
         m0, m1 = evaluate([new_c, new_h], opt_level=3)
         assert np.allclose(o0, m0) and np.allclose(o1, m1)
+
+    # Test cases 0-7 follow the following principle.
+    # +------+----------+-----------------------+
+    # | Test | from-op  |        to-op          |
+    # | Case | external | external | output     |
+    # |      |  output  | input    | (e)xternal |
+    # |      |          |          | (i)nternal |
+    # +------+----------+----------+------------+
+    # |  0   |    N     |     N    |      e     |
+    # |  1   |    N     |     N    |      i     |
+    # |  2   |    N     |     Y    |      e     |
+    # |  3   |    N     |     Y    |      i     |
+    # |  4   |    Y     |     N    |      e     |
+    # |  5   |    Y     |     N    |      i     |
+    # |  6   |    Y     |     Y    |      e     |
+    # |  7   |    Y     |     Y    |      i     |
+    # +------+----------+----------+------------+
+    # N -- no  //  Y -- yes
+
+    def test_case0and4(self):
+        in0 = np.random.random(3)
+        in1 = np.random.random(3)
+        sum0 = test_add(in0, in1)
+        sum1 = test_add(sum0, sum0)
+        o0 = evaluate(sum1, opt_level=0)
+        m0 = evaluate(sum1, opt_level=3)
+        assert np.allclose(o0, m0)
+        o0, o1 = evaluate([sum0, sum1], opt_level=0)
+        m0, m1 = evaluate([sum0, sum1], opt_level=3)
+        assert np.allclose(o0, m0) and np.allclose(o1, m1)
+
+    def test_case1and5(self):
+        in0 = np.random.random(3)
+        in1 = np.random.random(3)
+        in2 = np.random.random(3)
+        sum0 = test_add(in0, in1)
+        sum1 = test_add(sum0, sum0)
+        sum2 = test_add(sum1, in2)
+        o0 = evaluate(sum2, opt_level=0)
+        m0 = evaluate(sum2, opt_level=3)
+        assert np.allclose(o0, m0)
+        o0, o1 = evaluate([sum1, sum2], opt_level=0)
+        m0, m1 = evaluate([sum1, sum2], opt_level=3)
+        assert np.allclose(o0, m0) and np.allclose(o1, m1)
+
+    def test_case2and6(self):
+        in0 = np.random.random(3)
+        in1 = np.random.random(3)
+        in2 = np.random.random(3)
+        sum0 = test_add(in0, in1)
+        sum1 = test_add(sum0, in2)
+        o0 = evaluate(sum1, opt_level=0)
+        m0 = evaluate(sum1, opt_level=3)
+        assert np.allclose(o0, m0)
+        o0 = evaluate([sum0, sum1], opt_level=0)
+        m0 = evaluate([sum0, sum1], opt_level=3)
+        assert np.allclose(o0, m0)
+
+    def test_case3and7(self):
+        in0 = np.random.random(3)
+        in1 = np.random.random(3)
+        in2 = np.random.random(3)
+        in3 = np.random.random(3)
+        sum0 = test_add(in0, in1)
+        sum1 = test_add(sum0, in2)
+        sum2 = test_add(sum1, in3)
+        o0 = evaluate(sum2, opt_level=0)
+        m0 = evaluate(sum2, opt_level=3)
+        assert np.allclose(o0, m0)
+        o0, o1 = evaluate([sum0, sum2], opt_level=0)
+        m0, m1 = evaluate([sum0, sum2], opt_level=3)
+        assert np.allclose(o0, m0) and np.allclose(o1, m1)
+
 
 if __name__ == '__main__':
     clear_op_cache()
