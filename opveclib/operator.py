@@ -22,8 +22,7 @@ from dis import findlinestarts
 import six
 import numpy as np
 from numpy.ctypeslib import ndpointer
-
-from .expression import TensorType, ExpressionDAG, input, OutputTensor, Variable
+from .expression import TensorType, ExpressionDAG, input, OutputTensor
 from .local import version, cache_directory, cuda_enabled, cuda_directory, logger
 from . import language_pb2 as lang
 
@@ -549,57 +548,59 @@ def operator(forbid_none_valued_constants=True, name=None):
 
         extended_arg = 0
         extended_argj = 0
-        list_line_code_n = 0
-        last_line_index = 0
+        linestart_opcode_n = 0
+        linestart = 0
         op_last = 0
         variable_names = set()
-        i = 0
-        while i < len(code):
+
+        # step through op codes
+        cur_opcode_n = 0
+        while cur_opcode_n < len(code):
             is_assignment = False
             is_variable = False
             has_lshift = False
-            cur_op_code = bytecode_to_int(code[i])
-            if i in linestarts:
-                list_line_code_n = i
-                last_line_index = linestarts[i]
+            cur_opcode = bytecode_to_int(code[cur_opcode_n])
+            if cur_opcode_n in linestarts:
+                linestart_opcode_n = cur_opcode_n
+                linestart = linestarts[cur_opcode_n]
 
-            if cur_op_code == opcode.opmap['STORE_FAST']:
+            if cur_opcode == opcode.opmap['STORE_FAST']:
                 is_assignment = True
-                j = list_line_code_n + 1 # go forwards in block to find all LOAD_ATTR
-                while j < i and not is_variable:
-                    cj = code[j]
-                    opj = bytecode_to_int(cj)
-                    j += 1
-                    if opj >= opcode.HAVE_ARGUMENT:
-                        opargj = bytecode_to_int(code[j]) + bytecode_to_int(code[j+1])*256 + extended_argj
+                prev_opcode_n = linestart_opcode_n
+                while prev_opcode_n < cur_opcode_n and not is_variable:
+                    prev_opcode = bytecode_to_int(code[prev_opcode_n])
+                    prev_opcode_n += 1
+                    if prev_opcode >= opcode.HAVE_ARGUMENT:
+                        opargj = bytecode_to_int(code[prev_opcode_n]) + \
+                                 bytecode_to_int(code[prev_opcode_n+1])*256 + extended_argj
                         extended_argj = 0
-                        j += 2
-                        if opj == opcode.EXTENDED_ARG:
+                        prev_opcode_n += 2
+                        if prev_opcode == opcode.EXTENDED_ARG:
                             extended_argj = opargj*65536
-                        elif opj == opcode.opmap['LOAD_ATTR']:
-                            hasname = opj in opcode.hasname
+                        elif prev_opcode == opcode.opmap['LOAD_ATTR'] or prev_opcode == opcode.opmap['LOAD_GLOBAL']:
+                            hasname = prev_opcode in opcode.hasname
                             named_var = co.co_names[opargj] == 'variable'
                             is_variable = hasname and named_var
 
                 # check to see if prior op code is lshift
                 has_lshift = op_last == opcode.opmap['INPLACE_LSHIFT']
 
-            i += 1
-            if cur_op_code >= opcode.HAVE_ARGUMENT:
-                oparg = bytecode_to_int(code[i]) + bytecode_to_int(code[i+1])*256 + extended_arg
+            cur_opcode_n += 1
+            if cur_opcode >= opcode.HAVE_ARGUMENT:
+                oparg = bytecode_to_int(code[cur_opcode_n]) + bytecode_to_int(code[cur_opcode_n+1])*256 + extended_arg
                 extended_arg = 0
-                i += 2
+                cur_opcode_n += 2
 
-                if cur_op_code == opcode.EXTENDED_ARG:
+                if cur_opcode == opcode.EXTENDED_ARG:
                     extended_arg = oparg*65536
-                elif cur_op_code in opcode.haslocal:
+                elif cur_opcode in opcode.haslocal:
                     variable_name = co.co_varnames[oparg]
                     func_name = co.co_name
 
                     if is_assignment:
                         if variable_name in variable_names and not has_lshift:
 
-                            s = '  File "' + co.co_filename + '", line ' + str(last_line_index)
+                            s = '  File "' + co.co_filename + '", line ' + str(linestart)
 
                             raise SyntaxError('Cannot reassign to symbol "' + variable_name + '" in operator "' +
                                               func_name + '" because it refers to an OVL variable. Use the <<= operator'
@@ -607,7 +608,7 @@ def operator(forbid_none_valued_constants=True, name=None):
                         elif is_variable:
                             variable_names.add(variable_name)
 
-            op_last = cur_op_code
+            op_last = cur_opcode
 
         op = _OpGenerator(op_function, forbid_none_valued_constants, name)
         op.__name__ = op_function.__name__

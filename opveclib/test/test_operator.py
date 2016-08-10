@@ -243,11 +243,8 @@ class TestOperator(unittest.TestCase):
         else:
             assert False
 
-
-class TestA(unittest.TestCase):
-
     def test_reassign(self):
-        print('testing')
+
         try:
             @operator()
             def bad(data_in):
@@ -256,6 +253,22 @@ class TestA(unittest.TestCase):
 
                 a = variable(0, dtype=data_in.dtype)
                 a = 2
+
+                out[pos] = a
+                return out
+        except SyntaxError:
+            pass
+        else:
+            raise AssertionError
+
+        try:
+            @operator()
+            def bad(data_in):
+                out = output_like(data_in)
+                pos = position_in(data_in)
+
+                a = variable(0, dtype=data_in.dtype)
+                a = a + data_in[pos]
 
                 out[pos] = a
                 return out
