@@ -31,7 +31,7 @@ def expm1(x):
 
     e = ops.exp(x[pos])
     with ops.if_(e == 1.0):
-        output[pos] = e
+        output[pos] = x[pos]
     with ops.elif_ ((e - 1.0) == -1.0):
         output[pos] = -1.0
     with ops.else_():
@@ -47,7 +47,7 @@ class TestExpm1(unittest.TestCase):
         Test the correctness of ovl operator vs numpy implementation
         """
 
-        b = np.array([1e-10], dtype=np.float64)
+        b = np.array([1e-10, -1e-10, 0.0], dtype=np.float64)
         np_res = np.expm1(b)
         ovl_res = ops.evaluate(expm1(b))
         ops.logger.debug(u'numpy: ' + str(np_res) + u' ovl: ' + str(ovl_res))
