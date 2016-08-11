@@ -10,18 +10,28 @@
 # the specific language governing permissions and limitations under the License.
 
 # Run all unit Tests for opveclib on python 2 and 3. Stop after first failure
-nose2-2.7 -F opveclib.examples --verbose
-if [ ! $? -eq 0 ]; then
-  echo "example tests failed on Python 2"
-  exit 1
-fi
 nose2-2.7 -F opveclib.test --verbose
 if [ ! $? -eq 0 ]; then
   echo "unit tests failed on Python 2"
   exit 1
 fi
+nose2-2.7 -F opveclib.stdops --verbose
+if [ ! $? -eq 0 ]; then
+  echo "unit tests failed on Python 2"
+  exit 1
+fi
+nose2-2.7 -F opveclib.examples --verbose
+if [ ! $? -eq 0 ]; then
+  echo "example tests failed on Python 2"
+  exit 1
+fi
 # now run in python 3
 nose2-3.4 -F opveclib.test --verbose
+if [ ! $? -eq 0 ]; then
+  echo "unit tests failed on Python 3"
+  exit 1
+fi
+nose2-3.4 -F opveclib.stdops --verbose
 if [ ! $? -eq 0 ]; then
   echo "unit tests failed on Python 3"
   exit 1
