@@ -36,6 +36,9 @@ except OSError as exception:
     if exception.errno != errno.EEXIST:
         raise
 
+#: The C++ compiler path
+cxx = os.getenv('OPVECLIB_CXX', 'g++')
+
 
 def clear_op_cache():
     """

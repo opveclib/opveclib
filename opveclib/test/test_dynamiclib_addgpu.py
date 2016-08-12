@@ -14,7 +14,7 @@ import os
 import unittest
 import subprocess
 from ..operator import _DynamicLibOp, _default_cuda_threads_per_block
-from ..local import cuda_enabled, cuda_directory, cache_directory, clear_op_cache, logger
+from ..local import cuda_enabled, cuda_directory, cache_directory, clear_op_cache, logger, cxx
 
 
 # Test to ensure valid calculation on both CPU and GPU.
@@ -33,7 +33,7 @@ class DynamicLibAddGPUTest(unittest.TestCase):
             this_directory = os.path.split(this_file_path)[0]
 
             cpp_path = os.path.join(this_directory, 'addcpu.cpp')
-            subprocess.call(['g++', '-fPIC', '-Wall',
+            subprocess.call([cxx, '-fPIC', '-Wall',
                          '-std=c++11', '-Ofast', '-Wextra',
                          '-g', '-pedantic',
                          '-I'+this_directory+'/..',

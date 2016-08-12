@@ -11,10 +11,10 @@
 
 import unittest
 import numpy as np
-import opveclib as ops
+import opveclib as ovl
 
 
-@ops.operator()
+@ovl.operator()
 def graph_triangle_count(startEdge, fromVertex, toVertex):
     """Counts the triangles in an undirected graph.
 
@@ -45,39 +45,39 @@ def graph_triangle_count(startEdge, fromVertex, toVertex):
     :type toVertex: list.
     :return: Counts of triangles per edge.
     """
-    iEdge           = ops.position_in(toVertex.shape)[0]
-    count           = ops.output(toVertex.shape, ops.uint64)
-    nTriangle       = ops.variable(0, ops.uint64)
+    iEdge           = ovl.position_in(toVertex.shape)[0]
+    count           = ovl.output(toVertex.shape, ovl.uint64)
+    nTriangle       = ovl.variable(0, ovl.uint64)
 
-    iFromVertex     = ops.variable(fromVertex[iEdge], fromVertex.dtype)
-    iFromEdge       = ops.variable(startEdge[iFromVertex], startEdge.dtype)
-    iFromEdgeEnd    = ops.variable(startEdge[iFromVertex+1], startEdge.dtype)
-    iiFromVertex    = ops.variable(toVertex[iFromEdge], toVertex.dtype)
+    iFromVertex     = ovl.variable(fromVertex[iEdge], fromVertex.dtype)
+    iFromEdge       = ovl.variable(startEdge[iFromVertex], startEdge.dtype)
+    iFromEdgeEnd    = ovl.variable(startEdge[iFromVertex + 1], startEdge.dtype)
+    iiFromVertex    = ovl.variable(toVertex[iFromEdge], toVertex.dtype)
 
-    iToVertex       = ops.variable(toVertex[iEdge], toVertex.dtype)
-    iToEdge         = ops.variable(startEdge[iToVertex], startEdge.dtype)
-    iToEdgeEnd      = ops.variable(startEdge[iToVertex+1], startEdge.dtype)
-    iiToVertex      = ops.variable(toVertex[iToEdge], toVertex.dtype)
+    iToVertex       = ovl.variable(toVertex[iEdge], toVertex.dtype)
+    iToEdge         = ovl.variable(startEdge[iToVertex], startEdge.dtype)
+    iToEdgeEnd      = ovl.variable(startEdge[iToVertex + 1], startEdge.dtype)
+    iiToVertex      = ovl.variable(toVertex[iToEdge], toVertex.dtype)
 
     nMerge          = iToEdgeEnd-iToEdge + iFromEdgeEnd-iFromEdge # Maximum number of merges.
 
     # This construction is a work-around for simulating the function of a while loop.
     #TODO(raudies@hpe.com): Replace this construct by a while loop once it is available in ovl.
-    for iMerge in ops.arange(nMerge):
-        doMerge = ops.logical_and(iFromEdge < iFromEdgeEnd, iToEdge < iToEdgeEnd)
-        doMerge = ops.logical_and(doMerge, iiFromVertex < iToVertex)
+    for iMerge in ovl.arange(nMerge):
+        doMerge = ovl.logical_and(iFromEdge < iFromEdgeEnd, iToEdge < iToEdgeEnd)
+        doMerge = ovl.logical_and(doMerge, iiFromVertex < iToVertex)
 
-        with ops.if_(doMerge):
+        with ovl.if_(doMerge):
 
-            with ops.if_(iiFromVertex < iiToVertex):
+            with ovl.if_(iiFromVertex < iiToVertex):
                 iFromEdge <<= iFromEdge+1
                 iiFromVertex <<= toVertex[iFromEdge]
 
-            with ops.elif_(iiFromVertex > iiToVertex):
+            with ovl.elif_(iiFromVertex > iiToVertex):
                 iToEdge <<= iToEdge+1
                 iiToVertex <<= toVertex[iToEdge]
 
-            with ops.else_():
+            with ovl.else_():
                 nTriangle <<= nTriangle+1
                 iFromEdge <<= iFromEdge+1
                 iToEdge <<= iToEdge+1
@@ -115,7 +115,7 @@ def countTrianglesCPU(startEdge, fromVertex, toVertex):
         >>> countTrianglesCPU(startEdge, fromVertex, toVertex)
         3
     """
-    count = ops.evaluate(graph_triangle_count(startEdge, fromVertex, toVertex), target_language='cpp')
+    count = ovl.evaluate(graph_triangle_count(startEdge, fromVertex, toVertex), target_language='cpp')
     return np.sum(count, axis=0, dtype=np.uint64)
 
 
@@ -143,7 +143,7 @@ def countTrianglesGPU(startEdge, fromVertex, toVertex):
         >>> countTrianglesGPU(startEdge, fromVertex, toVertex)
         3
     """
-    count = ops.evaluate(graph_triangle_count(startEdge, fromVertex, toVertex), target_language='cuda')
+    count = ovl.evaluate(graph_triangle_count(startEdge, fromVertex, toVertex), target_language='cuda')
     return np.sum(count, axis=0, dtype=np.uint64)
 
 def countTrianglesNp(startEdge, fromVertex, toVertex):
@@ -412,7 +412,7 @@ class TestGraphTriangleCountOp(unittest.TestCase):
 
         writeExampleGraphToTextFile(tmpName)
 
-        ops.logger.debug('Testing graph %s.' % tmpName)
+        ovl.logger.debug('Testing graph %s.' % tmpName)
 
         startEdge, fromVertex, toVertex = loadGraphFromTextFile(tmpName)
 
@@ -422,10 +422,10 @@ class TestGraphTriangleCountOp(unittest.TestCase):
         assert nTriangleNPY==nTriangle
         assert nTriangleCPU==nTriangle
 
-        if ops.local.cuda_enabled:
+        if ovl.local.cuda_enabled:
             nTriangleGPU = countTrianglesGPU(startEdge, fromVertex, toVertex)
             assert nTriangleGPU==nTriangle
 
 if __name__ == '__main__':
-    ops.clear_op_cache()
+    ovl.clear_op_cache()
     unittest.main()

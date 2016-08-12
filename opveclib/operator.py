@@ -23,7 +23,7 @@ import six
 import numpy as np
 from numpy.ctypeslib import ndpointer
 from .expression import TensorType, ExpressionDAG, input, OutputTensor
-from .local import version, cache_directory, cuda_enabled, cuda_directory, logger
+from .local import version, cache_directory, cuda_enabled, cuda_directory, logger, cxx
 from . import language_pb2 as lang
 
 _default_cuda_threads_per_block = 32
@@ -50,7 +50,7 @@ class _DynamicLibOp(object):
                 try:
                     if cuda_enabled:
                         logger.debug('*** building dynamiclibop for GPU')
-                        subprocess.check_output(['g++', '-fPIC', '-Wall', '-shared',
+                        subprocess.check_output([cxx, '-fPIC', '-Wall', '-shared',
                                                  '-std=c++11', '-O2', '-Wextra', '-DGOOGLE_CUDA=1',
                                                  '-o', dynamiclibop_path,
                                                  this_directory + '/dynamiclibop.cc',
@@ -60,7 +60,7 @@ class _DynamicLibOp(object):
                                                 universal_newlines=True)
                     else:
                         logger.debug('*** building dynamiclibop for CPU')
-                        subprocess.check_output(['g++', '-fPIC', '-Wall', '-shared',
+                        subprocess.check_output([cxx, '-fPIC', '-Wall', '-shared',
                                                  '-std=c++11', '-O2', '-Wextra',
                                                  '-o', dynamiclibop_path,
                                                  this_directory + '/dynamiclibop.cc',
@@ -68,7 +68,7 @@ class _DynamicLibOp(object):
                                                 stderr=subprocess.STDOUT,
                                                 universal_newlines=True)
                 except subprocess.CalledProcessError as exception:
-                    logger.debug('g++ error: ' + exception.output)
+                    logger.debug('c++ compiler error: ' + exception.output)
                     raise
 
             _DynamicLibOp._loaded_module = tf.load_op_library(dynamiclibop_path)
@@ -1776,7 +1776,7 @@ def _make_generic_c(src, name):
         this_file_path = os.path.abspath(__file__)
         this_directory = os.path.split(this_file_path)[0]
         try:
-            subprocess.check_output(['g++', '-fPIC', '-std=c++11', '-g', '-pedantic',
+            subprocess.check_output([cxx, '-fPIC', '-std=c++11', '-g', '-pedantic',
                                      '-Wall', '-Wextra',
                                      '-I'+this_directory,
                                      '-shared',
@@ -1784,7 +1784,7 @@ def _make_generic_c(src, name):
                                     stderr=subprocess.STDOUT,
                                     universal_newlines=True)
         except subprocess.CalledProcessError as exception:
-            logger.debug('g++ error: ' + exception.output)
+            logger.debug('c++ compiler error: ' + exception.output)
             raise
 
     return generic_cpp_so_path
@@ -1913,7 +1913,7 @@ def profile(output_list, target_language, profiling_iterations, opt_level):
             cc_path = os.path.join(this_directory, 'testcop.cc')
 
             try:
-                subprocess.check_output(['g++', '-fPIC', '-Wall', '-shared',
+                subprocess.check_output([cxx, '-fPIC', '-Wall', '-shared',
                                          '-std=c++11', '-Ofast', '-Wextra',
                                          '-I'+this_directory,
                                          '-I'+cache_directory,
@@ -1922,7 +1922,7 @@ def profile(output_list, target_language, profiling_iterations, opt_level):
                                         stderr=subprocess.STDOUT,
                                         universal_newlines=True)
             except subprocess.CalledProcessError as exception:
-                logger.debug('g++ error: ' + exception.output)
+                logger.debug('c++ compiler error: ' + exception.output)
                 raise
 
             libtest = ctypes.cdll.LoadLibrary(testlib_path)
@@ -1958,14 +1958,14 @@ def profile(output_list, target_language, profiling_iterations, opt_level):
                                         universal_newlines=True)
 
                 # relocatable device code has to be defined when linking in addition
-                # to compiling. g++ has no concept of this, so we have to do an extra
-                # device code link step with a dummy link file
+                # to compiling. The default compiler, g++, has no concept of this, so
+                # we have to do an extra device code link step with a dummy link file
                 linko_path = os.path.join(cache_directory, 'link.o')
                 subprocess.check_output([nvcc_path, '-dlink', '-Xcompiler', '-fPIC',
                                          '-o', linko_path, o_path],
                                         stderr=subprocess.STDOUT,
                                         universal_newlines=True)
-                subprocess.check_output(['g++', '-shared',
+                subprocess.check_output([cxx, '-shared',
                                          '-o', testlib_path, o_path, linko_path,
                                          '-lcuda'],
                                         stderr=subprocess.STDOUT,

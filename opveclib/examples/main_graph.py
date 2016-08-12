@@ -11,7 +11,7 @@
 from __future__ import absolute_import
 import os.path
 from test_graph import loadGraphFromTextFile, countTrianglesCPU, countTrianglesGPU, countTrianglesNp
-import opveclib as ops
+import opveclib as ovl
 from six.moves import urllib
 import gzip
 import os.path
@@ -62,6 +62,6 @@ if __name__ == '__main__':
         print('Counted %d triangles using numpy.' % (nTriangleNPY))
         print('Counted %d triangles using OVL + CPU.' % (nTriangleCPU))
 
-        if ops.local.cuda_enabled:
+        if ovl.local.cuda_enabled:
             nTriangleGPU = countTrianglesGPU(startEdge, fromVertex, toVertex)
             print('Counted %d triangles using OVL + GPU.' % (nTriangleGPU))

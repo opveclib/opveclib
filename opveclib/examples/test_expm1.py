@@ -14,10 +14,11 @@ This example implements and tests expm1 operator  - ie. exp(x) - 1, which is equ
 
 import unittest
 import numpy as np
-import opveclib as ops
+import opveclib as ovl
 import tensorflow as tf
 
-@ops.operator()
+
+@ovl.operator()
 def expm1(x):
     """
     Define the operator function.
@@ -26,22 +27,23 @@ def expm1(x):
     :return: Element-wise exp(x) - 1
     """
 
-    output = ops.output_like(x)
-    pos = ops.position_in(x.shape)
+    output = ovl.output_like(x)
+    pos = ovl.position_in(x.shape)
 
-    e = ops.exp(x[pos])
-    with ops.if_(e == 1.0):
+    e = ovl.exp(x[pos])
+    with ovl.if_(e == 1.0):
         output[pos] = e
-    with ops.elif_ ((e - 1.0) == -1.0):
+    with ovl.elif_((e - 1.0) == -1.0):
         output[pos] = -1.0
-    with ops.else_():
-        output[pos] = (e - 1.0) * x[pos]/ops.log(e)
+    with ovl.else_():
+        output[pos] = (e - 1.0) * x[pos] / ovl.log(e)
 
     return output
 
 
 class TestExpm1(unittest.TestCase):
-    ops.clear_op_cache()
+    ovl.clear_op_cache()
+
     def test(self):
         """
         Test the correctness of ovl operator vs numpy implementation
@@ -49,17 +51,16 @@ class TestExpm1(unittest.TestCase):
 
         b = np.array([1e-10], dtype=np.float64)
         np_res = np.expm1(b)
-        ovl_res = ops.evaluate(expm1(b))
-        ops.logger.debug(u'numpy: ' + str(np_res) + u' ovl: ' + str(ovl_res))
+        ovl_res = ovl.evaluate(expm1(b))
+        ovl.logger.debug(u'numpy: ' + str(np_res) + u' ovl: ' + str(ovl_res))
         assert np.allclose(np_res, ovl_res, rtol=0, atol=1e-20)
-        if ops.cuda_enabled:
-            assert np.allclose(np.expm1(b), ops.evaluate(expm1(b), target_language='cuda'), rtol=0, atol=1e-20)
-
+        if ovl.cuda_enabled:
+            assert np.allclose(np.expm1(b), ovl.evaluate(expm1(b), target_language='cuda'), rtol=0, atol=1e-20)
 
         # test performance
         import timeit
         import time
-        logger = ops.logger
+        logger = ovl.logger
         iters = 10
         X = np.random.uniform(0, 1, size=(10000, 1000))
         ref = np.expm1(X)
@@ -69,29 +70,29 @@ class TestExpm1(unittest.TestCase):
                                       number=iters)
         logger.debug(u'Best numpy time (ms): ' + str(np_time))
         expm1Op = expm1(X)
-        ovl_cpp, prof_cpp = ops.profile(expm1Op, target_language='cpp', profiling_iterations=iters, opt_level=0)
+        ovl_cpp, prof_cpp = ovl.profile(expm1Op, target_language='cpp', profiling_iterations=iters, opt_level=0)
         assert np.allclose(ref, ovl_cpp, rtol=0, atol=1e-15)
         ovl_cpp_time = np.min(list(prof_cpp.values())[0])
         logger.debug(u'Best ovl cpp time (ms): ' + str(ovl_cpp_time))
-        if ops.cuda_enabled:
-            ovl_cuda, prof_cuda = ops.profile(expm1Op, target_language='cuda', profiling_iterations=iters, opt_level=0)
+        if ovl.cuda_enabled:
+            ovl_cuda, prof_cuda = ovl.profile(expm1Op, target_language='cuda', profiling_iterations=iters, opt_level=0)
             assert np.allclose(ref, ovl_cuda, rtol=0, atol=1e-15)
             ovl_cuda_time = np.min(list(prof_cuda.values())[0])
             logger.debug(u'Best ovl cuda time  (ms): ' + str(ovl_cuda_time))
 
         # OVL-TF integration
         # ensure TF runs on GPU
-        test_config=tf.ConfigProto(allow_soft_placement=False)
+        test_config = tf.ConfigProto(allow_soft_placement=False)
         test_config.graph_options.optimizer_options.opt_level = -1
         ones = np.ones_like(X)
-        if ops.cuda_enabled:
+        if ovl.cuda_enabled:
             devices = ['/cpu:0', '/gpu:0']
         else:
             devices = ['/cpu:0']
         with tf.Session(config=test_config) as sess:
-           for dev_string in devices:
+            for dev_string in devices:
                 with tf.device(dev_string):
-                    expm1_tf = ops.as_tensorflow(expm1Op)
+                    expm1_tf = ovl.as_tensorflow(expm1Op)
                     sess.run(tf.initialize_all_variables())
                     expm1_tf_result = sess.run(expm1_tf)
                     prof_ovl = np.zeros(iters)

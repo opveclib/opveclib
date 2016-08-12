@@ -16,9 +16,10 @@ across a specified axis of the input tensor. This generic accumulation operator 
 
 import unittest
 import numpy as np
-import opveclib as ops
+import opveclib as ovl
 
-@ops.operator()
+
+@ovl.operator()
 def accumulate(x, inner_fcn=None, axis=None):
     """
     Define the operator function.
@@ -45,10 +46,10 @@ def accumulate(x, inner_fcn=None, axis=None):
                 pass
             else:
                 workgroup_shape.append(num_elements)
-    pos = ops.position_in(workgroup_shape)
+    pos = ovl.position_in(workgroup_shape)
 
     # Define the accumulated output to be the same type as the input
-    out = ops.output_like(x)
+    out = ovl.output_like(x)
 
     # Define a function for determining the index of the input tensor as a function of accumulation axis position
     # and the current worker position. This is equal to the worker position with the accumulation axis position
@@ -66,11 +67,11 @@ def accumulate(x, inner_fcn=None, axis=None):
 
     # initialize accumulator to be the first element along the accumulation axis
     initial_value = x[resolve_position(0)]
-    accum = ops.variable(initial_value, x.dtype)
+    accum = ovl.variable(initial_value, x.dtype)
     out[resolve_position(0)] = accum
 
     # use this worker to iterate over and accumulate the rest of the elements in the accumulation axis
-    for i in ops.arange(1, x.shape[axis]):
+    for i in ovl.arange(1, x.shape[axis]):
         accum <<= inner_fcn(accum, x[resolve_position(i)])
         out[resolve_position(i)] = accum
 
@@ -147,28 +148,29 @@ def cumprod(x, axis=0):
 
 
 class TestAccumulate(unittest.TestCase):
-    ops.clear_op_cache()
+    ovl.clear_op_cache()
+
     def test(self):
         """
         Test the outputs of the operators to make sure they are consistent with the numpy implementation
         """
 
         a = np.random.random((5, 5, 5))
-        ops.logger.debug(u'Testing C')
-        assert np.allclose(np.cumsum(a, axis=0), ops.evaluate(cumsum(a, axis=0), target_language='cpp'))
-        assert np.allclose(np.cumsum(a, axis=1), ops.evaluate(cumsum(a, axis=1), target_language='cpp'))
-        assert np.allclose(np.cumsum(a, axis=2), ops.evaluate(cumsum(a, axis=2), target_language='cpp'))
+        ovl.logger.debug(u'Testing C')
+        assert np.allclose(np.cumsum(a, axis=0), ovl.evaluate(cumsum(a, axis=0), target_language='cpp'))
+        assert np.allclose(np.cumsum(a, axis=1), ovl.evaluate(cumsum(a, axis=1), target_language='cpp'))
+        assert np.allclose(np.cumsum(a, axis=2), ovl.evaluate(cumsum(a, axis=2), target_language='cpp'))
 
-        assert np.allclose(np.cumprod(a, axis=0), ops.evaluate(cumprod(a, axis=0), target_language='cpp'))
-        assert np.allclose(np.cumprod(a, axis=1), ops.evaluate(cumprod(a, axis=1), target_language='cpp'))
-        assert np.allclose(np.cumprod(a, axis=2), ops.evaluate(cumprod(a, axis=2), target_language='cpp'))
+        assert np.allclose(np.cumprod(a, axis=0), ovl.evaluate(cumprod(a, axis=0), target_language='cpp'))
+        assert np.allclose(np.cumprod(a, axis=1), ovl.evaluate(cumprod(a, axis=1), target_language='cpp'))
+        assert np.allclose(np.cumprod(a, axis=2), ovl.evaluate(cumprod(a, axis=2), target_language='cpp'))
 
-        if ops.cuda_enabled:
-            ops.logger.debug(u'Testing CUDA')
-            assert np.allclose(np.cumsum(a, axis=0), ops.evaluate(cumsum(a, axis=0), target_language='cuda'))
-            assert np.allclose(np.cumsum(a, axis=1), ops.evaluate(cumsum(a, axis=1), target_language='cuda'))
-            assert np.allclose(np.cumsum(a, axis=2), ops.evaluate(cumsum(a, axis=2), target_language='cuda'))
+        if ovl.cuda_enabled:
+            ovl.logger.debug(u'Testing CUDA')
+            assert np.allclose(np.cumsum(a, axis=0), ovl.evaluate(cumsum(a, axis=0), target_language='cuda'))
+            assert np.allclose(np.cumsum(a, axis=1), ovl.evaluate(cumsum(a, axis=1), target_language='cuda'))
+            assert np.allclose(np.cumsum(a, axis=2), ovl.evaluate(cumsum(a, axis=2), target_language='cuda'))
 
-            assert np.allclose(np.cumprod(a, axis=0), ops.evaluate(cumprod(a, axis=0), target_language='cuda'))
-            assert np.allclose(np.cumprod(a, axis=1), ops.evaluate(cumprod(a, axis=1), target_language='cuda'))
-            assert np.allclose(np.cumprod(a, axis=2), ops.evaluate(cumprod(a, axis=2), target_language='cuda'))
+            assert np.allclose(np.cumprod(a, axis=0), ovl.evaluate(cumprod(a, axis=0), target_language='cuda'))
+            assert np.allclose(np.cumprod(a, axis=1), ovl.evaluate(cumprod(a, axis=1), target_language='cuda'))
+            assert np.allclose(np.cumprod(a, axis=2), ovl.evaluate(cumprod(a, axis=2), target_language='cuda'))

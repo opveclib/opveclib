@@ -16,11 +16,12 @@ across a specified axis of the input tensor. This generic accumulation operator 
 
 import unittest
 import numpy as np
-import opveclib as ops
+import opveclib as ovl
 from .test_accumulate import cumsum
 
+
 class TestAccumulatePerf(unittest.TestCase):
-    ops.clear_op_cache()
+    ovl.clear_op_cache()
     def test_performance(self):
         """
         test the performance vs. numpy running standalone and from tensorflow
@@ -30,7 +31,7 @@ class TestAccumulatePerf(unittest.TestCase):
         import tensorflow as tf
         import timeit
         import time
-        logger = ops.logger
+        logger = ovl.logger
         iters = 10
         X = np.random.uniform(0, 1, size=(10000, 1000))
         # note, np.cumsum fails with memory error at input size 10 ^^ 6
@@ -41,12 +42,12 @@ class TestAccumulatePerf(unittest.TestCase):
                                       number=iters)
         logger.debug(u'Best numpy time (ms): ' + str(np_time))
         cumsumOp = cumsum(X, axis=0)
-        ovl_cpp, prof_cpp = ops.profile(cumsumOp, target_language='cpp', profiling_iterations=iters, opt_level=0)
+        ovl_cpp, prof_cpp = ovl.profile(cumsumOp, target_language='cpp', profiling_iterations=iters, opt_level=0)
         assert np.allclose(ref, ovl_cpp)
         ovl_cpp_time = np.min(list(prof_cpp.values())[0])
         logger.debug(u'Best ovl cpp time (ms): ' + str(ovl_cpp_time))
-        if ops.cuda_enabled:
-            ovl_cuda, prof_cuda = ops.profile(cumsumOp, target_language='cuda', profiling_iterations=iters, opt_level=0)
+        if ovl.cuda_enabled:
+            ovl_cuda, prof_cuda = ovl.profile(cumsumOp, target_language='cuda', profiling_iterations=iters, opt_level=0)
             assert np.allclose(ref, ovl_cuda)
             ovl_cuda_time = np.min(list(prof_cuda.values())[0])
             logger.debug(u'Best ovl cuda time  (ms): ' + str(ovl_cuda_time))
@@ -55,14 +56,14 @@ class TestAccumulatePerf(unittest.TestCase):
         # ensure TF runs on GPU
         test_config=tf.ConfigProto(allow_soft_placement=False)
         test_config.graph_options.optimizer_options.opt_level = -1
-        if ops.cuda_enabled:
+        if ovl.cuda_enabled:
             devices = ['/cpu:0', '/gpu:0']
         else:
             devices = ['/cpu:0']
         with tf.Session(config=test_config) as sess:
            for dev_string in devices:
                 with tf.device(dev_string):
-                    cumsum_tf = ops.as_tensorflow(cumsumOp)
+                    cumsum_tf = ovl.as_tensorflow(cumsumOp)
                     sess.run(tf.initialize_all_variables())
                     cumsum_tf_result = sess.run(cumsum_tf)
                     prof_ovl = np.zeros(iters)

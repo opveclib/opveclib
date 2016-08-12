@@ -9,13 +9,13 @@
 # the specific language governing permissions and limitations under the License.
 
 import numpy as np
-import opveclib as ops
+import opveclib as ovl
 import tensorflow as tf
 import itertools
 import time
 
 
-@ops.operator()
+@ovl.operator()
 def conv_1d(x, v, kernel_orientation='as-is', stride=1, mode='same', data_format='NCE'):
     """
     Define the operator function.
@@ -88,7 +88,7 @@ def conv_1d(x, v, kernel_orientation='as-is', stride=1, mode='same', data_format
     output_shape[n_axis] = num_batches
     output_shape[c_axis] = num_filters
     output_shape[e_axis] = output_elements
-    output = ops.output(output_shape, x.dtype)
+    output = ovl.output(output_shape, x.dtype)
 
     filters_per_worker = 1
     filter_workers, filter_remainder = divmod(num_filters, filters_per_worker)
@@ -106,39 +106,39 @@ def conv_1d(x, v, kernel_orientation='as-is', stride=1, mode='same', data_format
         element_workers += 1
 
     workgroup_shape = [batch_workers, filter_workers, element_workers]
-    ops.logger.debug(u'    workgroup_shape: ' + str(workgroup_shape))
-    pos = ops.position_in(workgroup_shape)
+    ovl.logger.debug(u'    workgroup_shape: ' + str(workgroup_shape))
+    pos = ovl.position_in(workgroup_shape)
     cur_batch_block = pos[0]
     cur_filter_block = pos[1]
     cur_element_block = pos[2]
 
-    num_block_batches = ops.variable(batches_per_worker, ops.uint32)
+    num_block_batches = ovl.variable(batches_per_worker, ovl.uint32)
     if batch_remainder > 0:
-        with ops.if_(cur_batch_block == batch_workers-1):
+        with ovl.if_(cur_batch_block == batch_workers-1):
             num_block_batches <<= batch_remainder
 
-    num_block_filters = ops.variable(filters_per_worker, ops.uint32)
+    num_block_filters = ovl.variable(filters_per_worker, ovl.uint32)
     if filter_remainder > 0:
-        with ops.if_(cur_filter_block == filter_workers-1):
+        with ovl.if_(cur_filter_block == filter_workers-1):
             num_block_filters <<= filter_remainder
 
-    num_block_elements = ops.variable(elements_per_worker, ops.uint32)
+    num_block_elements = ovl.variable(elements_per_worker, ovl.uint32)
     if element_remainder > 0:
-        with ops.if_(cur_element_block == element_workers-1):
+        with ovl.if_(cur_element_block == element_workers-1):
             num_block_elements <<= element_remainder
 
-    accum = ops.zeros((batches_per_worker, filters_per_worker, elements_per_worker), ops.float64) #4*4
+    accum = ovl.zeros((batches_per_worker, filters_per_worker, elements_per_worker), ovl.float64) #4*4
 
-    filter_block = ops.zeros((filters_per_worker, filter_size), v.dtype)  #4*10
-    input_block = ops.zeros((batches_per_worker, filter_size), x.dtype)  #4*10
-    for cur_channel in ops.arange(num_channels):
+    filter_block = ovl.zeros((filters_per_worker, filter_size), v.dtype)  #4*10
+    input_block = ovl.zeros((batches_per_worker, filter_size), x.dtype)  #4*10
+    for cur_channel in ovl.arange(num_channels):
 
         # load all filters for this channel
-        for intra_block_filter in ops.arange(filters_per_worker):
-            for f_pos in ops.arange(filter_size):
+        for intra_block_filter in ovl.arange(filters_per_worker):
+            for f_pos in ovl.arange(filter_size):
                 filter_index = [None, None, None]
                 filter_index[c_axis] = cur_channel
-                filter_index[n_axis] = ops.cast(intra_block_filter, ops.uint32) + cur_filter_block*filters_per_worker
+                filter_index[n_axis] = ovl.cast(intra_block_filter, ovl.uint32) + cur_filter_block * filters_per_worker
                 if kernel_orientation == 'as-is':
                     filter_index[e_axis] = f_pos
                 elif kernel_orientation == 'flipped':
@@ -148,31 +148,31 @@ def conv_1d(x, v, kernel_orientation='as-is', stride=1, mode='same', data_format
                 filter_block[intra_block_filter, f_pos] = v[filter_index]
 
         # load initial inputs for this channel
-        buffer_head = ops.variable(0, ops.uint32)
-        for intra_block_batch in ops.arange(num_block_batches):
+        buffer_head = ovl.variable(0, ovl.uint32)
+        for intra_block_batch in ovl.arange(num_block_batches):
             cur_batch = intra_block_batch + cur_batch_block*batches_per_worker
-            for f_pos in ops.arange(filter_size):
+            for f_pos in ovl.arange(filter_size):
                 x_index = [None, None, None]
                 x_index[c_axis] = cur_channel
                 x_index[n_axis] = cur_batch
 
-                x_elem_index = starting_element + ops.cast(cur_element_block*elements_per_worker, ops.uint64) + ops.cast(f_pos, ops.uint64)
+                x_elem_index = starting_element + ovl.cast(cur_element_block * elements_per_worker, ovl.uint64) + ovl.cast(f_pos, ovl.uint64)
                 x_index[e_axis] = x_elem_index
-                index_in_bounds = ops.logical_and(x_elem_index >= 0, x_elem_index < num_elements)
-                with ops.if_(index_in_bounds):
+                index_in_bounds = ovl.logical_and(x_elem_index >= 0, x_elem_index < num_elements)
+                with ovl.if_(index_in_bounds):
                     input_block[intra_block_batch, f_pos] = x[x_index]
-                with ops.else_():
+                with ovl.else_():
                     input_block[intra_block_batch, f_pos] = 0
 
-        for intra_block_element in ops.arange(num_block_elements):
+        for intra_block_element in ovl.arange(num_block_elements):
             cur_elem = intra_block_element + cur_element_block*elements_per_worker
-            for intra_block_batch in ops.arange(num_block_batches):
+            for intra_block_batch in ovl.arange(num_block_batches):
                 cur_batch = intra_block_batch + cur_batch_block*batches_per_worker
-                for intra_block_filter in ops.arange(num_block_filters):
-                    for f_pos in ops.arange(filter_size):
-                        x_pos = (buffer_head + ops.cast(f_pos, ops.uint32)) % filter_size
-                        cur_x = ops.cast(input_block[intra_block_batch, x_pos], ops.float64)
-                        cur_v = ops.cast(filter_block[intra_block_filter, f_pos], ops.float64)
+                for intra_block_filter in ovl.arange(num_block_filters):
+                    for f_pos in ovl.arange(filter_size):
+                        x_pos = (buffer_head + ovl.cast(f_pos, ovl.uint32)) % filter_size
+                        cur_x = ovl.cast(input_block[intra_block_batch, x_pos], ovl.float64)
+                        cur_v = ovl.cast(filter_block[intra_block_filter, f_pos], ovl.float64)
                         accum[intra_block_batch, intra_block_filter, intra_block_element] = \
                             accum[intra_block_batch, intra_block_filter, intra_block_element] + cur_x * cur_v
 
@@ -182,26 +182,26 @@ def conv_1d(x, v, kernel_orientation='as-is', stride=1, mode='same', data_format
                 x_index[n_axis] = cur_batch
                 x_elem_index = starting_element + cur_elem + filter_size
                 x_index[e_axis] = x_elem_index
-                index_in_bounds = ops.logical_and(x_elem_index >= 0, x_elem_index < num_elements)
-                with ops.if_(index_in_bounds):
+                index_in_bounds = ovl.logical_and(x_elem_index >= 0, x_elem_index < num_elements)
+                with ovl.if_(index_in_bounds):
                     input_block[intra_block_batch, buffer_head] = x[x_index]
-                with ops.else_():
+                with ovl.else_():
                     input_block[intra_block_batch, buffer_head] = 0
 
             buffer_head <<= (buffer_head + 1) % filter_size
 
-    for intra_block_batch in ops.arange(num_block_batches):
+    for intra_block_batch in ovl.arange(num_block_batches):
         cur_batch = intra_block_batch + cur_batch_block*batches_per_worker
-        for intra_block_filter in ops.arange(num_block_filters):
+        for intra_block_filter in ovl.arange(num_block_filters):
             cur_filter = intra_block_filter + cur_filter_block*filters_per_worker
-            for intra_block_element in ops.arange(num_block_elements):
+            for intra_block_element in ovl.arange(num_block_elements):
                 cur_elem = intra_block_element + cur_element_block*elements_per_worker
 
                 output_index = [None, None, None]
                 output_index[n_axis] = cur_batch
                 output_index[e_axis] = cur_elem
                 output_index[c_axis] = cur_filter
-                output[output_index] = ops.cast(accum[intra_block_batch, intra_block_filter, intra_block_element],
+                output[output_index] = ovl.cast(accum[intra_block_batch, intra_block_filter, intra_block_element],
                                                 output.dtype)
 
     return output
@@ -308,7 +308,7 @@ def run_tf(tensor_in_sizes, filter_in_sizes):
     num_elem = filter_in_sizes[1]
     num_chan = filter_in_sizes[2]
     ovl_filter_in_sizes = [num_filter, num_elem, num_chan]
-    ops.logger.debug(u'input and filter sizes: ' + str(ovl_tensor_in_sizes) + ', ' + str(ovl_filter_in_sizes))
+    ovl.logger.debug(u'input and filter sizes: ' + str(ovl_tensor_in_sizes) + ', ' + str(ovl_filter_in_sizes))
     ar1 = np.array(x1, dtype=np.float).reshape(ovl_tensor_in_sizes)
     # does not produce the correct results
     # ar2 = np.array(x2, dtype=np.float).reshape(ovl_filter_in_sizes, order='F')
@@ -327,12 +327,12 @@ def run_tf(tensor_in_sizes, filter_in_sizes):
 
     iters = 100
     ovlOp = conv_1d(ar1, ar2, mode='same', kernel_orientation='as-is', data_format='NEC')
-    if ops.cuda_enabled:
-        ovlResult, prof = ops.profile(ovlOp, target_language='cuda', profiling_iterations=iters, opt_level=3)
+    if ovl.cuda_enabled:
+        ovlResult, prof = ovl.profile(ovlOp, target_language='cuda', profiling_iterations=iters, opt_level=3)
         ovl_cuda_time = np.min(list(prof.values())[0])
         assert np.allclose(ovlResult, ref)
     #TODO - cpp is really slow...
-    ovlcppResult, profcpp = ops.profile(ovlOp, target_language='cpp', profiling_iterations=iters, opt_level=3)
+    ovlcppResult, profcpp = ovl.profile(ovlOp, target_language='cpp', profiling_iterations=iters, opt_level=3)
     ovl_cpp_time = np.min(list(profcpp.values())[0])
     assert np.allclose(ovlcppResult, ref)
 
@@ -344,7 +344,7 @@ def run_tf(tensor_in_sizes, filter_in_sizes):
     ovl_tf_time = 0
     with tf.Session(config=test_config) as sess:
         with tf.device('/gpu:0'):
-            ovlOp_tf = ops.as_tensorflow(ovlOp)
+            ovlOp_tf = ovl.as_tensorflow(ovlOp)
             init = tf.initialize_all_variables()
             sess.run(init)
             ovlOp_tf_result = sess.run(ovlOp_tf)
@@ -375,7 +375,7 @@ def run_tf(tensor_in_sizes, filter_in_sizes):
             assert np.allclose(tf_result, ref)
     sess.close()
     times = [np_time, ovl_cuda_time, ovl_cpp_time, ovl_tf_time, tf_time]
-    ops.logger.debug(u'    time [np, OVL_cuda, OVL_cpp, OVL_TF, TF]: ' + str(times))
+    ovl.logger.debug(u'    time [np, OVL_cuda, OVL_cpp, OVL_TF, TF]: ' + str(times))
 
 
 def run_tests():
@@ -397,17 +397,17 @@ def run_tests():
                 op = conv_1d(a1, b, mode=md, kernel_orientation=orientation, data_format='NEC')
 
                 # result1 =
-                assert np.allclose(ops.evaluate(op, target_language='cuda'), y1)
+                assert np.allclose(ovl.evaluate(op, target_language='cuda'), y1)
                 # for d in range(1):
                 a1[:] = a2[:]
-                assert np.allclose(ops.evaluate(op, target_language='cuda'), y2)
+                assert np.allclose(ovl.evaluate(op, target_language='cuda'), y2)
 
-                res, prof = ops.profile(op, target_language='cuda', profiling_iterations=100, opt_level=3)
+                res, prof = ovl.profile(op, target_language='cuda', profiling_iterations=100, opt_level=3)
 
                 # print(prof)
                 # print(debug)
                 # print(op[0, 0, :])
-                ops.logger.debug(k_ee, md, orientation, (t2-t1)*1000, np.min(list(prof.values())[0]))
+                ovl.logger.debug(k_ee, md, orientation, (t2 - t1) * 1000, np.min(list(prof.values())[0]))
                 # assert np.allclose(result1, y1)
                 # assert np.allclose(result2, y2)
 
