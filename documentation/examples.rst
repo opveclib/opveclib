@@ -4,3 +4,4 @@ Examples
     accumulate
     graph
     expm1
+    log1p
