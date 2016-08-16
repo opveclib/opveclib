@@ -869,6 +869,14 @@ class _Expression(object):
     def from_proto(proto, input_exprs):
         raise NotImplementedError('Abstract Class')
 
+    def __bool__(self):
+        self.__nonzero__()
+
+    def __nonzero__(self):
+        raise SyntaxError('Attempting to interpret the truth of an expression. This typically happens when trying to '
+                          'use a native if statement to created a conditional inside of an operator, which is not '
+                          'supported. To do so you must use the "with if_(...)" function.')
+
 
 class Scalar(_Expression):
     """
@@ -939,9 +947,6 @@ class Scalar(_Expression):
 
     def __neg__(self):
         return _UnaryMath(self, lang.NEGATE)
-
-    def __bool__(self):
-        raise SyntaxError('Cannot resolve expression values at interpretation time.')
 
     @staticmethod
     def from_proto(proto, input_exprs):

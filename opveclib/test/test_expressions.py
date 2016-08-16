@@ -488,3 +488,22 @@ class TestTensorExpression(unittest.TestCase):
         _Else()
         b <<= 0
         _EndIf()
+
+    def test_native_if(self):
+        ExpressionDAG.clear()
+        a = variable(0.0, float32)
+        try:
+            if a == 0:
+                pass
+        except SyntaxError:
+            pass
+        else:
+            raise AssertionError
+
+        try:
+            if a:
+                pass
+        except SyntaxError:
+            pass
+        else:
+            raise AssertionError
