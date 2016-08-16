@@ -13,17 +13,17 @@ import numpy as np
 import os
 import unittest
 import subprocess
-from ..operator import Operator
-from ..local import cuda_enabled, cuda_directory, cache_directory
+from ..operator import _DynamicLibOp, _default_cuda_threads_per_block
+from ..local import cuda_enabled, cuda_directory, cache_directory, clear_op_cache, logger, cxx
 
 
 # Test to ensure valid calculation on both CPU and GPU.
 # All GPU calculations have an extra 1.0 added to each element to verify that
 # code is actually running on GPU
 class DynamicLibAddGPUTest(unittest.TestCase):
+    clear_op_cache()
+
     def test1(self):
-        # build the dynamiclibop.so if needed
-        Operator._load_dynamiclib_module()
 
         # build the operator libs if needed
         cpulib = os.path.join(cache_directory, "libaddcpu.so")
@@ -33,12 +33,11 @@ class DynamicLibAddGPUTest(unittest.TestCase):
             this_directory = os.path.split(this_file_path)[0]
 
             cpp_path = os.path.join(this_directory, 'addcpu.cpp')
-            subprocess.call(['g++', '-fPIC', '-Wall',
+            subprocess.call([cxx, '-fPIC', '-Wall',
                          '-std=c++11', '-Ofast', '-Wextra',
                          '-g', '-pedantic',
                          '-I'+this_directory+'/..',
                          '-o', cpulib, '-shared',  cpp_path])
-
 
         if cuda_enabled:
             if not os.path.exists(gpulib):
@@ -60,63 +59,61 @@ class DynamicLibAddGPUTest(unittest.TestCase):
         else:
             devices = ['/cpu:0']
         for dev_string in devices:
-            tf.logging.log(tf.logging.INFO, '*** device: {dev}'.format(dev= dev_string))
-            with tf.Session(config=tf.ConfigProto(allow_soft_placement=False,log_device_placement=True)):
-                tf.logging.log(tf.logging.INFO, '*** add2float')
+            logger.debug('*** device: {dev}'.format(dev= dev_string))
+            test_config=tf.ConfigProto(allow_soft_placement=False)
+            # Don't perform optimizations for tests so we don't inadvertently run
+            # gpu ops on cpu
+            test_config.graph_options.optimizer_options.opt_level = -1
+            with tf.Session(config=test_config):
+                logger.debug('*** add2float')
                 with tf.device(dev_string):
-                    in0 = np.random.rand(3,5).astype(np.float32)
-                    in1 = np.random.rand(3,5).astype(np.float32)
-                    ones = np.ones((3,5), dtype=np.float32)
-                    output = Operator._dynamiclibop_module.dynamic_lib(inputs=[in0, in1],
-                                                                       out_shapes=[[3,5]],
-                                                                       out_types=['float'],
-                                                                       cpu_lib_path=cpulib,
-                                                                       cpu_func_name="add2float",
-                                                                       gpu_lib_path=gpulib,
-                                                                       gpu_func_name="add2float",
-                                                                       gpu_grad_func_name='',
-                                                                       gpu_grad_lib_path='',
-                                                                       cpu_grad_func_name='',
-                                                                       cpu_grad_lib_path='',
-                                                                       cuda_threads_per_block=Operator._default_cuda_threads_per_block)
+                    in0 = np.random.rand(3,50).astype(np.float32)
+                    in1 = np.random.rand(3,50).astype(np.float32)
+                    ones = np.ones((3,50), dtype=np.float32)
+                    output = _DynamicLibOp.module().dynamic_lib(inputs=[in0, in1],
+                                                               out_shapes=[[3,50]],
+                                                               out_types=['float'],
+                                                               cpu_lib_path=cpulib,
+                                                               cpu_func_name="add2float",
+                                                               gpu_lib_path=gpulib,
+                                                               gpu_func_name="add2float",
+                                                               serialized_grad_dag='',
+                                                               grad_dag_arg_index=[],
+                                                               cuda_threads_per_block=_default_cuda_threads_per_block)
 
                     ref = np.add(in0,in1)
                     if (dev_string is '/gpu:0'):
                         ref = np.add(ref,ones)
                     assert np.allclose(output[0].eval(), ref)
 
-                    tf.logging.log(tf.logging.INFO, '*** addFloatDoubleFloat')
-                    in2 = np.random.rand(3,5).astype(np.float64)
-                    output = Operator._dynamiclibop_module.dynamic_lib(inputs=[in0, in2, in1],
-                                                                       out_shapes=[[3,5]],
+                    in2 = np.random.rand(3,50).astype(np.float64)
+                    logger.debug('*** addFloatDoubleFloat')
+                    output = _DynamicLibOp.module().dynamic_lib(inputs=[in0, in2, in1],
+                                                                       out_shapes=[[3,50]],
                                                                        out_types=['float'],
                                                                        cpu_lib_path= cpulib,
                                                                        cpu_func_name="addFloatDoubleFloat",
                                                                        gpu_lib_path= gpulib,
                                                                        gpu_func_name="addFloatDoubleFloat",
-                                                                       gpu_grad_func_name='',
-                                                                       gpu_grad_lib_path='',
-                                                                       cpu_grad_func_name='',
-                                                                       cpu_grad_lib_path='',
-                                                                       cuda_threads_per_block=Operator._default_cuda_threads_per_block)
+                                                                       serialized_grad_dag='',
+                                                                       grad_dag_arg_index=[],
+                                                                       cuda_threads_per_block=_default_cuda_threads_per_block)
                     ref = (in0 + in2 + in1).astype(np.float32)
                     if (dev_string is '/gpu:0'):
                         ref = ref + ones
                     assert np.allclose(output[0].eval(), ref)
 
-                    tf.logging.log(tf.logging.INFO, '*** sumAndSq')
-                    output = Operator._dynamiclibop_module.dynamic_lib(inputs=[in0, in2],
-                                                                       out_shapes=[[3,5], [3,5]],
+                    logger.debug('*** sumAndSq')
+                    output = _DynamicLibOp.module().dynamic_lib(inputs=[in0, in2],
+                                                                       out_shapes=[[3,50], [3,50]],
                                                                        out_types=['float', 'float'],
                                                                        cpu_lib_path= cpulib,
                                                                        cpu_func_name="sumAndSq",
                                                                        gpu_lib_path= gpulib,
                                                                        gpu_func_name="sumAndSq",
-                                                                       gpu_grad_func_name='',
-                                                                       gpu_grad_lib_path='',
-                                                                       cpu_grad_func_name='',
-                                                                       cpu_grad_lib_path='',
-                                                                       cuda_threads_per_block=Operator._default_cuda_threads_per_block)
+                                                                       serialized_grad_dag='',
+                                                                       grad_dag_arg_index=[],
+                                                                       cuda_threads_per_block=_default_cuda_threads_per_block)
 
                     out0 = (in0 + in2).astype(np.float32)
                     if (dev_string is '/gpu:0'):
@@ -128,12 +125,9 @@ class DynamicLibAddGPUTest(unittest.TestCase):
                     assert np.allclose(output[1].eval(), out1)
 
                     # make sure we can also use a standard TF gpu operator in the same session
-                    tf.logging.log(tf.logging.INFO, '*** TF numerics op')
+                    logger.debug('*** TF numerics op')
                     x_shape = [5, 4]
                     x = np.random.random_sample(x_shape).astype(np.float32)
                     t = tf.constant(x, shape=x_shape, dtype=tf.float32)
                     t_verified = tf.verify_tensor_all_finite(t, "Input is not a number.")
                     assert np.allclose(x, t_verified.eval())
-
-if __name__ == "__main__":
-    unittest.main()

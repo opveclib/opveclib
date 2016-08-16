@@ -8,8 +8,8 @@
  on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for
  the specific language governing permissions and limitations under the License.*/
 
-#ifndef TENSORFLOW_CORE_USER_OPS_PARAMETER_H_
-#define TENSORFLOW_CORE_USER_OPS_PARAMETER_H_
+#ifndef DYNAMICLIBOP_H_
+#define DYNAMICLIBOP_H_
 
 #include <stdint.h>
 
@@ -89,4 +89,4 @@ void OutputParameter::setValue(int64_t idx, const U& rhs) {
     return dynamic_cast<TypedOutput<T>&>(*this).setValue(idx, rhs);
 }
 
-#endif  // TENSORFLOW_CORE_USER_OPS_PARAMETER_H_
+#endif  // DYNAMICLIBOP_H_

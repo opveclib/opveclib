@@ -25,7 +25,6 @@ import types
 sys.path.insert(0, os.path.abspath('..'))
 import opveclib as op
 sys.path.insert(0, os.path.abspath('../opveclib'))
-import examples as ex
 
 # generate API documentation file from the package init file
 with open(os.path.abspath('./api.rst'), 'w') as api_file:
@@ -52,6 +51,7 @@ with open(os.path.abspath('./api.rst'), 'w') as api_file:
 
             # generate documentation for all members of the public API
             if is_import and not is_comment:
+                module = split_line[split_line.index('from') + 1]
                 names = split_line[split_line.index('import') + 1:]
 
                 for name in names:
@@ -89,7 +89,7 @@ with open(os.path.abspath('./api.rst'), 'w') as api_file:
                                        '    :exclude-members: as_proto, from_proto, as_cstr, as_ctypes, as_numpy\n'
                                        '\n')
                     else:
-                        api_file.write('.. autodata:: opveclib.' + attr_name + '\n    :annotation:\n')
+                        api_file.write('.. autodata:: opveclib.' + module[1:] + '.' + attr_name + '\n    :annotation:\n')
 
 # -- General configuration ------------------------------------------------
 
@@ -111,7 +111,7 @@ extensions = [
     'sphinx.ext.mathjax',
     'sphinx.ext.ifconfig',
     'sphinx.ext.viewcode',
-    'sphinx.ext.githubpages',
+    #'sphinx.ext.githubpages',
 ]
 
 # Add any paths that contain templates here, relative to this directory.
@@ -197,7 +197,7 @@ html_theme = 'alabaster'
 # Theme options are theme-specific and customize the look and feel of a theme
 # further.  For a list of options available for each theme, see the
 # documentation.
-html_theme_options = {'github_user': 'hpe-cct',
+html_theme_options = {'github_user': 'hewlettpackardlabs',
                       'github_repo': 'opveclib',
                       'github_banner': 'true',
                       'fixed_sidebar': 'true'}
@@ -206,8 +206,7 @@ html_theme_options = {'github_user': 'hpe-cct',
 #html_theme_path = []
 
 # The name for this set of Sphinx documents.
-# "<project> v<release> documentation" by default.
-#html_title = u'opveclib v0.3'
+html_title = u'opveclib'
 
 # A shorter title for the navigation bar.  Default is the same as html_title.
 #html_short_title = None

@@ -8,46 +8,43 @@
 # on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for
 # the specific language governing permissions and limitations under the License.
 
-from __future__ import print_function
 import unittest
 import numpy as np
-from sys import _getframe
-from ..operator import Operator
+from ..operator import operator, evaluate
 from ..expression import position_in, output_like, if_, elif_, else_
-from ..local import cuda_enabled
+from ..local import cuda_enabled, clear_op_cache
 
 
-class Clip(Operator):
-    def op(self, arg, threshold1, threshold2):
-        pos = position_in(arg.shape)
+@operator()
+def clip(arg, threshold1=None, threshold2=None):
+    pos = position_in(arg.shape)
 
-        clipped = output_like(arg)
-        x = arg[pos]
+    clipped = output_like(arg)
+    x = arg[pos]
 
-        with if_(x < threshold1):
-            clipped[pos] = threshold1
+    with if_(x < threshold1):
+        clipped[pos] = threshold1
 
-        with elif_(x > threshold2):
-            clipped[pos] = threshold2
+    with elif_(x > threshold2):
+        clipped[pos] = threshold2
 
-        with else_():
-            clipped[pos] = x
+    with else_():
+        clipped[pos] = x
 
-        return clipped
+    return clipped
 
 
 class TestClip(unittest.TestCase):
+    clear_op_cache()
+
     def test(self):
-        print('*** Running Test: ' + self.__class__.__name__ + ' function: ' + _getframe().f_code.co_name)
         a = np.random.random(1000)
-        op = Clip(a, threshold1=0.1, threshold2=0.9, clear_cache=True)
-        op_c = op.evaluate_c()
+
+        op = clip(a, threshold1=0.1, threshold2=0.9)
+        op_c = evaluate(op, target_language='cpp')
         op_np = np.clip(a, 0.1, 0.9)
         assert np.all(np.equal(op_c, op_np))
 
         if cuda_enabled:
-            op_cuda = op.evaluate_cuda()
+            op_cuda = evaluate(op, target_language='cuda')
             assert np.all(np.equal(op_cuda, op_np))
-
-if __name__ == '__main__':
-    unittest.main()

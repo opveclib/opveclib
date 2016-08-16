@@ -8,38 +8,37 @@
 # on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for
 # the specific language governing permissions and limitations under the License.
 
-from __future__ import print_function
 import unittest
 import numpy as np
-from sys import _getframe
-from ..operator import Operator
+from ..operator import operator, evaluate
 from ..expression import output_like, position_in, minimum, maximum, power, arctan2, logical_and, logical_or
-from ..local import cuda_enabled
+from ..local import cuda_enabled, clear_op_cache
 
 
 def gen(input0, input1, ops_func, np_func):
-    class BinaryMath(Operator):
-        def op(self, input0, input1):
+    @operator()
+    def binary_math(op_input0, op_input1):
 
-            output = output_like(input0)
-            pos = position_in(input0.shape)
+        output = output_like(op_input0)
+        pos = position_in(op_input0.shape)
 
-            output[pos] = ops_func(input0[pos], input1[pos])
+        output[pos] = ops_func(op_input0[pos], op_input1[pos])
 
-            return output
+        return output
 
-    op = BinaryMath(input0, input1, clear_cache=True)
-    op_c = op.evaluate_c()
+    op = binary_math(input0, input1)
+    op_c = evaluate(op, target_language='cpp')
     assert np.allclose(op_c, np_func(input0, input1))
 
     if cuda_enabled:
-        op_cuda = op.evaluate_cuda()
+        op_cuda = evaluate(op, target_language='cuda')
         assert np.allclose(op_cuda, np_func(input0, input1))
 
 
 class TestBinary(unittest.TestCase):
+    clear_op_cache()
+
     def test_binary(self):
-        print('*** Running Test: ' + self.__class__.__name__ + ' function: ' + _getframe().f_code.co_name)
         self.binary_math(np.float32)
         self.binary_math(np.float64)
 
@@ -52,6 +51,7 @@ class TestBinary(unittest.TestCase):
         self.binary_math(np.uint16)
         self.binary_math(np.uint32)
         self.binary_math(np.uint64)
+    test_binary.regression = 1
 
     def binary_math(self, dtype):
         length = 10
@@ -103,7 +103,3 @@ class TestBinary(unittest.TestCase):
         if dtype in fp:
             gen(np.abs(x), y, lambda a, b: power(a, b), lambda a, b: np.power(a, b))
             gen(x, y, lambda a, b: arctan2(a, b), lambda a, b: np.arctan2(a, b))
-
-
-if __name__ == '__main__':
-    unittest.main()

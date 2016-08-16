@@ -2,8 +2,8 @@
 .. toctree::
 
     index
-    programming
     examples
     api
     contributing
+    programming
     license

@@ -19,6 +19,13 @@ To illustrate the definitions we specify a simple graph with five vertices and s
 
 This graph has three triangles (0, 1, 3), (0, 2, 3), and (2, 3, 4).
 
+Source Code
+-----------
+.. autofunction:: examples.test_graph.countTrianglesGPU
+
+.. autofunction:: examples.test_graph.countTrianglesCPU
+
+
 Triangle Counting
 -----------------
 There are edge-based and vertex-based algorithms for triangle counting. For the GPU edge based algorithms are better

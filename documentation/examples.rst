@@ -3,5 +3,5 @@ Examples
 .. toctree::
     accumulate
     graph
-    clustering
-    diffusion
+    expm1
+    log1p

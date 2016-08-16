@@ -37,8 +37,8 @@ from .expression import minimum, maximum, power, arctan2, logical_and, logical_o
 from .expression import arange
 from .expression import if_, elif_, else_
 
-# @ Operator
-from .operator import Operator
+# @ Operator functions
+from .operator import operator, gradient, evaluate, profile, as_tensorflow
 
-# @ Localization info
-from .local import version, cuda_enabled, cache_directory
+# @ Local runtime environment functions
+from .local import version, logger, cuda_enabled, cache_directory, clear_op_cache
