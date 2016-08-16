@@ -1629,7 +1629,7 @@ def _merge_expr_dags(to_expr_dag, from_expr_dag, indices_info):
 
     # Set the name and workgroup shape of the merged expression dag.
     merged_expr_dag.workgroup_shape.extend(from_expr_dag.workgroup_shape)
-    merged_expr_dag.name = from_expr_dag.name + ' ' + to_expr_dag.name
+    merged_expr_dag.name = from_expr_dag.name + '_' + to_expr_dag.name
 
     return merged_expr_dag
 
@@ -1843,16 +1843,6 @@ def evaluate(output_list, target_language='cpp', opt_level=3):
         return evaluated_outputs[0]
     else:
         return evaluated_outputs
-
-# def _evaluate_op_dag(op_dag, target_language='cpp'):
-#     evaluated_outputs = _profile_op_dag(op_dag, target_language=target_language, profiling_iterations=1)[0]
-#     if len(evaluated_outputs) == 1:
-#         return evaluated_outputs[0]
-#     else:
-#         return evaluated_outputs
-#
-# def profile(output_list, target_language='cpp', profiling_iterations=1):
-#     return _profile_op_dag(_build_op_dag(*output_list), target_language=target_language, profiling_iterations=profiling_iterations)
 
 
 def profile(output_list, target_language, profiling_iterations, opt_level):
