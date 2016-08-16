@@ -9,7 +9,9 @@
 # the specific language governing permissions and limitations under the License.
 
 """
-This example implements and tests expm1 operator  - ie. exp(x) - 1, which is equivalent to that defined for numpy.
+This example implements and tests expm1 operator
+- ie. element-wise exp(x) - 1,
+which is equivalent to that defined for numpy.
 """
 
 import unittest
@@ -17,29 +19,45 @@ import numpy as np
 import opveclib as ovl
 import tensorflow as tf
 
-
 @ovl.operator()
 def expm1(x):
     """
-    Define the operator function.
+    Define the expm1 operator by defining the its operator function to be
+
+    .. math::
+      out_{i} = exp(x_{i}) - 1.0
 
     :param x: The input tensor
     :return: Element-wise exp(x) - 1
-    """
 
+    :Examples:
+
+    .. doctest::
+
+        >>> import numpy as np
+        >>> from opveclib import evaluate
+        >>> from opveclib.examples import expm1
+        >>> a = np.array([1e-10, -1e-10])
+        >>> evaluate(expm1(a))
+        array([  1.00000000e-10,  -1.00000000e-10])
+        >>> np.expm1(a)
+        array([  1.00000000e-10,  -1.00000000e-10])
+        >>> ones = np.ones_like(a)
+        >>> np.exp(a) - ones
+        array([  1.00000008e-10,  -1.00000008e-10])
+    """
     output = ovl.output_like(x)
     pos = ovl.position_in(x.shape)
-
     e = ovl.exp(x[pos])
+
+    # note, this is an example of the use of the OVL conditional operators
     with ovl.if_(e == 1.0):
         output[pos] = x[pos]
     with ovl.elif_ ((e - 1.0) == -1.0):
         output[pos] = -1.0
     with ovl.else_():
         output[pos] = (e - 1.0) * x[pos] / ovl.log(e)
-
     return output
-
 
 class TestExpm1(unittest.TestCase):
     ovl.clear_op_cache()
@@ -54,11 +72,13 @@ class TestExpm1(unittest.TestCase):
         ovl.logger.debug(u'numpy: ' + str(ref) + u' ovl: ' + str(ovl_res))
         assert np.allclose(ref, ovl_res, rtol=0, atol=1e-20)
         if ovl.cuda_enabled:
-            assert np.allclose(np.expm1(a), ovl.evaluate(expm1Op, target_language='cuda'), rtol=0, atol=1e-20)
+            assert np.allclose(np.expm1(a),
+                      ovl.evaluate(expm1Op, target_language='cuda'),
+                      rtol=0, atol=1e-20)
 
         # test  vs tensorflow
-        # ensure TF runs on GPU
         test_config=tf.ConfigProto(allow_soft_placement=False)
+        # ensure TF runs on GPU when asked
         test_config.graph_options.optimizer_options.opt_level = -1
         ones = np.ones_like(a)
         if ovl.cuda_enabled:
@@ -71,12 +91,13 @@ class TestExpm1(unittest.TestCase):
                     expm1_tf = ovl.as_tensorflow(expm1Op)
                     sess.run(tf.initialize_all_variables())
                     expm1_tf_result = sess.run(expm1_tf)
-                    assert np.allclose(ref, expm1_tf_result, rtol=0, atol=1e-20)
+                    assert np.allclose(ref, expm1_tf_result,
+                                       rtol=0, atol=1e-20)
 
                     # TF exp - 1
                     tf_out = tf.exp(a) - ones
                     tf_result = tf_out.eval()
                     # this should fail
-                    assert (np.allclose(ref, tf_result, rtol=0, atol=1e-20)  == False)
-                    
+                    assert (np.allclose(ref, tf_result,
+                                        rtol=0, atol=1e-20) == False)
         sess.close()
