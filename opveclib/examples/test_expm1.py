@@ -14,10 +14,11 @@ This example implements and tests expm1 operator  - ie. exp(x) - 1, which is equ
 
 import unittest
 import numpy as np
-import opveclib as ops
+import opveclib as ovl
 import tensorflow as tf
 
-@ops.operator()
+
+@ovl.operator()
 def expm1(x):
     """
     Define the operator function.
@@ -26,22 +27,22 @@ def expm1(x):
     :return: Element-wise exp(x) - 1
     """
 
-    output = ops.output_like(x)
-    pos = ops.position_in(x.shape)
+    output = ovl.output_like(x)
+    pos = ovl.position_in(x.shape)
 
-    e = ops.exp(x[pos])
-    with ops.if_(e == 1.0):
+    e = ovl.exp(x[pos])
+    with ovl.if_(e == 1.0):
         output[pos] = x[pos]
-    with ops.elif_ ((e - 1.0) == -1.0):
+    with ovl.elif_ ((e - 1.0) == -1.0):
         output[pos] = -1.0
-    with ops.else_():
-        output[pos] = (e - 1.0) * x[pos]/ops.log(e)
+    with ovl.else_():
+        output[pos] = (e - 1.0) * x[pos] / ovl.log(e)
 
     return output
 
 
 class TestExpm1(unittest.TestCase):
-    ops.clear_op_cache()
+    ovl.clear_op_cache()
     def test(self):
         """
         Test the correctness of ovl operator vs numpy implementation
@@ -49,25 +50,25 @@ class TestExpm1(unittest.TestCase):
         a = np.array([1e-10, -1e-10, 0.0], dtype=np.float64)
         expm1Op = expm1(a)
         ref = np.expm1(a)
-        ovl_res = ops.evaluate(expm1Op)
-        ops.logger.debug(u'numpy: ' + str(ref) + u' ovl: ' + str(ovl_res))
+        ovl_res = ovl.evaluate(expm1Op)
+        ovl.logger.debug(u'numpy: ' + str(ref) + u' ovl: ' + str(ovl_res))
         assert np.allclose(ref, ovl_res, rtol=0, atol=1e-20)
-        if ops.cuda_enabled:
-            assert np.allclose(np.expm1(a), ops.evaluate(expm1Op, target_language='cuda'), rtol=0, atol=1e-20)
+        if ovl.cuda_enabled:
+            assert np.allclose(np.expm1(a), ovl.evaluate(expm1Op, target_language='cuda'), rtol=0, atol=1e-20)
 
         # test  vs tensorflow
         # ensure TF runs on GPU
         test_config=tf.ConfigProto(allow_soft_placement=False)
         test_config.graph_options.optimizer_options.opt_level = -1
         ones = np.ones_like(a)
-        if ops.cuda_enabled:
+        if ovl.cuda_enabled:
             devices = ['/cpu:0', '/gpu:0']
         else:
             devices = ['/cpu:0']
         with tf.Session(config=test_config) as sess:
            for dev_string in devices:
                 with tf.device(dev_string):
-                    expm1_tf = ops.as_tensorflow(expm1Op)
+                    expm1_tf = ovl.as_tensorflow(expm1Op)
                     sess.run(tf.initialize_all_variables())
                     expm1_tf_result = sess.run(expm1_tf)
                     assert np.allclose(ref, expm1_tf_result, rtol=0, atol=1e-20)
