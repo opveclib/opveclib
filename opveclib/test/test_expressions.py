@@ -507,3 +507,17 @@ class TestTensorExpression(unittest.TestCase):
             pass
         else:
             raise AssertionError
+
+        try:
+            max(a, 1)
+        except SyntaxError:
+            pass
+        else:
+            raise AssertionError
+
+        try:
+            min(a, 1)
+        except SyntaxError:
+            pass
+        else:
+            raise AssertionError

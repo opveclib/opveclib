@@ -2063,7 +2063,7 @@ def profile(output_list, target_language, profiling_iterations, opt_level):
     return outputs, profiling_times
 
 
-def as_tensorflow(tensor_list):
+def as_tensorflow(tensor_list, opt_level=3):
     """
     Create a DAG of TensorFlow operators based on a DAG of OVL operators and register it with the current
     TensorFlow Graph. The inputs to the DAG must be numpy arrays or TensorFlow tensors.

@@ -874,8 +874,9 @@ class _Expression(object):
 
     def __nonzero__(self):
         raise SyntaxError('Attempting to interpret the truth of an expression. This typically happens when trying to '
-                          'use a native if statement to created a conditional inside of an operator, which is not '
-                          'supported. To do so you must use the "with if_(...)" function.')
+                          'use a python native "if", "min", or "max" statement to create a data-dependent conditional '
+                          'inside of an operator, which is not supported. To do so you must use the corresponding '
+                          '"with if_(...)", "minimum", and "maximum" functions.')
 
 
 class Scalar(_Expression):

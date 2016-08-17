@@ -9,8 +9,8 @@
 # the specific language governing permissions and limitations under the License.
 
 """
-This example implements and tests the expm1 operator
-- ie. element-wise exp(x) - 1,
+This example implements and tests the log1p operator
+- ie. element-wise log(1 + x),
 which is equivalent to that defined for numpy.
 """
 
@@ -20,15 +20,15 @@ import opveclib as ovl
 import tensorflow as tf
 
 @ovl.operator()
-def expm1(x):
+def log1p(x):
     """
-    Define the expm1 operator by defining the its operator function to be
+    Define the log1p operator by defining the its operator function to be
 
     .. math::
-      out_{i} = exp(x_{i}) - 1.0
+      out_{i} = log(1.0 + x_{i})
 
     :param x: The input tensor
-    :return: Element-wise exp(x) - 1
+    :return: Element-wise log(1 + x)
 
     :Examples:
 
@@ -36,27 +36,26 @@ def expm1(x):
 
         >>> import numpy as np
         >>> from opveclib import evaluate
-        >>> from opveclib.examples import expm1
-        >>> a = np.array([1e-10, -1e-10])
-        >>> evaluate(expm1(a))
-        array([  1.00000000e-10,  -1.00000000e-10])
-        >>> np.expm1(a)
-        array([  1.00000000e-10,  -1.00000000e-10])
+        >>> from opveclib.examples import log1p
+        >>> a = np.array([1e-99, -1e-99])
+        >>> evaluate(log1p(a))
+        array([  1.00000000e-99,  -1.00000000e-99])
+        >>> np.log1p(a)
+        array([  1.00000000e-99,  -1.00000000e-99])
         >>> ones = np.ones_like(a)
-        >>> np.exp(a) - ones
-        array([  1.00000008e-10,  -1.00000008e-10])
+        >>> np.log(ones + a)
+        array([ 0.,  0.])
     """
     output = ovl.output_like(x)
     pos = ovl.position_in(x.shape)
-    e = ovl.exp(x[pos])
+    u = 1.0 + x[pos]
+    d = u - 1.0
 
     # note, this is an example of the use of the OVL conditional operators
-    with ovl.if_(e == 1.0):
+    with ovl.if_(d == 0):
         output[pos] = x[pos]
-    with ovl.elif_ ((e - 1.0) == -1.0):
-        output[pos] = -1.0
     with ovl.else_():
-        output[pos] = (e - 1.0) * x[pos] / ovl.log(e)
+        output[pos] = ovl.log(u) * x[pos] / d
     return output
 
 class TestExpm1(unittest.TestCase):
@@ -65,15 +64,15 @@ class TestExpm1(unittest.TestCase):
         """
         Test the correctness of ovl operator vs numpy implementation
         """
-        a = np.array([1e-10, -1e-10, 0.0], dtype=np.float64)
-        expm1Op = expm1(a)
-        ref = np.expm1(a)
-        ovl_res = ovl.evaluate(expm1Op)
+        a = np.array([1e-99, -1e-99, 0.0], dtype=np.float64)
+        log1pOp = log1p(a)
+        ref = np.log1p(a)
+        ovl_res = ovl.evaluate(log1pOp)
         ovl.logger.debug(u'numpy: ' + str(ref) + u' ovl: ' + str(ovl_res))
         assert np.allclose(ref, ovl_res, rtol=0, atol=1e-20)
         if ovl.cuda_enabled:
-            assert np.allclose(np.expm1(a),
-                      ovl.evaluate(expm1Op, target_language='cuda'),
+            assert np.allclose(np.log1p(a),
+                      ovl.evaluate(log1pOp, target_language='cuda'),
                       rtol=0, atol=1e-20)
 
         # test  vs tensorflow
@@ -88,14 +87,14 @@ class TestExpm1(unittest.TestCase):
         with tf.Session(config=test_config) as sess:
            for dev_string in devices:
                 with tf.device(dev_string):
-                    expm1_tf = ovl.as_tensorflow(expm1Op)
+                    log1p_tf = ovl.as_tensorflow(log1pOp)
                     sess.run(tf.initialize_all_variables())
-                    expm1_tf_result = sess.run(expm1_tf)
-                    assert np.allclose(ref, expm1_tf_result,
+                    log1p_tf_result = sess.run(log1p_tf)
+                    assert np.allclose(ref, log1p_tf_result,
                                        rtol=0, atol=1e-20)
 
                     # TF exp - 1
-                    tf_out = tf.exp(a) - ones
+                    tf_out = tf.log(a - ones)
                     tf_result = tf_out.eval()
                     # this should fail
                     assert (np.allclose(ref, tf_result,
