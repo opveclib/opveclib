@@ -102,57 +102,69 @@ int32_t testCOperator(const char *opLibPath, const char *opFuncName,
     }
 
     // Build the output tensor parameter list
+    // initialize all outputs to 0xFE in order to catch errors where outputs
+    // are not completely filled
     std::vector<std::shared_ptr<OutputParameter>> outputs;
     outputs.reserve(numOutputs);
     for (uint32_t i = 0; i < numOutputs; ++i) {
         size_t N = testOutputs[i].len;
         switch (testOutputs[i].dtype) {
             case (opveclib::DType::FLOAT32): {
+                memset(testOutputs[i].data, 0xFE, N*sizeof(float));
                 outputs.emplace_back(new TypedOutput<float>(
                                static_cast<float*>(testOutputs[i].data), N));
                 break;
             }
             case (opveclib::DType::FLOAT64): {
+                memset(testOutputs[i].data, 0xFE, N*sizeof(double));
                 outputs.emplace_back(new TypedOutput<double>(
                                static_cast<double*>(testOutputs[i].data), N));
                 break;
             }
             case (opveclib::DType::INT8): {
+                memset(testOutputs[i].data, 0xFE, N*sizeof(int8_t));
                 outputs.emplace_back(
                      new TypedOutput<int8_t>(static_cast<int8_t*>(testOutputs[i].data), N));
                 break;
             }
             case (opveclib::DType::INT16): {
+                memset(testOutputs[i].data, 0xFE, N*sizeof(int16_t));
                 outputs.emplace_back(
                      new TypedOutput<int16_t>(static_cast<int16_t*>(testOutputs[i].data), N));
                 break;
             }
             case (opveclib::DType::INT32): {
+                memset(testOutputs[i].data, 0xFE, N*sizeof(int32_t));
                 outputs.emplace_back(
                      new TypedOutput<int32_t>(static_cast<int32_t*>(testOutputs[i].data), N));
                 break;
             }
             case (opveclib::DType::INT64): {
+                memset(testOutputs[i].data, 0xFE, N*sizeof(int64_t));
                 outputs.emplace_back(
                      new TypedOutput<int64_t>(static_cast<int64_t*>(testOutputs[i].data), N));
                 break;
             }
             case (opveclib::DType::UINT8): {
+                memset(testOutputs[i].data, 0xFE, N*sizeof(uint8_t));
                 outputs.emplace_back(
                      new TypedOutput<uint8_t>(static_cast<uint8_t*>(testOutputs[i].data), N));
                 break;
             }
             case (opveclib::DType::UINT16): {
+                memset(testOutputs[i].data, 0xFE, N*sizeof(uint16_t));
                 outputs.emplace_back(
                      new TypedOutput<uint16_t>(static_cast<uint16_t*>(testOutputs[i].data), N));
                 break;
             }
             case (opveclib::DType::UINT32): {
+                memset(testOutputs[i].data, 0xFE, N*sizeof(uint32_t));
                 outputs.emplace_back(
                      new TypedOutput<uint32_t>(static_cast<uint32_t*>(testOutputs[i].data), N));
                 break;
             }
             case (opveclib::DType::UINT64): {
+                memset(testOutputs[i].data, 0xFE, N*sizeof(uint64_t));
                 outputs.emplace_back(
                      new TypedOutput<uint64_t>(static_cast<uint64_t*>(testOutputs[i].data), N));
                 break;
