@@ -27,7 +27,7 @@ setup(
     license='Apache 2.0',
     description='Operator Vectorization Library',
     long_description='',
-    url='https://github.com/hewlettpackardlabs/opveclib/',
+    url='https://github.com/opveclib/opveclib/',
     author='Hewlett Packard Labs',
     author_email='',
 )
