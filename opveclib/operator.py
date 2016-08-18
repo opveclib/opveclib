@@ -248,7 +248,7 @@ class _Operator(object):
         self.grad_dag_arg_index = grad_dag_arg_index
         self.from_gradient = from_gradient
 
-        logger.debug('Operator created: ' + str(dag.name))
+        # logger.debug('Operator created: ' + str(dag.name))
 
     def __getitem__(self, item):
         return OperatorOutput(self, item)
@@ -1767,7 +1767,7 @@ def _make_generic_c(src, name):
     generic_cpp_so_path = os.path.join(cache_directory, name + '_generic_cpp.so')
 
     if not os.path.exists(generic_cpp_so_path):
-        logger.debug('Compiling generic C++ for Op ' + name)
+        # logger.debug('Compiling generic C++ for Op ' + name)
 
         generic_cpp_path = os.path.join(cache_directory, name + '_generic_cpp.cpp')
         with open(generic_cpp_path, 'w') as f:
@@ -1794,7 +1794,7 @@ def _make_generic_cuda(src, name):
     # look for generic cuda shared library in the operator cache
     generic_cuda_so_path = os.path.join(cache_directory, name + '_generic_cuda.so')
     if not os.path.exists(generic_cuda_so_path):
-        logger.debug('Compiling generic CUDA for Op ' + name)
+        # logger.debug('Compiling generic CUDA for Op ' + name)
         # generate and compile generic cuda operator
         nvcc_path = os.path.join(cuda_directory, 'bin/nvcc')
         generic_cuda_path = os.path.join(cache_directory, name + '_generic_cuda.cu')

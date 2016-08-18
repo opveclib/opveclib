@@ -183,6 +183,8 @@ int32_t testCUDAOperator(const char *opLibPath, const char *opFuncName,
     }
 
     // Build the output tensor parameter list
+    // initialize all outputs to 0xFE in order to catch errors where outputs
+    // are not completely filled
     std::vector<std::shared_ptr<OutputParameter>> outputs;
     outputs.reserve(numOutputs);
     void* d_outputs[numOutputs];
@@ -191,60 +193,70 @@ int32_t testCUDAOperator(const char *opLibPath, const char *opFuncName,
         switch (testOutputs[i].dtype) {
             case (opveclib::DType::FLOAT32): {
                 CUDA_RUNTIME_SAFE_CALL(cudaMalloc(&d_outputs[i], N*sizeof(float)));
+                CUDA_RUNTIME_SAFE_CALL(cudaMemset(d_outputs[i], 0xFE, N*sizeof(float)));
                 outputs.emplace_back(new TypedOutput<float>(
                                static_cast<float*>(d_outputs[i]), N));
                 break;
             }
             case (opveclib::DType::FLOAT64): {
                 CUDA_RUNTIME_SAFE_CALL(cudaMalloc(&d_outputs[i], N*sizeof(double)));
+                CUDA_RUNTIME_SAFE_CALL(cudaMemset(d_outputs[i], 0xFE, N*sizeof(double)));
                 outputs.emplace_back(new TypedOutput<double>(
                                static_cast<double*>(d_outputs[i]), N));
                 break;
             }
             case (opveclib::DType::INT8): {
                 CUDA_RUNTIME_SAFE_CALL(cudaMalloc(&d_outputs[i], N*sizeof(int8_t)));
+                CUDA_RUNTIME_SAFE_CALL(cudaMemset(d_outputs[i], 0xFE, N*sizeof(int8_t)));
                 outputs.emplace_back(
                      new TypedOutput<int8_t>(static_cast<int8_t*>(d_outputs[i]), N));
                 break;
             }
             case (opveclib::DType::INT16): {
                 CUDA_RUNTIME_SAFE_CALL(cudaMalloc(&d_outputs[i], N*sizeof(int16_t)));
+                CUDA_RUNTIME_SAFE_CALL(cudaMemset(d_outputs[i], 0xFE, N*sizeof(int16_t)));
                 outputs.emplace_back(
                      new TypedOutput<int16_t>(static_cast<int16_t*>(d_outputs[i]), N));
                 break;
             }
             case (opveclib::DType::INT32): {
                 CUDA_RUNTIME_SAFE_CALL(cudaMalloc(&d_outputs[i], N*sizeof(int32_t)));
+                CUDA_RUNTIME_SAFE_CALL(cudaMemset(d_outputs[i], 0xFE, N*sizeof(int32_t)));
                 outputs.emplace_back(
                      new TypedOutput<int32_t>(static_cast<int32_t*>(d_outputs[i]), N));
                 break;
             }
             case (opveclib::DType::INT64): {
                 CUDA_RUNTIME_SAFE_CALL(cudaMalloc(&d_outputs[i], N*sizeof(int64_t)));
+                CUDA_RUNTIME_SAFE_CALL(cudaMemset(d_outputs[i], 0xFE, N*sizeof(int64_t)));
                 outputs.emplace_back(
                      new TypedOutput<int64_t>(static_cast<int64_t*>(d_outputs[i]), N));
                 break;
             }
             case (opveclib::DType::UINT8): {
                 CUDA_RUNTIME_SAFE_CALL(cudaMalloc(&d_outputs[i], N*sizeof(uint8_t)));
+                CUDA_RUNTIME_SAFE_CALL(cudaMemset(d_outputs[i], 0xFE, N*sizeof(uint8_t)));
                 outputs.emplace_back(
                      new TypedOutput<uint8_t>(static_cast<uint8_t*>(d_outputs[i]), N));
                 break;
             }
             case (opveclib::DType::UINT16): {
                 CUDA_RUNTIME_SAFE_CALL(cudaMalloc(&d_outputs[i], N*sizeof(uint16_t)));
+                CUDA_RUNTIME_SAFE_CALL(cudaMemset(d_outputs[i], 0xFE, N*sizeof(uint16_t)));
                 outputs.emplace_back(
                      new TypedOutput<uint16_t>(static_cast<uint16_t*>(d_outputs[i]), N));
                 break;
             }
             case (opveclib::DType::UINT32): {
                 CUDA_RUNTIME_SAFE_CALL(cudaMalloc(&d_outputs[i], N*sizeof(uint32_t)));
+                CUDA_RUNTIME_SAFE_CALL(cudaMemset(d_outputs[i], 0xFE, N*sizeof(uint32_t)));
                 outputs.emplace_back(
                      new TypedOutput<uint32_t>(static_cast<uint32_t*>(d_outputs[i]), N));
                 break;
             }
             case (opveclib::DType::UINT64): {
                 CUDA_RUNTIME_SAFE_CALL(cudaMalloc(&d_outputs[i], N*sizeof(uint64_t)));
+                CUDA_RUNTIME_SAFE_CALL(cudaMemset(d_outputs[i], 0xFE, N*sizeof(uint64_t)));
                 outputs.emplace_back(
                      new TypedOutput<uint64_t>(static_cast<uint64_t*>(d_outputs[i]), N));
                 break;
