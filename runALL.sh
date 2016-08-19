@@ -41,3 +41,11 @@ if [ ! $? -eq 0 ]; then
   echo "example tests failed on Python 3"
   exit 1
 fi
+
+# run doctest
+cd documentation
+make doctest
+if [ ! $? -eq 0 ]; then
+  echo "doctest failed"
+  exit 1
+fi

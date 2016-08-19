@@ -327,6 +327,7 @@ def run_tf(tensor_in_sizes, filter_in_sizes):
 
     iters = 100
     ovlOp = conv_1d(ar1, ar2, mode='same', kernel_orientation='as-is', data_format='NEC')
+    ovl_cuda_time = 0
     if ovl.cuda_enabled:
         ovlResult, prof = ovl.profile(ovlOp, target_language='cuda', profiling_iterations=iters, opt_level=3)
         ovl_cuda_time = np.min(list(prof.values())[0])
@@ -342,8 +343,12 @@ def run_tf(tensor_in_sizes, filter_in_sizes):
 
     # OVL-TF integration
     ovl_tf_time = 0
+
+    dev_string = '/cpu:0'
+    if ovl.cuda_enabled:
+        dev_string = '/gpu:0'
     with tf.Session(config=test_config) as sess:
-        with tf.device('/gpu:0'):
+        with tf.device(dev_string):
             ovlOp_tf = ovl.as_tensorflow(ovlOp)
             init = tf.initialize_all_variables()
             sess.run(init)
@@ -359,7 +364,7 @@ def run_tf(tensor_in_sizes, filter_in_sizes):
     # run TF 2D conv alone
     tf_time = 0
     with tf.Session(config=test_config) as sess:
-        with tf.device('/gpu:0'):
+        with tf.device(dev_string):
             result = sess.run([conv])
             t0 = time.time()
             for dummy in itertools.repeat(None, iters):
@@ -397,17 +402,14 @@ def run_tests():
                 op = conv_1d(a1, b, mode=md, kernel_orientation=orientation, data_format='NEC')
 
                 # result1 =
-                assert np.allclose(ovl.evaluate(op, target_language='cuda'), y1)
+                if ovl.cuda_enabled:
+                    assert np.allclose(ovl.evaluate(op, target_language='cuda'), y1)
                 # for d in range(1):
                 a1[:] = a2[:]
-                assert np.allclose(ovl.evaluate(op, target_language='cuda'), y2)
-
-                res, prof = ovl.profile(op, target_language='cuda', profiling_iterations=100, opt_level=3)
-
-                # print(prof)
-                # print(debug)
-                # print(op[0, 0, :])
-                ovl.logger.debug(k_ee, md, orientation, (t2 - t1) * 1000, np.min(list(prof.values())[0]))
+                if ovl.cuda_enabled:
+                    assert np.allclose(ovl.evaluate(op, target_language='cuda'), y2)
+                    res, prof = ovl.profile(op, target_language='cuda', profiling_iterations=100, opt_level=3)
+                    ovl.logger.debug(k_ee, md, orientation, (t2 - t1) * 1000, np.min(list(prof.values())[0]))
                 # assert np.allclose(result1, y1)
                 # assert np.allclose(result2, y2)
 

@@ -53,6 +53,10 @@ RUN pip3 --no-cache-dir install --upgrade \
 # set default workdir
 WORKDIR /usr/opveclib
 
+# install sphinx so we can run doctest
+# note we use the python2 version here and the python3 version for cpu to get better coverage
+RUN pip2 install -U sphinx
+
 # install protoc 3.0.0 and its C++ libraries
 #RUN wget --no-check-certificate  https://github.com/google/protobuf/releases/download/v3.0.0-beta-2/protobuf-cpp-3.0.0-beta-2.tar.gz
 #RUN tar xvf protobuf-cpp-3.0.0-beta-2.tar.gz
@@ -68,6 +72,8 @@ ENV LD_LIBRARY_PATH="$LD_LIBRARY_PATH:/usr/local/cuda/lib64"
 
 
 COPY opveclib /usr/opveclib/opveclib
+COPY documentation /usr/opveclib/documentation
+COPY README.rst /usr/opveclib/
 COPY setup.py /usr/opveclib/
 COPY runBAT.sh /usr/opveclib/
 COPY runALL.sh /usr/opveclib/

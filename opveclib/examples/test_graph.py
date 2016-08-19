@@ -143,7 +143,10 @@ def countTrianglesGPU(startEdge, fromVertex, toVertex):
         >>> countTrianglesGPU(startEdge, fromVertex, toVertex)
         3
     """
-    count = ovl.evaluate(graph_triangle_count(startEdge, fromVertex, toVertex), target_language='cuda')
+    if ovl.local.cuda_enabled:
+        count = ovl.evaluate(graph_triangle_count(startEdge, fromVertex, toVertex), target_language='cuda')
+    else:
+        count = ovl.evaluate(graph_triangle_count(startEdge, fromVertex, toVertex), target_language='cpp')
     return np.sum(count, axis=0, dtype=np.uint64)
 
 def countTrianglesNp(startEdge, fromVertex, toVertex):

@@ -32,7 +32,7 @@ with open(os.path.abspath('./api.rst'), 'w') as api_file:
     api_file.write('Public API\n==========\n\n')
     with open(os.path.abspath('../opveclib/__init__.py'), 'r') as f:
         for line in f:
-            split_line = string.split(line)
+            split_line = line.split()
             is_comment = len(split_line) > 0 and split_line[0][0] == '#'
             is_heading = len(split_line) > 1 and split_line[1][0] == '@'
             is_import = 'from' in split_line and 'import' in split_line
@@ -43,7 +43,7 @@ with open(os.path.abspath('./api.rst'), 'w') as api_file:
                     heading += w + ' '
                 heading = heading[:-1] + '\n'
 
-                heading_level = string.count(split_line[1], '@')
+                heading_level = split_line[1].count('@')
                 heading += {1: '-', 2: '~'}[heading_level]*(len(heading) - 1)
                 heading += '\n\n'
 
@@ -55,7 +55,7 @@ with open(os.path.abspath('./api.rst'), 'w') as api_file:
                 names = split_line[split_line.index('import') + 1:]
 
                 for name in names:
-                    attr_name = name.translate(None, ',')
+                    attr_name = name.replace(',', '')
                     attr = getattr(op, attr_name)
 
                     # manually parse include expression classes
@@ -82,7 +82,7 @@ with open(os.path.abspath('./api.rst'), 'w') as api_file:
                                        '\n')
                     elif isinstance(attr, types.FunctionType):
                         api_file.write('.. autofunction:: opveclib.' + attr_name + '\n\n')
-                    elif isinstance(attr, types.TypeType):
+                    elif isinstance(attr, type):
                         api_file.write('.. autoclass:: opveclib.' + attr_name + '\n'
                                        '    :members:\n'
                                        '    :undoc-members:\n'

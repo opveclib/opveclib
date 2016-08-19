@@ -61,11 +61,18 @@ WORKDIR /usr/opveclib
 #RUN make install
 #RUN ldconfig
 
+# install sphinx so we can run doctest
+# note we use the python3 version here and the python2 version for gpu to get better coverage
+RUN pip3 install -U sphinx
+
 # copy opveclib source that was already cloned from github via jenkins
 COPY opveclib /usr/opveclib/opveclib
+COPY documentation /usr/opveclib/documentation
+COPY README.rst /usr/opveclib/
 COPY setup.py /usr/opveclib/
 COPY runBAT.sh /usr/opveclib/
 COPY runALL.sh /usr/opveclib/
 COPY nose2.cfg /usr/opveclib/
+
 
 CMD /bin/bash
