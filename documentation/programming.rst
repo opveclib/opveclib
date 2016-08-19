@@ -350,6 +350,7 @@ show the use of two new concenpts:
 Outputs:
 
 .. testoutput::
+
     [  8.  26.  44.]
 
 
