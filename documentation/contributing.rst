@@ -13,6 +13,12 @@ Contribution Policy
   explicitly capturing debug level logs.
 * Do not use print statements. All debugging output should be made to the library's logger.
 
+Versioning
+----------
+
+Code is versioned according to the `semantic versioning 2.0.0 <http://semver.org/spec/v2.0.0.html>`_ spec.
+The complete public API is specified :ref:`here <api>`.
+
 Contributor License Agreement
 -----------------------------
 

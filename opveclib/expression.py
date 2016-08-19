@@ -1279,6 +1279,8 @@ class _ConstScalar(Scalar):
     def from_proto(proto, input_exprs):
         if proto.dtype == lang.FLOAT64:
             return _ConstScalar(float(proto.double_data[0]))
+        elif proto.dtype == lang.FLOAT32:
+            return _ConstScalar(float(proto.float_data[0]))
         elif proto.dtype == lang.INT64:
             return _ConstScalar(int(proto.sint64_data[0]))
         else:
@@ -1385,6 +1387,13 @@ class PositionTensor(_TensorExpression, _Readable):
         if type(workgroup_shape) is int:
             self.workgroup_shape = [workgroup_shape]
         else:
+            try:
+                for elem in workgroup_shape:
+                    if not isinstance(elem, int):
+                        raise TypeError
+            except TypeError:
+                raise TypeError('workgroup_shape must be an int or an iterable of ints')
+
             self.workgroup_shape = workgroup_shape
 
         workgroup_dims = len(self.workgroup_shape)

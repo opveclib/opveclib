@@ -1,7 +1,7 @@
 
 The Operator Vectorization Library, or OVL, is a python library for defining high performance
 custom operators for the TensorFlow platform. OVL enables TensorFlow users
-to easily write, test, and use custom operators in pure python without sacrificing performance and circumventing the
+to easily write, test, and use custom operators in pure python without sacrificing performance. This circumvents the
 productivity bottleneck of implementing, building, and linking custom C++ and CUDA operators or propagating
 them through the Eigen code base.
 
@@ -11,7 +11,7 @@ Key features include:
   into the TensorFlow run time, cutting out the overhead of implementing, testing, and maintaining operators for
   multiple hardware architectures.
 * An *optimizer* which can fuse an unbounded number of qualifying OVL operators into a single function call,
-  mitigating bandwidth-related performance bottlenecks.
+  mitigating performance bottlenecks related to global memory bandwidth limits and operator launch overhead.
 * A *python testing framework* so that users can directly test and profile their operators,
   on both the CPU and GPU, against a python-native reference like numpy.
 * Straightforward *gradient definition*, enabling OVL operators to be fully integrated in the middle of a
@@ -84,6 +84,7 @@ Installation
 OVL is currently tested and supported under Ubuntu 14.04, python 2.7 and 3.4, and is compatible with both the CPU and
 GPU versions of TensorFlow. OVL requires a c++ compiler to be available on the system and is currently only tested with
 g++. OVL has been tested with the following nvidia GPUs:
+
 ::
     GeForce GTX TITAN
     GeForce GTX TITAN Black
@@ -164,3 +165,4 @@ You may also need to make sure the CUDA libraries are on your library path, typi
 Current Build Status
 --------------------
 TODO: Expose Jenkins status here.
+
