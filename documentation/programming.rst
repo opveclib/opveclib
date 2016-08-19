@@ -36,7 +36,7 @@ Common Pitfalls
 ~~~~~~~~~~~~~~~
 
 OVL currently uses the python interpreter to parse operators into its own intermediate representation, an approach
-which comes with some limitations. These limitations result is a programming API that has two common pitfalls that
+which comes with some limitations. These limitations result in a programming API that has two common pitfalls that
 raise a syntax error when encountered. These pitfalls are highlighted here to prevent confusion, but examples of
 proper use cases are detailed in the examples section below. These limitations may eventually disappear (i.e. not
 throw a syntax error and work as expected) as improvements are made to library internals.
@@ -65,7 +65,7 @@ Conditionals
 ____________
 
 The python-native ``if``, ``elif``, and ``else`` statements cannot be used with OVL expressions. OVL
-conditionals must be invoked from within a ``with`` statement. More specifically, the following should raise and error:
+conditionals must be invoked from within a ``with`` statement. More specifically, the following should raise an error:
 
 .. code-block:: python
 
@@ -97,7 +97,7 @@ implementations in the OVL API. This example takes the absolute value of an inpu
 the basic functionality necessary to create and use an operator. New concepts introduced here include:
 
 * An OVL operator is defined by creating a python function and decorating it with he ``operator()`` decorator.
-* Arguments to the operator are the tensors that it will operator on at evaluation time.
+* Arguments to the operator are the tensors that it will operate on at evaluation time.
 * Output tensors are the only thing that can be returned from operators. They are defined with the ``output`` and
   ``output_like`` functions.
 * Operators are implicitly mapped over a set of workgroup positions. The workgroup shape must be statically
