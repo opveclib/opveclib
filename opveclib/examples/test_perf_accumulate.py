@@ -40,17 +40,17 @@ class TestAccumulatePerf(unittest.TestCase):
         np_time = 100 * timeit.timeit('np.cumsum(X, axis=0)',
                                       setup='import numpy as np; X = np.random.uniform(0, 1, size=(10000, 1000))',
                                       number=iters)
-        logger.debug(u'Best numpy time (ms): ' + str(np_time))
+        logger.info(u'Best numpy time (ms): ' + str(np_time))
         cumsumOp = cumsum(X, axis=0)
         ovl_cpp, prof_cpp = ovl.profile(cumsumOp, target_language='cpp', profiling_iterations=iters, opt_level=0)
         assert np.allclose(ref, ovl_cpp)
         ovl_cpp_time = np.min(list(prof_cpp.values())[0])
-        logger.debug(u'Best ovl cpp time (ms): ' + str(ovl_cpp_time))
+        logger.info(u'Best ovl cpp time (ms): ' + str(ovl_cpp_time))
         if ovl.cuda_enabled:
             ovl_cuda, prof_cuda = ovl.profile(cumsumOp, target_language='cuda', profiling_iterations=iters, opt_level=0)
             assert np.allclose(ref, ovl_cuda)
             ovl_cuda_time = np.min(list(prof_cuda.values())[0])
-            logger.debug(u'Best ovl cuda time  (ms): ' + str(ovl_cuda_time))
+            logger.info(u'Best ovl cuda time  (ms): ' + str(ovl_cuda_time))
 
         # OVL-TF integration
         # ensure TF runs on GPU
@@ -73,7 +73,7 @@ class TestAccumulatePerf(unittest.TestCase):
                         t1 = time.time()
                         prof_ovl[i] = t1 - t0
                     tf_ovl_time = np.min(prof_ovl) * 1000.00
-                    logger.debug(u'Best tf + ovl time  (ms) on ' + dev_string + ' :' + str(tf_ovl_time))
+                    logger.info(u'Best tf + ovl time  (ms) on ' + dev_string + ' :' + str(tf_ovl_time))
                     assert np.allclose(ref, cumsum_tf_result)
 
                     # TF cumsum
@@ -87,5 +87,5 @@ class TestAccumulatePerf(unittest.TestCase):
                         t1 = time.time()
                         prof_tf[i] = t1 - t0
                     tf_time = np.min(prof_tf) * 1000.00
-                    logger.debug(u'Best tf cumsum time  (ms) on ' + dev_string + ' :' + str(tf_time))
+                    logger.info(u'Best tf cumsum time  (ms) on ' + dev_string + ' :' + str(tf_time))
         sess.close()

@@ -49,7 +49,7 @@ class _DynamicLibOp(object):
                 this_directory = os.path.split(this_file_path)[0]
                 try:
                     if cuda_enabled:
-                        logger.debug('*** building dynamiclibop for GPU')
+                        logger.info('building dynamiclibop for GPU')
                         subprocess.check_output([cxx, '-fPIC', '-Wall', '-shared',
                                                  '-std=c++11', '-O2', '-Wextra', '-DGOOGLE_CUDA=1',
                                                  '-o', dynamiclibop_path,
@@ -59,7 +59,7 @@ class _DynamicLibOp(object):
                                                 stderr=subprocess.STDOUT,
                                                 universal_newlines=True)
                     else:
-                        logger.debug('*** building dynamiclibop for CPU')
+                        logger.info('building dynamiclibop for CPU')
                         subprocess.check_output([cxx, '-fPIC', '-Wall', '-shared',
                                                  '-std=c++11', '-O2', '-Wextra',
                                                  '-o', dynamiclibop_path,
@@ -68,7 +68,7 @@ class _DynamicLibOp(object):
                                                 stderr=subprocess.STDOUT,
                                                 universal_newlines=True)
                 except subprocess.CalledProcessError as exception:
-                    logger.debug('c++ compiler error: ' + exception.output)
+                    logger.error('c++ compiler error: ' + exception.output)
                     raise
 
             _DynamicLibOp._loaded_module = tf.load_op_library(dynamiclibop_path)
@@ -248,7 +248,7 @@ class _Operator(object):
         self.grad_dag_arg_index = grad_dag_arg_index
         self.from_gradient = from_gradient
 
-        # logger.debug('Operator created: ' + str(dag.name))
+        logger.debug('Operator created: ' + str(dag.name))
 
     def __getitem__(self, item):
         return OperatorOutput(self, item)
@@ -1169,7 +1169,7 @@ def _get_merge_refs_for_op_dag(proto_op_dag):
 
                 match = to_workgroup_shape == from_workgroup_shape
                 if not match:
-                    logger.debug('Non-matching workgroup shapes for %s input [%d] and %s output [%d].'
+                    logger.info('Non-matching workgroup shapes for %s input [%d] and %s output [%d].'
                                  % (to_exp_dag.name, to_in_arg_index, from_exp_dag.name, input.op_output_index))
                     continue
 
@@ -1177,7 +1177,7 @@ def _get_merge_refs_for_op_dag(proto_op_dag):
                 # Because of broadcasting that we currently do not handle.
                 match = input_shape_of_out == output_shape_of_in
                 if not match:
-                    logger.debug('Non-matching tensor shapes (boradcasting) for %s input [%d] and %s output [%d].'
+                    logger.info('Non-matching tensor shapes (boradcasting) for %s input [%d] and %s output [%d].'
                                  % (to_exp_dag.name, to_in_arg_index, from_exp_dag.name, input.op_output_index))
                     continue
 
@@ -1186,7 +1186,7 @@ def _get_merge_refs_for_op_dag(proto_op_dag):
                 match = len(tensor_write_indices) == 1
 
                 if not match:
-                    logger.debug('Multiple writes to %s output [%d]' % (from_exp_dag.name, input.op_output_index))
+                    logger.info('Multiple writes to %s output [%d]' % (from_exp_dag.name, input.op_output_index))
                     continue
 
                 # if there are multiple different write patterns we cannot merge.
@@ -1198,7 +1198,7 @@ def _get_merge_refs_for_op_dag(proto_op_dag):
                         break
 
                 if not match:
-                    logger.debug('No-matching read/write index pattern for %s input [%d] and %s output [%d]'
+                    logger.info('No-matching read/write index pattern for %s input [%d] and %s output [%d]'
                                  % (to_exp_dag.name, to_in_arg_index, from_exp_dag.name, input.op_output_index))
                     continue
 
@@ -1653,7 +1653,7 @@ def _merge_op_dag(proto_op_dag):
         to_op_index = merge_ref[0]
         from_op_index = merge_ref[1]
 
-        logger.debug('Merging ' + ops[from_op_index].name + ' and ' + ops[to_op_index].name)
+        logger.info('Merging ' + ops[from_op_index].name + ' and ' + ops[to_op_index].name)
 
         indices_info = _get_indices_info(merged_op_dag, to_op_index, from_op_index)
         merged_expr_dag = _merge_expr_dags(ops[to_op_index], ops[from_op_index], indices_info)
@@ -1767,7 +1767,7 @@ def _make_generic_c(src, name):
     generic_cpp_so_path = os.path.join(cache_directory, name + '_generic_cpp.so')
 
     if not os.path.exists(generic_cpp_so_path):
-        # logger.debug('Compiling generic C++ for Op ' + name)
+        logger.debug('Compiling generic C++ for Op ' + name)
 
         generic_cpp_path = os.path.join(cache_directory, name + '_generic_cpp.cpp')
         with open(generic_cpp_path, 'w') as f:
@@ -1784,7 +1784,7 @@ def _make_generic_c(src, name):
                                     stderr=subprocess.STDOUT,
                                     universal_newlines=True)
         except subprocess.CalledProcessError as exception:
-            logger.debug('c++ compiler error: ' + exception.output)
+            logger.error('c++ compiler error: ' + exception.output)
             raise
 
     return generic_cpp_so_path
@@ -1794,7 +1794,7 @@ def _make_generic_cuda(src, name):
     # look for generic cuda shared library in the operator cache
     generic_cuda_so_path = os.path.join(cache_directory, name + '_generic_cuda.so')
     if not os.path.exists(generic_cuda_so_path):
-        # logger.debug('Compiling generic CUDA for Op ' + name)
+        logger.debug('Compiling generic CUDA for Op ' + name)
         # generate and compile generic cuda operator
         nvcc_path = os.path.join(cuda_directory, 'bin/nvcc')
         generic_cuda_path = os.path.join(cache_directory, name + '_generic_cuda.cu')
@@ -1815,7 +1815,7 @@ def _make_generic_cuda(src, name):
                                     stderr=subprocess.STDOUT,
                                     universal_newlines=True)
         except subprocess.CalledProcessError as exception:
-            logger.debug('nvcc error: ' + exception.output)
+            logger.error('nvcc error: ' + exception.output)
             raise
 
         # clean up .o files
@@ -1912,7 +1912,7 @@ def profile(output_list, target_language, profiling_iterations, opt_level):
                                         stderr=subprocess.STDOUT,
                                         universal_newlines=True)
             except subprocess.CalledProcessError as exception:
-                logger.debug('c++ compiler error: ' + exception.output)
+                logger.error('c++ compiler error: ' + exception.output)
                 raise
 
             libtest = ctypes.cdll.LoadLibrary(testlib_path)
@@ -1961,7 +1961,7 @@ def profile(output_list, target_language, profiling_iterations, opt_level):
                                         stderr=subprocess.STDOUT,
                                         universal_newlines=True)
             except subprocess.CalledProcessError as exception:
-                logger.debug('nvcc error: ' + exception.output)
+                logger.error('nvcc error: ' + exception.output)
                 raise
 
             # clean up .o files

@@ -415,7 +415,7 @@ class TestGraphTriangleCountOp(unittest.TestCase):
 
         writeExampleGraphToTextFile(tmpName)
 
-        ovl.logger.debug('Testing graph %s.' % tmpName)
+        ovl.logger.info('Testing graph %s.' % tmpName)
 
         startEdge, fromVertex, toVertex = loadGraphFromTextFile(tmpName)
 

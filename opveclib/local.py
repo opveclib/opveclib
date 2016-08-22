@@ -55,9 +55,9 @@ cuda_enabled = True
 # test whether we have cuda installed and if the tensorflow cuda version is installed
 if not os.path.exists(cuda_directory):
     cuda_enabled = False
-    logger.debug('*** CUDA directory not found - Running on CPU Only ***')
+    logger.info('CUDA directory not found - Running on CPU Only ***')
 elif not tf.test.is_built_with_cuda():
     cuda_enabled = False
-    logger.debug('*** TensorFlow CUDA version not installed - Running on CPU Only ***')
+    logger.info('TensorFlow CUDA version not installed - Running on CPU Only ***')
 else:
-    logger.debug('*** GPU ')
+    logger.info('GPU version enabled')

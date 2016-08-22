@@ -68,7 +68,7 @@ class TestExpm1(unittest.TestCase):
         log1pOp = log1p(a)
         ref = np.log1p(a)
         ovl_res = ovl.evaluate(log1pOp)
-        ovl.logger.debug(u'numpy: ' + str(ref) + u' ovl: ' + str(ovl_res))
+        ovl.logger.info(u'numpy: ' + str(ref) + u' ovl: ' + str(ovl_res))
         assert np.allclose(ref, ovl_res, rtol=0, atol=1e-20)
         if ovl.cuda_enabled:
             assert np.allclose(np.log1p(a),

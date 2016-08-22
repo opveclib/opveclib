@@ -76,7 +76,6 @@ void add2float(std::vector<std::shared_ptr<const InputParameter>> inputs,
 	uint32_t num_blocks = len / threads_per_block;
 	if(len % threads_per_block > 0) num_blocks += 1;
 
-	std::cout << "*** launching Add2GPUKernel ***" << std::endl;
 	Add2GPUKernel<<<num_blocks, threads_per_block, 0, stream>>>(in0, in1, out, len);
 }
 
@@ -96,7 +95,6 @@ void addFloatDoubleFloat(std::vector<std::shared_ptr<const InputParameter>> inpu
 	uint32_t num_blocks = len / threads_per_block;
 	if(len % threads_per_block > 0) num_blocks += 1;
 
-	std::cout << "*** launching Add3GPUKernel ***" << std::endl;
 	Add3GPUKernel<<<num_blocks, threads_per_block, 0, stream>>>(in0, in1, in2, out, len);
 }
 
@@ -115,7 +113,6 @@ void sumAndSq(std::vector<std::shared_ptr<const InputParameter>> inputs,
 	uint32_t num_blocks = len / threads_per_block;
 	if(len % threads_per_block > 0) num_blocks += 1;
 
-	std::cout << "*** launching SumSqGPUKernel ***" << std::endl;
 	SumSqGPUKernel<<<num_blocks, threads_per_block, 0, stream>>>(in0, in1, out0, out1, len);
 }
 

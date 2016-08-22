@@ -9,9 +9,11 @@ Contribution Policy
 * All functionality must be fully documented and tested. Doctest examples should be included in all
   documentation.
 * Follow the PEP-8 style guide.
-* Do not use a logging level above debug - library should be silent unless there is an error raised, or the user is
-  explicitly capturing debug level logs.
 * Do not use print statements. All debugging output should be made to the library's logger.
+* Library should be silent unless there is an error raised, or the user is
+  explicitly capturing debug or info level logs.
+* Use logging level info judiciously for confirmation that the library is functioning correctly.
+* Use logging level debug for detailed information needed for debugging when things go wrong.
 
 Versioning
 ----------
