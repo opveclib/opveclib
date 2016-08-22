@@ -124,7 +124,7 @@ Install the latest release of OVL:
     sudo pip install --upgrade opveclib
 
 If you see an error message during the install like
-``libnvrtc.so.7.5: cannot open shared object file: No such file or directory``, this likely means that the CUDA
+``libcublas.so.7.5: cannot open shared object file: No such file or directory``, this likely means that the CUDA
 library path is not exposed to the sudo environment. To solve this issue you
 may explicitly pass an ``LD_LIBRARY_PATH`` to sudo to install the package:
 
@@ -154,7 +154,7 @@ you may need to explicitly set the CUDA_HOME environment variable, typically:
     export CUDA_HOME=/usr/local/cuda
 
 
-If you see an error like: ``libnvrtc.so.7.5: cannot open shared object file: No such file or directory``
+If you see an error like: ``libcublas.so.7.5: cannot open shared object file: No such file or directory``
 You may also need to make sure the CUDA libraries are on your library path, typically:
 
 .. code-block:: console
