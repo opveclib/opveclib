@@ -157,10 +157,10 @@ class TestMath(unittest.TestCase):
             args_3d = []
             args_4d = []
             for n in range(num_concat):
-                args_1d.append(tf.constant(np.random.random(10/num_concat).reshape((10/num_concat))))
-                args_2d.append(tf.constant(np.random.random(100/num_concat).reshape((10, 10/num_concat))))
-                args_3d.append(tf.constant(np.random.random(1000/num_concat).reshape((10, 10, 10/num_concat))))
-                args_4d.append(tf.constant(np.random.random(10000/num_concat).reshape((10, 10, 10, 10/num_concat))))
+                args_1d.append(tf.constant(np.random.random(10//num_concat).reshape((10//num_concat))))
+                args_2d.append(tf.constant(np.random.random(100//num_concat).reshape((10, 10//num_concat))))
+                args_3d.append(tf.constant(np.random.random(1000//num_concat).reshape((10, 10, 10//num_concat))))
+                args_4d.append(tf.constant(np.random.random(10000//num_concat).reshape((10, 10, 10, 10//num_concat))))
 
             tf_1d = tf.concat(0, args_1d)
             tf_2d = tf.concat(1, args_2d)
@@ -198,6 +198,13 @@ class TestMath(unittest.TestCase):
                 assert np.all(np.equal(*s.run([tf_grads_3d[grad_index], ovl_grads_3d[grad_index]])))
                 assert np.all(np.equal(*s.run([tf_grads_4d[grad_index], ovl_grads_4d[grad_index]])))
 
+            # concatenate irregularly sized arrays
+            arg_irr1 = tf.constant(np.random.random(10*5).reshape(10, 5))
+            arg_irr2 = tf.constant(np.random.random(10*7).reshape(10, 7))
+            tf_irr = tf.concat(1, [arg_irr1, arg_irr2])
+            ovl_irr = as_tensorflow(concat(arg_irr1, arg_irr2, concat_dim=1))
+            assert np.all(np.equal(*s.run([tf_irr, ovl_irr])))
+
     def test_split(self):
         with tf.Session() as s:
             arg_1d = tf.constant(np.random.random(10))
@@ -227,10 +234,11 @@ class TestMath(unittest.TestCase):
             grads_above_3d = []
             grads_above_4d = []
             for n in range(num_split):
-                grads_above_1d.append(tf.constant(np.random.random(10/num_split).reshape((10/num_split))))
-                grads_above_2d.append(tf.constant(np.random.random(100/num_split).reshape((10, 10/num_split))))
-                grads_above_3d.append(tf.constant(np.random.random(1000/num_split).reshape((10, 10, 10/num_split))))
-                grads_above_4d.append(tf.constant(np.random.random(10000/num_split).reshape((10, 10, 10, 10/num_split))))
+                grads_above_1d.append(tf.constant(np.random.random(10//num_split).reshape((10//num_split))))
+                grads_above_2d.append(tf.constant(np.random.random(100//num_split).reshape((10, 10//num_split))))
+                grads_above_3d.append(tf.constant(np.random.random(1000//num_split).reshape((10, 10, 10//num_split))))
+                grads_above_4d.append(tf.constant(np.random.random(10000//num_split).
+                                                  reshape((10, 10, 10, 10//num_split))))
 
             tf_grad_1d = tf.gradients(tf_1d, arg_1d, grads_above_1d)[0]
             ovl_grad_1d = tf.gradients(ovl_1d, arg_1d, grads_above_1d)[0]
@@ -238,7 +246,6 @@ class TestMath(unittest.TestCase):
 
             tf_grad_2d = tf.gradients(tf_2d, arg_2d, grads_above_2d)[0]
             ovl_grad_2d = tf.gradients(ovl_2d, arg_2d, grads_above_2d)[0]
-            print(s.run([tf_grad_2d, ovl_grad_2d]))
             assert np.all(np.equal(*s.run([tf_grad_2d, ovl_grad_2d])))
 
             tf_grad_3d = tf.gradients(tf_3d, arg_3d, grads_above_3d)[0]

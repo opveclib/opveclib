@@ -115,37 +115,62 @@ def concat(*args, **constants):
     ref_rank = args[0].rank
     ref_shape = args[0].shape
     ref_type = args[0].dtype
+    all_same = True
+    num_args = len(args)
     for arg in args:
         assert arg.rank == ref_rank
         assert arg.dtype == ref_type
+        if arg.shape != ref_shape:
+            all_same = False
 
         concat_bounds.append(concat_bounds[-1] + arg.shape[concat_dim])
         for dim in range(ref_rank):
             if dim != concat_dim:
                 assert arg.shape[dim] == ref_shape[dim]
+    if all_same:
+        out_shape = []
+        for dim in range(ref_rank):
+            if dim == concat_dim:
+                out_shape.append(num_args*ref_shape[dim])
+            else:
+                out_shape.append(ref_shape[dim])
 
-    out_shape = []
-    for dim in range(ref_rank):
-        if dim == concat_dim:
-            out_shape.append(concat_bounds[-1])
-        else:
-            out_shape.append(ref_shape[dim])
+        pos = position_in(ref_shape)
+        out = output(out_shape, ref_type)
 
-    out = output(out_shape, ref_type)
-    pos = position_in(out_shape)
-
-    for arg_n, arg in enumerate(args):
-        l_bound = concat_bounds[arg_n]
-        u_bound = concat_bounds[arg_n + 1]
-        concat_pos = pos[concat_dim]
-        with if_(expr_logical_and(concat_pos >= l_bound, concat_pos < u_bound)):
-            in_pos = []
+        for arg_n, arg in enumerate(args):
+            out_pos = []
             for dim in range(ref_rank):
                 if dim == concat_dim:
-                    in_pos.append(concat_pos - l_bound)
+                    out_pos.append(arg_n*ref_shape[dim]+pos[dim])
                 else:
-                    in_pos.append(pos[dim])
-            out[pos] = arg[in_pos]
+                    out_pos.append(pos[dim])
+
+            out[out_pos] = arg[pos]
+
+    else:
+        out_shape = []
+        for dim in range(ref_rank):
+            if dim == concat_dim:
+                out_shape.append(concat_bounds[-1])
+            else:
+                out_shape.append(ref_shape[dim])
+
+        out = output(out_shape, ref_type)
+        pos = position_in(out_shape)
+
+        for arg_n, arg in enumerate(args):
+            l_bound = concat_bounds[arg_n]
+            u_bound = concat_bounds[arg_n + 1]
+            concat_pos = pos[concat_dim]
+            with if_(expr_logical_and(concat_pos >= l_bound, concat_pos < u_bound)):
+                in_pos = []
+                for dim in range(ref_rank):
+                    if dim == concat_dim:
+                        in_pos.append(concat_pos - l_bound)
+                    else:
+                        in_pos.append(pos[dim])
+                out[pos] = arg[in_pos]
 
     return out
 
@@ -162,13 +187,23 @@ def concat_grad(*args, **constants):
     concat_dim = constants['concat_dim']
     inputs = args[:-1]
     num_inputs = len(inputs)
-    grad_above = args[-1]
-    s = split(grad_above, split_dim=concat_dim, num_split=num_inputs)
 
-    grads = []
-    for n in range(num_inputs):
-        grads.append(s[n])
-    return grads
+    first_type = inputs[0].tensor_type
+    all_same = True
+    for i in range(1, num_inputs):
+        if inputs[i].tensor_type != first_type:
+            all_same = False
+
+    if all_same:
+        grad_above = args[-1]
+        s = split(grad_above, split_dim=concat_dim, num_split=num_inputs)
+
+        grads = []
+        for n in range(num_inputs):
+            grads.append(s[n])
+        return grads
+    else:
+        return [None]*num_inputs
 
 
 def _broadcast_cwise_binary(lhs, rhs, fcn):

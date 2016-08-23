@@ -227,6 +227,8 @@ class OperatorOutput(object):
 
 class _GradientPlaceholder(object):
     def __init__(self, shape, dtype):
+        self.tensor_type = TensorType(shape, dtype)
+        self.rank = self.tensor_type.rank
         self.shape = shape
         self.dtype = dtype
 
@@ -442,7 +444,7 @@ class _OpGenerator(object):
         # create input expressions
         input_exprs = []
         for cur_type in input_types:
-            input_exprs.append(input(cur_type))
+            input_exprs.append(input(TensorType.like(cur_type)))
 
         # interpret function to build up ExpressionDAG
         output_exprs = self.op_function(*input_exprs, **constants)
@@ -502,24 +504,36 @@ class _OpGenerator(object):
             except TypeError:
                 grad_outputs = [grad_outputs]
 
-            # make sure grad outputs are the same type as op inputs
-            for grad_output_index, grad_output in enumerate(grad_outputs):
-                if isinstance(grad_output, _Operator) and len(grad_output.output_types) != 1:
-                    raise TypeError('A multi-output operator was returned from a gradient function, but the meaning '
-                                    'of this is ambiguous: explicitly index each output from operator: ' +
-                                    str(grad_output.name))
-                cur_input_type = input_types[grad_output_index]
-                cur_grad_output_type = TensorType.like(_resolve_output(grad_output))
-                if cur_input_type != cur_grad_output_type:
-                    raise TypeError('Gradient output index ' + str(grad_output_index) + ', with TensorType: ' +
-                                    str(cur_grad_output_type) + ' is inconsistent with operator input index ' +
-                                    str(grad_output_index) + ', with TensorType: ' + str(cur_input_type))
+            # If any gradient function outputs are None, do not create a grad dag
+            # TODO: allow for incomplete derivative definition
+            has_none_grads = False
+            for grad_output in grad_outputs:
+                if grad_output is None:
+                    has_none_grads = True
 
-            grad_dag = _build_op_dag(*grad_outputs)
-            proto_grad_dag = grad_dag.proto_dag
-            grad_dag_arg_index = []
-            for inp in grad_dag.inputs:
-                grad_dag_arg_index.append(grad_inputs.index(inp))
+            if has_none_grads:
+                proto_grad_dag = None
+                grad_dag_arg_index = None
+            else:
+                # make sure grad outputs are the same type as op inputs
+                for grad_output_index, grad_output in enumerate(grad_outputs):
+                    if isinstance(grad_output, _Operator) and len(grad_output.output_types) != 1:
+                        raise TypeError('A multi-output operator was returned from a gradient function, '
+                                        'but the meaning of this is ambiguous: explicitly index each '
+                                        'output from operator: ' +
+                                        str(grad_output.name))
+                    cur_input_type = input_types[grad_output_index]
+                    cur_grad_output_type = TensorType.like(_resolve_output(grad_output))
+                    if cur_input_type != cur_grad_output_type:
+                        raise TypeError('Gradient output index ' + str(grad_output_index) + ', with TensorType: ' +
+                                        str(cur_grad_output_type) + ' is inconsistent with operator input index ' +
+                                        str(grad_output_index) + ', with TensorType: ' + str(cur_input_type))
+
+                grad_dag = _build_op_dag(*grad_outputs)
+                proto_grad_dag = grad_dag.proto_dag
+                grad_dag_arg_index = []
+                for inp in grad_dag.inputs:
+                    grad_dag_arg_index.append(grad_inputs.index(inp))
 
         return _Operator(expression_dag, output_types, inputs, proto_grad_dag, grad_dag_arg_index,
                          from_gradient, self.name)
