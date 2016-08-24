@@ -650,6 +650,8 @@ def gradient(op_function):
             resolved = grad_function
 
         op_function.add_grad(resolved)
+        resolved.__name__ = grad_function.__name__
+        resolved.__doc__ = grad_function.__doc__
         return resolved
 
     return wrapper
