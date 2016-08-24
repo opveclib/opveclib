@@ -14,7 +14,7 @@ import tensorflow as tf
 from ..operator import operator, evaluate, as_tensorflow
 from ..expression import position_in, output_like
 from ..local import clear_op_cache
-from .math import add, sub, mul, div, neg, tanh, sigmoid, split, concat
+from .math import add, sub, mul, div, neg, tanh, sin, cos, tan, sigmoid, split, concat
 
 
 class TestMath(unittest.TestCase):
@@ -92,7 +92,9 @@ class TestMath(unittest.TestCase):
         """
         Ensure that all component-wise binary functions in the math op library yield an identical gradient to tensorflow
         """
-        with tf.Session() as s:
+        test_config=tf.ConfigProto(allow_soft_placement=False)
+        test_config.graph_options.optimizer_options.opt_level = -1
+        with tf.Session(config=test_config) as s:
             lhs_np = np.random.random(100)
             rhs_np = lhs_np + np.random.randint(-1, 2, size=100)
             grad_above = tf.constant(np.random.random(100))
@@ -128,7 +130,9 @@ class TestMath(unittest.TestCase):
         """
         Ensure that all component-wise unary functions in the math op library yield an identical gradient to tensorflow
         """
-        with tf.Session() as s:
+        test_config=tf.ConfigProto(allow_soft_placement=False)
+        test_config.graph_options.optimizer_options.opt_level = -1
+        with tf.Session(config=test_config) as s:
             arg_np = np.random.random(100)
             grad_above = tf.constant(np.random.random(100))
 
@@ -147,10 +151,15 @@ class TestMath(unittest.TestCase):
 
             test_grad(lambda x: neg(x), lambda x: tf.neg(x))
             test_grad(lambda x: tanh(x), lambda x: tf.tanh(x))
+            test_grad(lambda x: sin(x), lambda x: tf.sin(x))
+            test_grad(lambda x: cos(x), lambda x: tf.cos(x))
+            test_grad(lambda x: tan(x), lambda x: tf.tan(x))
             test_grad(lambda x: sigmoid(x), lambda x: tf.sigmoid(x))
 
     def test_concat(self):
-        with tf.Session() as s:
+        test_config=tf.ConfigProto(allow_soft_placement=False)
+        test_config.graph_options.optimizer_options.opt_level = -1
+        with tf.Session(config=test_config) as s:
             num_concat = 5
             args_1d = []
             args_2d = []
@@ -206,7 +215,9 @@ class TestMath(unittest.TestCase):
             assert np.all(np.equal(*s.run([tf_irr, ovl_irr])))
 
     def test_split(self):
-        with tf.Session() as s:
+        test_config=tf.ConfigProto(allow_soft_placement=False)
+        test_config.graph_options.optimizer_options.opt_level = -1
+        with tf.Session(config=test_config) as s:
             arg_1d = tf.constant(np.random.random(10))
             arg_2d = tf.constant(np.random.random(100).reshape((10, 10)))
             arg_3d = tf.constant(np.random.random(1000).reshape((10, 10, 10)))
@@ -262,7 +273,9 @@ class TestMath(unittest.TestCase):
         vec_len = 500
         forget = 0.0
 
-        with tf.Session() as s:
+        test_config=tf.ConfigProto(allow_soft_placement=False)
+        test_config.graph_options.optimizer_options.opt_level = -1
+        with tf.Session(config=test_config) as s:
             concat_arg = tf.constant(np.random.normal(size=batches*4*vec_len).reshape((batches, 4*vec_len)))
             c = tf.constant(np.random.normal(size=batches*vec_len).reshape((batches, vec_len)))
 
