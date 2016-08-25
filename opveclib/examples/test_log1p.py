@@ -58,7 +58,25 @@ def log1p(x):
         output[pos] = ovl.log(u) * x[pos] / d
     return output
 
-class TestExpm1(unittest.TestCase):
+@ovl.gradient(log1p)
+@ovl.operator()
+def log1p_grad(x, grad):
+    """
+    Define the log1p gradient operator by defining the its operator function to be
+
+    .. math::
+      out_{i} = 1.0 / (x_{i} + 1.0) * grad_{i}
+
+    :param x: The input tensor argument
+    :param grad: The input gradient tensor to the gradient operator
+    :return: Element-wise gradient of the original operator
+    """
+    out = ovl.output(x.shape, x.dtype)
+    pos = ovl.position_in(x.shape)
+    out[pos] = 1.0 / (x[pos] + 1.0) * grad[pos]
+    return out
+
+class TestLog1p(unittest.TestCase):
     ovl.clear_op_cache()
     def test(self):
         """
@@ -100,3 +118,34 @@ class TestExpm1(unittest.TestCase):
                     assert (np.allclose(ref, tf_result,
                                         rtol=0, atol=1e-20) == False)
         sess.close()
+
+    def test_gradient(self):
+        """
+        Test the correctness of the gradient against tensorflow
+        """
+        if ovl.cuda_enabled:
+            devices = ['/cpu:0', '/gpu:0']
+        else:
+            devices = ['/cpu:0']
+        # ensure TF runs on GPU when asked
+        test_config=tf.ConfigProto(allow_soft_placement=False)
+        test_config.graph_options.optimizer_options.opt_level = -1
+        with tf.Session(config=test_config) as sess:
+           for dev_string in devices:
+                with tf.device(dev_string):
+                    a = np.random.random(100)
+                    grad_input = tf.constant(np.random.random(100))
+                    arg = tf.constant(a)
+                    ovl_op = log1p(arg)
+                    ones = tf.constant(np.ones_like(a))
+                    ovl_out = ovl.as_tensorflow(ovl_op)
+                    tf_out = tf.log(arg + ones)
+
+                    ovl_grad = tf.gradients(ovl_out, arg, grad_input)[0]
+                    tf_grad = tf.gradients(tf_out, arg, grad_input)[0]
+                    ovl_out, tf_out, ovl_grad, tf_grad = sess.run([ovl_out, tf_out, ovl_grad, tf_grad])
+
+                    assert np.allclose(ovl_out, tf_out)
+                    assert np.allclose(ovl_grad, tf_grad)
+        sess.close()
+

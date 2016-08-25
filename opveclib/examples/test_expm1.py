@@ -59,6 +59,24 @@ def expm1(x):
         output[pos] = (e - 1.0) * x[pos] / ovl.log(e)
     return output
 
+@ovl.gradient(expm1)
+@ovl.operator()
+def expm1_grad(x, grad):
+    """
+    Define the expm1 gradient operator by defining the its operator function to be
+
+    .. math::
+      out_{i} = exp(x_{i}) * grad_{i}
+
+    :param x: The input tensor argument
+    :param grad: The input gradient tensor to the gradient operator
+    :return: Element-wise gradient of the original operator
+    """
+    out = ovl.output(x.shape, x.dtype)
+    pos = ovl.position_in(x.shape)
+    out[pos] = ovl.exp(x[pos]) * grad[pos]
+    return out
+
 class TestExpm1(unittest.TestCase):
     ovl.clear_op_cache()
     def test(self):
@@ -66,19 +84,19 @@ class TestExpm1(unittest.TestCase):
         Test the correctness of ovl operator vs numpy implementation
         """
         a = np.array([1e-10, -1e-10, 0.0], dtype=np.float64)
-        expm1Op = expm1(a)
+        expm1_op = expm1(a)
         ref = np.expm1(a)
-        ovl_res = ovl.evaluate(expm1Op)
+        ovl_res = ovl.evaluate(expm1_op)
         ovl.logger.info(u'numpy: ' + str(ref) + u' ovl: ' + str(ovl_res))
         assert np.allclose(ref, ovl_res, rtol=0, atol=1e-20)
         if ovl.cuda_enabled:
             assert np.allclose(np.expm1(a),
-                      ovl.evaluate(expm1Op, target_language='cuda'),
+                      ovl.evaluate(expm1_op, target_language='cuda'),
                       rtol=0, atol=1e-20)
 
         # test  vs tensorflow
-        test_config=tf.ConfigProto(allow_soft_placement=False)
         # ensure TF runs on GPU when asked
+        test_config=tf.ConfigProto(allow_soft_placement=False)
         test_config.graph_options.optimizer_options.opt_level = -1
         ones = np.ones_like(a)
         if ovl.cuda_enabled:
@@ -88,7 +106,7 @@ class TestExpm1(unittest.TestCase):
         with tf.Session(config=test_config) as sess:
            for dev_string in devices:
                 with tf.device(dev_string):
-                    expm1_tf = ovl.as_tensorflow(expm1Op)
+                    expm1_tf = ovl.as_tensorflow(expm1_op)
                     sess.run(tf.initialize_all_variables())
                     expm1_tf_result = sess.run(expm1_tf)
                     assert np.allclose(ref, expm1_tf_result,
@@ -101,3 +119,34 @@ class TestExpm1(unittest.TestCase):
                     assert (np.allclose(ref, tf_result,
                                         rtol=0, atol=1e-20) == False)
         sess.close()
+
+    def test_gradient(self):
+        """
+        Test the correctness of the gradient against tensorflow
+        """
+        if ovl.cuda_enabled:
+            devices = ['/cpu:0', '/gpu:0']
+        else:
+            devices = ['/cpu:0']
+        # ensure TF runs on GPU when asked
+        test_config=tf.ConfigProto(allow_soft_placement=False)
+        test_config.graph_options.optimizer_options.opt_level = -1
+        with tf.Session(config=test_config) as sess:
+           for dev_string in devices:
+                with tf.device(dev_string):
+                    a = np.random.random(100)
+                    grad_input = tf.constant(np.random.random(100))
+                    arg = tf.constant(a)
+                    ovl_op = expm1(arg)
+                    ones = tf.constant(np.ones_like(a))
+                    ovl_out = ovl.as_tensorflow(ovl_op)
+                    tf_out = tf.exp(arg) - ones
+
+                    ovl_grad = tf.gradients(ovl_out, arg, grad_input)[0]
+                    tf_grad = tf.gradients(tf_out, arg, grad_input)[0]
+                    ovl_out, tf_out, ovl_grad, tf_grad = sess.run([ovl_out, tf_out, ovl_grad, tf_grad])
+
+                    assert np.allclose(ovl_out, tf_out)
+                    assert np.allclose(ovl_grad, tf_grad)
+        sess.close()
+

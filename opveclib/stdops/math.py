@@ -11,7 +11,7 @@
 from ..operator import operator, gradient, OperatorOutput
 from ..expression import output, output_like, position_in, \
     uint8, uint16, uint32, uint64
-from ..expression import tanh as expr_tanh, exp as expr_exp, logical_and as expr_logical_and, variable, if_
+from ..expression import tanh as expr_tanh, sin as expr_sin, cos as expr_cos, tan as expr_tan, exp as expr_exp, logical_and as expr_logical_and, variable, if_
 
 
 def _cwise_unary(arg, func):
@@ -55,6 +55,37 @@ def tanh(arg):
 @operator()
 def tanh_grad(arg, grad_above):
     return _cwise_unary_grad(arg, grad_above, lambda x, dz: (1-expr_tanh(x)*expr_tanh(x))*dz)
+
+
+@operator()
+def sin(arg):
+    return _cwise_unary(arg, lambda x: expr_sin(x))
+
+@gradient(sin)
+@operator()
+def sin_grad(arg, grad_above):
+    return _cwise_unary_grad(arg, grad_above, lambda x, dz: expr_cos(x)*dz)
+
+
+@operator()
+def cos(arg):
+    return _cwise_unary(arg, lambda x: expr_cos(x))
+
+
+@gradient(cos)
+@operator()
+def cos_grad(arg, grad_above):
+    return _cwise_unary_grad(arg, grad_above, lambda x, dz: -expr_sin(x)*dz)
+
+@operator()
+def tan(arg):
+    return _cwise_unary(arg, lambda x: expr_tan(x))
+
+
+@gradient(tan)
+@operator()
+def tan_grad(arg, grad_above):
+    return _cwise_unary_grad(arg, grad_above, lambda x, dz: (1 / (expr_cos(x)*expr_cos(x)))*dz)
 
 
 @operator()
