@@ -164,5 +164,10 @@ You may also need to make sure the CUDA libraries are on your library path, typi
 
 Current Build Status
 --------------------
-TODO: Expose Jenkins status here.
+
+Development branch:
+
+.. image:: https://jenkins-cct.labs.hpe.com/buildStatus/icon?job=opveclib-dev
+    :target: https://jenkins-cct.labs.hpe.com/job/opveclib-dev/
+    :alt: Build Status
 
