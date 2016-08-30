@@ -15,7 +15,7 @@ import opveclib as ovl
 
 
 @ovl.operator()
-def graph_triangle_count(startEdge, fromVertex, toVertex):
+def triangles_op(startEdge, fromVertex, toVertex):
     """Counts the triangles in an undirected graph.
 
     Notice that this method assumes that the graph is given as an adjacency list where all lists with vertex neighbors
@@ -91,35 +91,7 @@ def graph_triangle_count(startEdge, fromVertex, toVertex):
     return count
 
 
-def countTrianglesCPU(startEdge, fromVertex, toVertex):
-    """Count the triangles on the CPU.
-
-    The array toVertex is a flattened list of lists structure, where startEdge encodes the start indices of the lists.
-
-    :param startEdge: Indices into toVertex where edges start.
-    :type startEdge: list.
-    :param fromVertex: The from-vertex of each edge.
-    :type fromVertex: list.
-    :param toVertex: The to-vertex of each edge.
-    :type toVertex: list.
-    :return: Triangle count of graph.
-
-    :Examples:
-
-    .. doctest::
-
-        >>> from opveclib.examples.test_graph import loadGraphFromTextFile, writeExampleGraphToTextFile, countTrianglesCPU
-        >>> tmpName = "/tmp/v7e20.txt"
-        >>> writeExampleGraphToTextFile(tmpName)
-        >>> startEdge, fromVertex, toVertex = loadGraphFromTextFile(tmpName)
-        >>> countTrianglesCPU(startEdge, fromVertex, toVertex)
-        3
-    """
-    count = ovl.evaluate(graph_triangle_count(startEdge, fromVertex, toVertex), target_language='cpp')
-    return np.sum(count, axis=0, dtype=np.uint64)
-
-
-def countTrianglesGPU(startEdge, fromVertex, toVertex):
+def triangles(startEdge, fromVertex, toVertex, target_language='cpp'):
     """Count the triangles on the GPU.
 
     The array toVertex is a flattened list of lists structure, where startEdge encodes the start indices of the lists.
@@ -136,20 +108,23 @@ def countTrianglesGPU(startEdge, fromVertex, toVertex):
 
     .. doctest::
 
-        >>> from opveclib.examples.test_graph import loadGraphFromTextFile, writeExampleGraphToTextFile, countTrianglesGPU
+        >>> from opveclib.examples.test_graph import load_graph_from_text_file, write_example_graph_to_text_file, triangles
         >>> tmpName = "/tmp/v7e20.txt"
-        >>> writeExampleGraphToTextFile(tmpName)
-        >>> startEdge, fromVertex, toVertex = loadGraphFromTextFile(tmpName)
-        >>> countTrianglesGPU(startEdge, fromVertex, toVertex)
+        >>> write_example_graph_to_text_file(tmpName)
+        >>> startEdge, fromVertex, toVertex = load_graph_from_text_file(tmpName)
+        >>> triangles(startEdge, fromVertex, toVertex)
         3
     """
-    if ovl.local.cuda_enabled:
-        count = ovl.evaluate(graph_triangle_count(startEdge, fromVertex, toVertex), target_language='cuda')
-    else:
-        count = ovl.evaluate(graph_triangle_count(startEdge, fromVertex, toVertex), target_language='cpp')
+    if not ovl.local.cuda_enabled and target_language == 'cuda':
+        ovl.logger.debug("triangles tried to use cuda which is not enabled.")
+        return 0
+
+    count = ovl.evaluate(triangles_op(startEdge, fromVertex, toVertex), target_language=target_language)
+
     return np.sum(count, axis=0, dtype=np.uint64)
 
-def countTrianglesNp(startEdge, fromVertex, toVertex):
+
+def reference(startEdge, fromVertex, toVertex):
     """Count the triangles using python.
 
     This is a reference implementation of the operator function in python.
@@ -197,7 +172,7 @@ def countTrianglesNp(startEdge, fromVertex, toVertex):
 
     return nTriangle
 
-def writeExampleGraphToTextFile(fileName):
+def write_example_graph_to_text_file(fileName):
     """"Writes an example graph to file.
 
     :param fileName: The path + name of the ascii text file to hold the edge list of the graph.
@@ -233,7 +208,7 @@ def writeExampleGraphToTextFile(fileName):
 
 
 
-def loadGraphFromTextFile(fileName):
+def load_graph_from_text_file(fileName):
     """Load a graph from a text file where each line has a pair of numbers representing (from,to) of an edge.
 
     :param fileName: The path + name of the ascii text file to read.
@@ -413,21 +388,17 @@ class TestGraphTriangleCountOp(unittest.TestCase):
         tmpName     = "/tmp/v7e20.txt"
         nTriangle   = 3
 
-        writeExampleGraphToTextFile(tmpName)
+        write_example_graph_to_text_file(tmpName)
 
         ovl.logger.info('Testing graph %s.' % tmpName)
 
-        startEdge, fromVertex, toVertex = loadGraphFromTextFile(tmpName)
+        startEdge, fromVertex, toVertex = load_graph_from_text_file(tmpName)
 
-        nTriangleNPY = countTrianglesNp(startEdge, fromVertex, toVertex)
-        nTriangleCPU = countTrianglesCPU(startEdge, fromVertex, toVertex)
-
-        assert nTriangleNPY==nTriangle
-        assert nTriangleCPU==nTriangle
+        assert nTriangle == triangles(startEdge, fromVertex, toVertex)
+        assert nTriangle == reference(startEdge, fromVertex, toVertex)
 
         if ovl.local.cuda_enabled:
-            nTriangleGPU = countTrianglesGPU(startEdge, fromVertex, toVertex)
-            assert nTriangleGPU==nTriangle
+            assert nTriangle == triangles(startEdge, fromVertex, toVertex, target_language='cuda')
 
 if __name__ == '__main__':
     ovl.clear_op_cache()
