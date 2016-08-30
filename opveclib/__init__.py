@@ -30,8 +30,9 @@ from .expression import variable, cast
 from .expression import arccos, arcsin, arctan, cos, cosh, sin, sinh, tan, tanh
 from .expression import exp, log, log10, sqrt
 from .expression import ceil, absolute, floor
+from .expression import logical_not
 # @@ Binary math
-from .expression import minimum, maximum, power, arctan2, logical_and, logical_or, logical_not
+from .expression import minimum, maximum, power, arctan2, logical_and, logical_or
 
 # @ Control flow
 from .expression import arange
