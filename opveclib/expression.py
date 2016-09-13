@@ -79,7 +79,7 @@ class DType(object):
             # find index by equality, rather than equivalency
             index = list(DType._np_lookup.keys()).index(dtype)
             self.proto_dtype = list(DType._np_lookup.values())[index]
-        elif type(dtype) is int:
+        elif isinstance(dtype, six.integer_types):
             if dtype not in list(lang.DType.values()):
                 raise ValueError('dtype ' + str(dtype) + ' is not valid.')
             else:
@@ -156,14 +156,14 @@ class TensorType(object):
         """
         self.dtype = DType(dtype)
 
-        if type(shape) is int:
+        if isinstance(shape, six.integer_types):
             self.shape = [shape]
         else:
             self.shape = []
             for elem in shape:
                 if elem is None:
                     raise TypeError('All dimensions must be defined.')
-                elif type(elem) is not int:
+                elif not isinstance(elem, six.integer_types):
                     raise TypeError('Shape must be an iterable of ints.')
                 else:
                     self.shape.append(elem)
@@ -1042,7 +1042,7 @@ def _to_scalar_index(target_shape, index):
 
         index = None
         for i, expr in enumerate(exprs):
-            if not isinstance(expr, int):
+            if not isinstance(expr, six.integer_types):
                 # todo: optionally dynamically constrain each non-constant dimensional index to within shape bounds
                 # bound_expr = cast(minimum(maximum(expr, 0), target_shape[i]-1), uint64)
                 bound_expr = cast(expr, uint64)
@@ -1150,7 +1150,7 @@ class InputTensor(_TensorExpression, _Readable):
     def __init__(self, tensor_type, io_index):
         if not isinstance(tensor_type, TensorType):
             raise TypeError
-        if not isinstance(io_index, int):
+        if not isinstance(io_index, six.integer_types):
             raise TypeError
 
         super(self.__class__, self).__init__(lang.INPUT, tensor_type)
@@ -1222,7 +1222,7 @@ class OutputTensor(_TensorExpression, _Writable):
     def __init__(self, tensor_type, io_index):
         if not isinstance(tensor_type, TensorType):
             raise TypeError
-        if not isinstance(io_index, int):
+        if not isinstance(io_index, six.integer_types):
             raise TypeError
 
         super(self.__class__, self).__init__(lang.OUTPUT, tensor_type)
@@ -1258,7 +1258,7 @@ class _ConstScalar(Scalar):
         if type(value) is float:
             super(self.__class__, self).__init__(lang.CONST_SCALAR, float64)
             self.proto_expr.double_data.append(value)
-        elif type(value) is int:
+        elif isinstance(value, six.integer_types):
             super(self.__class__, self).__init__(lang.CONST_SCALAR, int64)
             self.proto_expr.sint64_data.append(value)
         else:
@@ -1320,7 +1320,7 @@ class _ConstTensor(_TensorExpression, _Readable):
             array = np.array(value)
         elif type(value) is np.ndarray:
             array = value
-        elif type(value) is int or type(value) is float:
+        elif isinstance(value, six.integer_types) or type(value) is float:
             array = np.array([value])
         else:
             raise TypeError('ConstTensors can wrap lists, tuples, and numpy arrays')
@@ -1384,12 +1384,12 @@ class PositionTensor(_TensorExpression, _Readable):
     """
     def __init__(self, workgroup_shape):
 
-        if type(workgroup_shape) is int:
+        if isinstance(workgroup_shape, six.integer_types):
             self.workgroup_shape = [workgroup_shape]
         else:
             try:
                 for elem in workgroup_shape:
-                    if not isinstance(elem, int):
+                    if not isinstance(elem, six.integer_types):
                         raise TypeError
             except TypeError:
                 raise TypeError('workgroup_shape must be an int or an iterable of ints')
@@ -1439,7 +1439,7 @@ def variable(initial_value, dtype):
     :param dtype: The DType of the variable
     :return: The variable expression
     """
-    if type(initial_value) is int or type(initial_value) is float:
+    if isinstance(initial_value, six.integer_types) or isinstance(initial_value, float):
         return Variable(dtype, _ConstScalar(initial_value))
     elif issubclass(initial_value.__class__, Scalar):
         var = Variable(dtype, _ConstScalar(0))

@@ -11,7 +11,9 @@
 from __future__ import print_function
 import unittest
 import numpy as np
-from ..operator import operator, evaluate, _get_merge_refs_for_op_dag, _build_op_dag, _MergeRef
+import tensorflow as tf
+from ..operator import operator, gradient, evaluate, as_tensorflow, \
+    _get_merge_refs_for_op_dag, _build_op_dag, _MergeRef
 from ..expression import position_in, output, variable, arange, output_like, if_, elif_, else_
 from ..local import clear_op_cache
 from ..stdops.math import sigmoid, tanh, mul, split
@@ -175,7 +177,7 @@ def euqal_set_merge_refs(refs_be, refs_is):
 
 
 class TestOperator(unittest.TestCase):
-
+    clear_op_cache()
     # Tests merging across split and concatenate
     def test_merge_split_concatenate(self):
         in0 = np.random.random([4, 5])              # op-index  in-arg-index  out-arg-index
@@ -390,7 +392,92 @@ class TestOperator(unittest.TestCase):
         m0, m1 = evaluate([sum0, sum2], opt_level=3)
         assert np.allclose(o0, m0) and np.allclose(o1, m1)
 
+    def test_grad_dag_merge(self):
+        @operator()
+        def f(in0, in1):
+            pos = position_in(in0.shape)
+            out0 = output_like(in0)
+            out1 = output_like(in1)
+            out2 = output_like(in1)
 
-if __name__ == '__main__':
-    clear_op_cache()
-    unittest.main()
+            out0[pos] = 2 * in0[pos]
+            out1[pos] = 3 * in1[pos]
+            out2[pos] = 4 * in1[pos]
+
+            return out0, out1, out2
+
+        @gradient(f)
+        @operator()
+        def f_grad(in0, in1, dout0, dout1, dout2):
+            pos = position_in(in0.shape)
+            din0 = output_like(in0)
+            din1 = output_like(in1)
+
+            din0[pos] = 2 * dout0[pos]
+            din1[pos] = 3 * dout1[pos] + 4 * dout2[pos]
+
+            return din0, din1
+
+        @operator()
+        def g(in0, in1, in2, in3):
+            pos = position_in(in0.shape)
+            out0 = output_like(in0)
+            out1 = output_like(in0)
+
+            out0[pos] = 5*in0[pos] + 6*in1[pos]
+            out1[pos] = 7*in2[pos] + 8*in3[pos]
+
+            return out0, out1
+
+        @gradient(g)
+        @operator()
+        def g_grad(in0, in1, in2, in3, dout0, dout1):
+            pos = position_in(in0.shape)
+            din0 = output_like(in0)
+            din1 = output_like(in1)
+            din2 = output_like(in2)
+            din3 = output_like(in3)
+
+            din0[pos] = 5*dout0[pos]
+            din1[pos] = 6*dout0[pos]
+            din2[pos] = 7*dout1[pos]
+            din3[pos] = 8*dout1[pos]
+
+            return din0, din1, din2, din3
+
+        x0 = tf.constant(np.random.random(10))
+        x1 = tf.constant(np.random.random(10))
+        h3 = tf.constant(np.random.random(10))
+        y0, y1, y2 = f(x0, x1)
+        z0, z1 = g(y1, y2, y2, h3)
+
+        z1, z0, y1, y0 = as_tensorflow([z1, z0, y1, y0], opt_level=3)
+
+        with tf.Session() as s:
+            y0_tf = 2*x0
+            y1_tf = 3*x1
+            y2_tf = 4*x1
+
+            z0_tf = 5*y1_tf + 6*y2_tf
+            z1_tf = 7*y2_tf + 8*h3
+            y1_out_tf = 1.0*y1_tf
+
+            assert np.allclose(s.run([z1])[0], s.run([z1_tf])[0])
+            assert np.allclose(s.run([z0])[0], s.run([z0_tf])[0])
+            assert np.allclose(s.run([y1])[0], s.run([y1_tf])[0])
+            assert np.allclose(s.run([y0])[0], s.run([y0_tf])[0])
+
+            z1_g = tf.constant(np.random.random(10))
+            z0_g = tf.constant(np.random.random(10))
+            y1_g = tf.constant(np.random.random(10))
+            y0_g = tf.constant(np.random.random(10))
+
+            x0_g_tf, x1_g_tf, h3_g_tf = tf.gradients([z1_tf, z0_tf, y1_out_tf, y0_tf], [x0, x1, h3], [z1_g, z0_g, y1_g, y0_g])
+            x0_g_op, x1_g_op, h3_g_op = tf.gradients([z1, z0, y1, y0], [x0, x1, h3], [z1_g, z0_g, y1_g, y0_g])
+
+            x0_g_tf, x1_g_tf, h3_g_tf = s.run([x0_g_tf, x1_g_tf, h3_g_tf])
+            x0_g_op, x1_g_op, h3_g_op = s.run([x0_g_op, x1_g_op, h3_g_op])
+
+            assert np.allclose(x0_g_tf, x0_g_op)
+            assert np.allclose(h3_g_tf, h3_g_op)
+            assert np.allclose(x1_g_tf, x1_g_op)

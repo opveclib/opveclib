@@ -9,6 +9,7 @@
 # on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for
 # the specific language governing permissions and limitations under the License.
 
+from __future__ import absolute_import
 import ctypes
 import hashlib
 import os
@@ -90,7 +91,6 @@ class _DynamicLibOp(object):
 
                 grad_dag = lang.OperatorDAG()
                 grad_dag.ParseFromString(op.get_attr('serialized_grad_dag'))
-                grad_dag_arg_index=op.get_attr('grad_dag_arg_index')
 
                 try:
                     len(grads)
@@ -100,20 +100,16 @@ class _DynamicLibOp(object):
                     grad_list = list(grads)
 
                 grad_inputs = []
-                grad_of_grad_dags = []
+
                 for op_input in op.inputs:
                     grad_inputs.append(op_input)
-                    grad_of_grad_dags.append(None)
                 for grad in grad_list:
                     grad_inputs.append(grad)
-                    grad_of_grad_dags.append(None)
 
-                selected_inputs = []
-                for arg_index in grad_dag_arg_index:
-                    selected_inputs.append(grad_inputs[arg_index])
+                grad_of_grad_dags = [None]*len(grad_dag.operators)
 
                 # make sure that the input types and expected types are consistent
-                for grad_input_index, grad_input in enumerate(selected_inputs):
+                for grad_input_index, grad_input in enumerate(grad_inputs):
                     received_type = TensorType.like(grad_input).as_proto()
                     expected_type = grad_dag.dag_input_types[grad_input_index]
 
@@ -122,7 +118,7 @@ class _DynamicLibOp(object):
                                         ', but expected a type: ' + str(expected_type) +
                                         ' at gradient input index: ' + str(grad_input_index))
 
-                return _dag_to_tf(grad_dag, selected_inputs, grad_of_grad_dags, None)
+                return _dag_to_tf(grad_dag, grad_inputs, grad_of_grad_dags)
 
             _DynamicLibOp._gradient_registered = True
 
@@ -241,13 +237,12 @@ class _Operator(object):
     # raise operator priority so that numpy does not try to use its own operator
     __array_priority__ = 1
 
-    def __init__(self, dag, output_types, inputs, grad_dag, grad_dag_arg_index, from_gradient, name):
+    def __init__(self, dag, output_types, inputs, grad_dag, from_gradient, name):
         self.inputs = inputs
         self.expression_dag = dag
         self.output_types = output_types
         self.name = name
         self.grad_dag = grad_dag
-        self.grad_dag_arg_index = grad_dag_arg_index
         self.from_gradient = from_gradient
 
         logger.debug('Operator created: ' + str(dag.name))
@@ -486,8 +481,7 @@ class _OpGenerator(object):
         expression_dag.name = self.name
 
         if self.grad_function is None or from_gradient:
-            proto_grad_dag = None
-            grad_dag_arg_index = None
+            reordered_dag = None
         else:
             grad_inputs = []
             for t in input_types:
@@ -512,8 +506,7 @@ class _OpGenerator(object):
                     has_none_grads = True
 
             if has_none_grads:
-                proto_grad_dag = None
-                grad_dag_arg_index = None
+                reordered_dag = None
             else:
                 # make sure grad outputs are the same type as op inputs
                 for grad_output_index, grad_output in enumerate(grad_outputs):
@@ -530,13 +523,36 @@ class _OpGenerator(object):
                                         str(grad_output_index) + ', with TensorType: ' + str(cur_input_type))
 
                 grad_dag = _build_op_dag(*grad_outputs)
-                proto_grad_dag = grad_dag.proto_dag
-                grad_dag_arg_index = []
-                for inp in grad_dag.inputs:
-                    grad_dag_arg_index.append(grad_inputs.index(inp))
+                # grad dag may not be dependent on all possible gradient inputs, in which case _build_op_dag
+                #  will not find all possible _GradientPlaceholders in grad_inputs. It may also find the inputs
+                #  in a different order than grad_inputs is arranged. In both of these cases the gradient dag
+                #  should have all possible inputs inserted and re-arranged so that they reflect the length
+                #  and order of grad_inputs. All downstream functions that use the grad dag assume that all
+                #  possible inputs are populated in that order.
 
-        return _Operator(expression_dag, output_types, inputs, proto_grad_dag, grad_dag_arg_index,
-                         from_gradient, self.name)
+                found_inputs = grad_dag.inputs
+                input_remap = {}
+                for found_index, found_input in enumerate(found_inputs):
+                    grad_index = grad_inputs.index(found_input)
+                    input_remap[found_index] = grad_index
+
+                # copy the found proto dag
+                reordered_dag = lang.OperatorDAG()
+                reordered_dag.CopyFrom(grad_dag.proto_dag)
+
+                # clear the input types and put in the correct full signature of gradient inputs
+                del reordered_dag.dag_input_types[:]
+                for grad_input in grad_inputs:
+                    cur_type = grad_input.tensor_type.as_proto()
+                    reordered_dag.dag_input_types.add().CopyFrom(cur_type)
+
+                # update the input references to update dag_input_index values
+                for ref in reordered_dag.references:
+                    for input_ref in ref.input_refs:
+                        if input_ref.is_leaf:
+                            input_ref.dag_input_index = input_remap[input_ref.dag_input_index]
+
+        return _Operator(expression_dag, output_types, inputs, reordered_dag, from_gradient, self.name)
 
     def add_grad(self, grad_function):
         if self.grad_function is None:
@@ -1650,7 +1666,7 @@ def _merge_expr_dags(to_expr_dag, from_expr_dag, indices_info):
     return merged_expr_dag
 
 
-def _merge_op_dag(proto_op_dag):
+def _merge_op_dag(proto_op_dag, grad_dags):
     """
     Merges the operator dag by decreasing the depth of the operator dag and increasing the depth of the expression dag.
     :param op_dag: The protobuf format of the operator dag.
@@ -1659,6 +1675,7 @@ def _merge_op_dag(proto_op_dag):
 
     # Initialize the merged op-dag and the merge refs and their grouping.
     merged_op_dag = proto_op_dag
+    merged_grad_dags = grad_dags
     group_merge_refs = _group_merge_refs(merged_op_dag, _get_merge_refs_for_op_dag(merged_op_dag))
 
     # While we can merge ops in the dag.
@@ -1672,6 +1689,229 @@ def _merge_op_dag(proto_op_dag):
         logger.info('Merging ' + ops[from_op_index].name + ' and ' + ops[to_op_index].name)
 
         indices_info = _get_indices_info(merged_op_dag, to_op_index, from_op_index)
+
+        if grad_dags is not None and None not in grad_dags:
+            # call f the downstream op and g the upstream op
+            # the merged op is then g(f(..), ..)
+            def get_expr_dag_io_info(expr_dag):
+                input_types = []
+                input_indices = []
+                output_types = []
+                output_indices = []
+                cur_input = 0
+                cur_output = 0
+                for expr_n, expr in enumerate(expr_dag.expressions):
+                    if expr.code == lang.INPUT:
+                        if cur_input != expr.io_index:
+                            raise ValueError('Invalid Expression dag, received out of order input expression.')
+                        cur_input += 1
+                        input_types.append(expr.tensor_type)
+                        input_indices.append(expr_n)
+                    elif expr.code == lang.OUTPUT:
+                        if cur_output != expr.io_index:
+                            raise ValueError('Invalid expression dag, received out of order output expression.')
+                        cur_output += 1
+                        output_types.append(expr.tensor_type)
+                        output_indices.append(expr_n)
+
+                return input_types, input_indices, output_types, output_indices
+
+            f_n = merge_ref[1]
+            g_n = merge_ref[0]
+            f = ops[f_n]
+            g = ops[g_n]
+            f_in_types, _, f_out_types, _ = get_expr_dag_io_info(f)
+            g_in_types, _, g_out_types, _ = get_expr_dag_io_info(g)
+            num_f_ins = len(f_in_types)
+            num_f_outs = len(f_out_types)
+            num_g_ins = len(g_in_types)
+            num_g_outs = len(g_out_types)
+            # classify input and output connects as being one of:
+            #   g_in unshared - input to g not also used as an input to f
+            #   f_out unshared - f output which remains external, not used by g
+            #
+            #   note: all g outputs are untouched by merging process and remain external
+            g_ins_unshared = indices_info.external_inputs_for_to_io
+            g_ins_shared = set(range(num_g_ins)) - g_ins_unshared
+            f_outs_removed = indices_info.outputs_removed_in_from
+
+            # Note: this seems like to should be used_only_in_to_io, but appears not to be in some cases
+            # f_outs_internalized = indices_info.used_only_in_to_io
+            # f_outs_pruned = f_outs_removed - f_outs_internalized
+            # f_outs_remaining = set(range(num_f_outs)) - f_outs_removed
+            # try this instead
+
+            f_outs_internalized = set()
+            for g_in in g_ins_shared:
+                f_out = indices_info.input_to_ouput_index[g_in]
+                if f_out in f_outs_removed:
+                    f_outs_internalized.add(f_out)
+            f_outs_pruned = f_outs_removed - f_outs_internalized
+            f_outs_remaining = set(range(num_f_outs)) - f_outs_removed
+
+            # find out which shared connections are duplicated
+            # find mapping of f_out -> g_in for duplicated and internalized connections
+            f_outs_to_g_ins_duplicated = {}
+            f_outs_to_g_ins_internalized = {}
+            g_ins_to_f_outs = {}
+            f_outs_duplicated = set()
+            for g_in in g_ins_shared:
+                f_out = indices_info.input_to_ouput_index[g_in]
+                g_ins_to_f_outs[g_in] = f_out
+                if f_out in f_outs_internalized:
+                    if f_out not in f_outs_to_g_ins_internalized.keys():
+                        f_outs_to_g_ins_internalized[f_out] = set()
+                    f_outs_to_g_ins_internalized[f_out].add(g_in)
+                else:
+                    if f_out not in f_outs_to_g_ins_duplicated.keys():
+                        f_outs_to_g_ins_duplicated[f_out] = set()
+                    f_outs_to_g_ins_duplicated[f_out].add(g_in)
+                    f_outs_duplicated.add(f_out)
+            f_outs_unshared = f_outs_remaining - f_outs_duplicated
+
+            # create an _Operator from the f expression dag
+            f_inputs = []
+            for tt in f_in_types:
+                external_placeholder = _GradientPlaceholder(tt.shape, tt.dtype)
+                f_inputs.append(external_placeholder)
+            f_output_types = []
+            for tt in f_out_types:
+                f_output_types.append(TensorType.from_proto(tt))
+            f_op = _Operator(f, f_output_types, f_inputs, None, True, f.name)
+
+            # create a new set of _Operators that corresponds to g_grad_dag and wire up connections
+            # create inputs for g_grad_dag
+            g_grad_dag = grad_dags[g_n]
+            g_grad_dag_inputs = []
+            for g_grad_dag_in_n, tt in enumerate(g_grad_dag.dag_input_types):
+                if g_grad_dag_in_n in g_ins_to_f_outs.keys():
+                    g_grad_dag_inputs.append(f_op[g_ins_to_f_outs[g_grad_dag_in_n]])
+                else:
+                    external_placeholder = _GradientPlaceholder(tt.shape, tt.dtype)
+                    g_grad_dag_inputs.append(external_placeholder)
+
+            def reify_op_dag(op_dag, dag_inputs):
+                operators = []
+                for op_n, op in enumerate(op_dag.operators):
+                    op_inputs = []
+                    for ref in op_dag.references[op_n].input_refs:
+                        if ref.is_leaf:
+                            op_inputs.append(dag_inputs[ref.dag_input_index])
+                        else:
+                            op_inputs.append(operators[ref.op_index][ref.op_output_index])
+                    _, _, op_out_types_proto, _ = get_expr_dag_io_info(op)
+                    op_out_types = []
+                    for tt in op_out_types_proto:
+                        op_out_types.append(TensorType.from_proto(tt))
+                    operators.append(_Operator(op, op_out_types, op_inputs, None, True, op.name))
+
+                outputs = []
+                for dag_output in op_dag.dag_outputs:
+                    outputs.append(operators[dag_output.op_index][dag_output.op_output_index])
+
+                return outputs
+
+            g_grad_outputs = reify_op_dag(g_grad_dag, g_grad_dag_inputs)
+            g_grad_external_outputs = []
+            for g_grad_n in sorted(g_ins_unshared):
+                g_grad_external_outputs.append(g_grad_outputs[g_grad_n])
+
+            # create inputs for f_grad
+            f_grad_inputs = []
+            for f_in_n in range(num_f_ins):
+                f_grad_inputs.append(f_inputs[f_in_n])
+
+            from .expression import output_like, position_in, output
+
+            @operator()
+            def gradient_sum(*args):
+                assert len(args) > 1
+                output_shape = args[0].shape
+                output_type = args[0].dtype
+                for arg in args:
+                    assert arg.shape == output_shape
+                    assert arg.dtype == output_type
+                out = output_like(args[0])
+                pos = position_in(output_shape)
+                s = args[0][pos]
+                for arg in args[1:]:
+                    s += arg[pos]
+                out[pos] = s
+                return out
+
+            @operator()
+            def zeros(shape=None, dtype=None):
+                out = output(shape, dtype)
+                pos = position_in(shape)
+                out[pos] = 0
+                return out
+
+            f_grad_in_externals = []
+            for f_out_n in range(num_f_outs):
+                if f_out_n in f_outs_unshared:
+                    external_placeholder = _GradientPlaceholder(f_out_types[f_out_n].shape, f_out_types[f_out_n].dtype)
+                    f_grad_inputs.append(external_placeholder)
+                    f_grad_in_externals.append(external_placeholder)
+                elif f_out_n in f_outs_duplicated:
+                    external_placeholder = _GradientPlaceholder(f_out_types[f_out_n].shape, f_out_types[f_out_n].dtype)
+                    shared = [external_placeholder]
+                    for g_in in f_outs_to_g_ins_duplicated[f_out_n]:
+                        shared.append(g_grad_outputs[g_in])
+                    f_grad_inputs.append(gradient_sum(*shared))
+                    f_grad_in_externals.append(external_placeholder)
+                elif f_out_n in f_outs_internalized:
+                    shared = []
+                    for g_in in f_outs_to_g_ins_internalized[f_out_n]:
+                        shared.append(g_grad_outputs[g_in])
+                    if len(shared) == 1:
+                        f_grad_inputs.append(shared[0])
+                    else:
+                        f_grad_inputs.append(gradient_sum(*shared))
+                elif f_out_n in f_outs_pruned:
+                    # external_placeholder = _PrunedInput(f_out_types[f_out_n].shape, f_out_types[f_out_n].dtype)
+                    f_grad_inputs.append(zeros(shape=f_out_types[f_out_n].shape, dtype=f_out_types[f_out_n].dtype))
+                    # output has been pruned, so merged op gets no external gradient for this output
+                else:
+                    raise ValueError('f outputs should be one of: unshared, duplicated, internalized, pruned')
+            f_grad_dag = grad_dags[f_n]
+            f_grad_outputs = reify_op_dag(f_grad_dag, f_grad_inputs)
+
+            # append g_grad_external_outputs and generate new op dag
+            f_grad_outputs.extend(g_grad_external_outputs)
+            new_dag = _build_op_dag(*f_grad_outputs)
+
+            ordered_final_inputs = []
+            ordered_final_inputs.extend(f_inputs)
+            for g_in in sorted(g_ins_unshared):
+                ordered_final_inputs.append(g_grad_dag_inputs[g_in])
+            ordered_final_inputs.extend(f_grad_in_externals)
+            ordered_final_inputs.extend(g_grad_dag_inputs[-num_g_outs:])
+
+            found_inputs = new_dag.inputs
+            input_remap = {}
+            for found_index, found_input in enumerate(found_inputs):
+                grad_index = ordered_final_inputs.index(found_input)
+                input_remap[found_index] = grad_index
+
+            # copy the found proto dag
+            reordered_dag = lang.OperatorDAG()
+            reordered_dag.CopyFrom(new_dag.proto_dag)
+
+            # clear the input types and put in the correct full signature of gradient inputs
+            del reordered_dag.dag_input_types[:]
+            for grad_input in ordered_final_inputs:
+                cur_type = grad_input.tensor_type.as_proto()
+                reordered_dag.dag_input_types.add().CopyFrom(cur_type)
+
+            # update the input references to update dag_input_index values
+            for ref in reordered_dag.references:
+                for input_ref in ref.input_refs:
+                    if input_ref.is_leaf:
+                        input_ref.dag_input_index = input_remap[input_ref.dag_input_index]
+
+            merged_grad_dags[g_n] = reordered_dag
+            del merged_grad_dags[f_n]
+
         merged_expr_dag = _merge_expr_dags(ops[to_op_index], ops[from_op_index], indices_info)
 
         new_out_indices = indices_info.new_out_indices
@@ -1775,7 +2015,15 @@ def _merge_op_dag(proto_op_dag):
             proto_type = TensorType.like(dag_input).as_proto()
             merged_op_dag.dag_input_types.add().CopyFrom(proto_type)
 
-    return merged_op_dag
+    if merged_grad_dags is not None and None not in merged_grad_dags:
+        opt_grad_dags = []
+        for grad_dag in merged_grad_dags:
+            gd, _ = _merge_op_dag(grad_dag, None)
+            opt_grad_dags.append(gd)
+    else:
+        opt_grad_dags = merged_grad_dags
+
+    return merged_op_dag, opt_grad_dags
 
 
 def _make_generic_c(src, name):
@@ -2000,7 +2248,7 @@ def profile(output_list, target_language, profiling_iterations, opt_level):
     op_dag = _build_op_dag(*output_list)
     dag = op_dag.proto_dag
     if opt_level >= 3:
-        dag = _merge_op_dag(dag)
+        dag, _ = _merge_op_dag(dag, None)
     inputs = op_dag.inputs
 
     output_buffers = []
@@ -2085,18 +2333,20 @@ def as_tensorflow(tensor_list, opt_level=3):
     TensorFlow Graph. The inputs to the DAG must be numpy arrays or TensorFlow tensors.
 
     :param tensor_list: operator outputs to convert to TensorFlow tensors
-
+    :param opt_level: optimization level to use
     :return: A TensorFlow operator.
     """
     op_dag = _build_op_dag(*tensor_list)
-    grad_dag_arg_index_list = []
-    for op in op_dag.operators:
-        grad_dag_arg_index_list.append(op.grad_dag_arg_index)
 
-    return _dag_to_tf(op_dag.proto_dag, op_dag.inputs, op_dag.grad_dags, grad_dag_arg_index_list)
+    dag = op_dag.proto_dag
+    grad_dags = op_dag.grad_dags
+    if opt_level >= 3:
+        dag, grad_dags = _merge_op_dag(dag, grad_dags)
+
+    return _dag_to_tf(dag, op_dag.inputs, grad_dags)
 
 
-def _dag_to_tf(dag, inputs, grad_dags, grad_dag_arg_index_list):
+def _dag_to_tf(dag, inputs, grad_dags):
     output_tensors = []
     # compile all ops in the dag
     for op_index, op in enumerate(dag.operators):
@@ -2129,12 +2379,11 @@ def _dag_to_tf(dag, inputs, grad_dags, grad_dag_arg_index_list):
 
         if grad_dags[op_index] is None:
             serialized_grad_dag = ''
-            grad_dag_arg_index = []
         else:
             serialized_grad_dag = grad_dags[op_index].SerializeToString()
-            grad_dag_arg_index = grad_dag_arg_index_list[op_index]
 
-        tf_op = _DynamicLibOp.module().dynamic_lib(inputs=cur_inputs,
+        tf_op = _DynamicLibOp.module().dynamic_lib(name='opveclib_' + op.name,
+                                                   inputs=cur_inputs,
                                                    out_shapes=out_shapes,
                                                    out_types=out_tf_types,
                                                    cpu_lib_path=cpu_op_lib,
@@ -2142,7 +2391,6 @@ def _dag_to_tf(dag, inputs, grad_dags, grad_dag_arg_index_list):
                                                    gpu_lib_path=cuda_op_lib,
                                                    gpu_func_name=name + '_generic_cuda',
                                                    serialized_grad_dag=serialized_grad_dag,
-                                                   grad_dag_arg_index=grad_dag_arg_index,
                                                    cuda_threads_per_block=_default_cuda_threads_per_block)
         output_tensors.append(tf_op)
 
