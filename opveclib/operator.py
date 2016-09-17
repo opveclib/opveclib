@@ -1666,364 +1666,372 @@ def _merge_expr_dags(to_expr_dag, from_expr_dag, indices_info):
     return merged_expr_dag
 
 
+_merged_dag_registry = {}
+
+
 def _merge_op_dag(proto_op_dag, grad_dags):
     """
     Merges the operator dag by decreasing the depth of the operator dag and increasing the depth of the expression dag.
-    :param op_dag: The protobuf format of the operator dag.
+    :param proto_op_dag: The protobuf format of the operator dag.
+    :param grad_dags: The gradient dags, in order of the operators in the op dag
     :return: A merged operator dag in protobuf format.
     """
+    op_dag_hash = hashlib.sha224(proto_op_dag.SerializeToString() + version.encode('utf-8')).hexdigest()
+    try:
+        return _merged_dag_registry[op_dag_hash]
+    except KeyError:
 
-    # Initialize the merged op-dag and the merge refs and their grouping.
-    merged_op_dag = proto_op_dag
-    merged_grad_dags = grad_dags
-    group_merge_refs = _group_merge_refs(merged_op_dag, _get_merge_refs_for_op_dag(merged_op_dag))
+        # Initialize the merged op-dag and the merge refs and their grouping.
+        merged_op_dag = proto_op_dag
+        merged_grad_dags = grad_dags
+        group_merge_refs = _group_merge_refs(merged_op_dag, _get_merge_refs_for_op_dag(merged_op_dag))
 
-    # While we can merge ops in the dag.
-    while len(group_merge_refs) > 0:
-        ops = merged_op_dag.operators
-        refs = merged_op_dag.references
-        merge_ref = group_merge_refs.pop(0)
-        to_op_index = merge_ref[0]
-        from_op_index = merge_ref[1]
+        # While we can merge ops in the dag.
+        while len(group_merge_refs) > 0:
+            ops = merged_op_dag.operators
+            refs = merged_op_dag.references
+            merge_ref = group_merge_refs.pop(0)
+            to_op_index = merge_ref[0]
+            from_op_index = merge_ref[1]
 
-        logger.info('Merging ' + ops[from_op_index].name + ' and ' + ops[to_op_index].name)
+            logger.info('Merging ' + ops[from_op_index].name + ' and ' + ops[to_op_index].name)
 
-        indices_info = _get_indices_info(merged_op_dag, to_op_index, from_op_index)
+            indices_info = _get_indices_info(merged_op_dag, to_op_index, from_op_index)
 
-        if grad_dags is not None and None not in grad_dags:
-            # call f the downstream op and g the upstream op
-            # the merged op is then g(f(..), ..)
-            def get_expr_dag_io_info(expr_dag):
-                input_types = []
-                input_indices = []
-                output_types = []
-                output_indices = []
-                cur_input = 0
-                cur_output = 0
-                for expr_n, expr in enumerate(expr_dag.expressions):
-                    if expr.code == lang.INPUT:
-                        if cur_input != expr.io_index:
-                            raise ValueError('Invalid Expression dag, received out of order input expression.')
-                        cur_input += 1
-                        input_types.append(expr.tensor_type)
-                        input_indices.append(expr_n)
-                    elif expr.code == lang.OUTPUT:
-                        if cur_output != expr.io_index:
-                            raise ValueError('Invalid expression dag, received out of order output expression.')
-                        cur_output += 1
-                        output_types.append(expr.tensor_type)
-                        output_indices.append(expr_n)
+            if grad_dags is not None and None not in grad_dags:
+                # call f the downstream op and g the upstream op
+                # the merged op is then g(f(..), ..)
+                def get_expr_dag_io_info(expr_dag):
+                    input_types = []
+                    input_indices = []
+                    output_types = []
+                    output_indices = []
+                    cur_input = 0
+                    cur_output = 0
+                    for expr_n, expr in enumerate(expr_dag.expressions):
+                        if expr.code == lang.INPUT:
+                            if cur_input != expr.io_index:
+                                raise ValueError('Invalid Expression dag, received out of order input expression.')
+                            cur_input += 1
+                            input_types.append(expr.tensor_type)
+                            input_indices.append(expr_n)
+                        elif expr.code == lang.OUTPUT:
+                            if cur_output != expr.io_index:
+                                raise ValueError('Invalid expression dag, received out of order output expression.')
+                            cur_output += 1
+                            output_types.append(expr.tensor_type)
+                            output_indices.append(expr_n)
 
-                return input_types, input_indices, output_types, output_indices
+                    return input_types, input_indices, output_types, output_indices
 
-            f_n = merge_ref[1]
-            g_n = merge_ref[0]
-            f = ops[f_n]
-            g = ops[g_n]
-            f_in_types, _, f_out_types, _ = get_expr_dag_io_info(f)
-            g_in_types, _, g_out_types, _ = get_expr_dag_io_info(g)
-            num_f_ins = len(f_in_types)
-            num_f_outs = len(f_out_types)
-            num_g_ins = len(g_in_types)
-            num_g_outs = len(g_out_types)
-            # classify input and output connects as being one of:
-            #   g_in unshared - input to g not also used as an input to f
-            #   f_out unshared - f output which remains external, not used by g
-            #
-            #   note: all g outputs are untouched by merging process and remain external
-            g_ins_unshared = indices_info.external_inputs_for_to_io
-            g_ins_shared = set(range(num_g_ins)) - g_ins_unshared
-            f_outs_removed = indices_info.outputs_removed_in_from
+                f_n = merge_ref[1]
+                g_n = merge_ref[0]
+                f = ops[f_n]
+                g = ops[g_n]
+                f_in_types, _, f_out_types, _ = get_expr_dag_io_info(f)
+                g_in_types, _, g_out_types, _ = get_expr_dag_io_info(g)
+                num_f_ins = len(f_in_types)
+                num_f_outs = len(f_out_types)
+                num_g_ins = len(g_in_types)
+                num_g_outs = len(g_out_types)
+                # classify input and output connects as being one of:
+                #   g_in unshared - input to g not also used as an input to f
+                #   f_out unshared - f output which remains external, not used by g
+                #
+                #   note: all g outputs are untouched by merging process and remain external
+                g_ins_unshared = indices_info.external_inputs_for_to_io
+                g_ins_shared = set(range(num_g_ins)) - g_ins_unshared
+                f_outs_removed = indices_info.outputs_removed_in_from
 
-            # Note: this seems like to should be used_only_in_to_io, but appears not to be in some cases
-            # f_outs_internalized = indices_info.used_only_in_to_io
-            # f_outs_pruned = f_outs_removed - f_outs_internalized
-            # f_outs_remaining = set(range(num_f_outs)) - f_outs_removed
-            # try this instead
+                # Note: this seems like to should be used_only_in_to_io, but appears not to be in some cases
+                # f_outs_internalized = indices_info.used_only_in_to_io
+                # f_outs_pruned = f_outs_removed - f_outs_internalized
+                # f_outs_remaining = set(range(num_f_outs)) - f_outs_removed
+                # try this instead
 
-            f_outs_internalized = set()
-            for g_in in g_ins_shared:
-                f_out = indices_info.input_to_ouput_index[g_in]
-                if f_out in f_outs_removed:
-                    f_outs_internalized.add(f_out)
-            f_outs_pruned = f_outs_removed - f_outs_internalized
-            f_outs_remaining = set(range(num_f_outs)) - f_outs_removed
+                f_outs_internalized = set()
+                for g_in in g_ins_shared:
+                    f_out = indices_info.input_to_ouput_index[g_in]
+                    if f_out in f_outs_removed:
+                        f_outs_internalized.add(f_out)
+                f_outs_pruned = f_outs_removed - f_outs_internalized
+                f_outs_remaining = set(range(num_f_outs)) - f_outs_removed
 
-            # find out which shared connections are duplicated
-            # find mapping of f_out -> g_in for duplicated and internalized connections
-            f_outs_to_g_ins_duplicated = {}
-            f_outs_to_g_ins_internalized = {}
-            g_ins_to_f_outs = {}
-            f_outs_duplicated = set()
-            for g_in in g_ins_shared:
-                f_out = indices_info.input_to_ouput_index[g_in]
-                g_ins_to_f_outs[g_in] = f_out
-                if f_out in f_outs_internalized:
-                    if f_out not in f_outs_to_g_ins_internalized.keys():
-                        f_outs_to_g_ins_internalized[f_out] = set()
-                    f_outs_to_g_ins_internalized[f_out].add(g_in)
-                else:
-                    if f_out not in f_outs_to_g_ins_duplicated.keys():
-                        f_outs_to_g_ins_duplicated[f_out] = set()
-                    f_outs_to_g_ins_duplicated[f_out].add(g_in)
-                    f_outs_duplicated.add(f_out)
-            f_outs_unshared = f_outs_remaining - f_outs_duplicated
-
-            # create an _Operator from the f expression dag
-            f_inputs = []
-            for tt in f_in_types:
-                external_placeholder = _GradientPlaceholder(tt.shape, tt.dtype)
-                f_inputs.append(external_placeholder)
-            f_output_types = []
-            for tt in f_out_types:
-                f_output_types.append(TensorType.from_proto(tt))
-            f_op = _Operator(f, f_output_types, f_inputs, None, True, f.name)
-
-            # create a new set of _Operators that corresponds to g_grad_dag and wire up connections
-            # create inputs for g_grad_dag
-            g_grad_dag = grad_dags[g_n]
-            g_grad_dag_inputs = []
-            for g_grad_dag_in_n, tt in enumerate(g_grad_dag.dag_input_types):
-                if g_grad_dag_in_n in g_ins_to_f_outs.keys():
-                    g_grad_dag_inputs.append(f_op[g_ins_to_f_outs[g_grad_dag_in_n]])
-                else:
-                    external_placeholder = _GradientPlaceholder(tt.shape, tt.dtype)
-                    g_grad_dag_inputs.append(external_placeholder)
-
-            def reify_op_dag(op_dag, dag_inputs):
-                operators = []
-                for op_n, op in enumerate(op_dag.operators):
-                    op_inputs = []
-                    for ref in op_dag.references[op_n].input_refs:
-                        if ref.is_leaf:
-                            op_inputs.append(dag_inputs[ref.dag_input_index])
-                        else:
-                            op_inputs.append(operators[ref.op_index][ref.op_output_index])
-                    _, _, op_out_types_proto, _ = get_expr_dag_io_info(op)
-                    op_out_types = []
-                    for tt in op_out_types_proto:
-                        op_out_types.append(TensorType.from_proto(tt))
-                    operators.append(_Operator(op, op_out_types, op_inputs, None, True, op.name))
-
-                outputs = []
-                for dag_output in op_dag.dag_outputs:
-                    outputs.append(operators[dag_output.op_index][dag_output.op_output_index])
-
-                return outputs
-
-            g_grad_outputs = reify_op_dag(g_grad_dag, g_grad_dag_inputs)
-            g_grad_external_outputs = []
-            for g_grad_n in sorted(g_ins_unshared):
-                g_grad_external_outputs.append(g_grad_outputs[g_grad_n])
-
-            # create inputs for f_grad
-            f_grad_inputs = []
-            for f_in_n in range(num_f_ins):
-                f_grad_inputs.append(f_inputs[f_in_n])
-
-            from .expression import output_like, position_in, output
-
-            @operator()
-            def gradient_sum(*args):
-                assert len(args) > 1
-                output_shape = args[0].shape
-                output_type = args[0].dtype
-                for arg in args:
-                    assert arg.shape == output_shape
-                    assert arg.dtype == output_type
-                out = output_like(args[0])
-                pos = position_in(output_shape)
-                s = args[0][pos]
-                for arg in args[1:]:
-                    s += arg[pos]
-                out[pos] = s
-                return out
-
-            @operator()
-            def zeros(shape=None, dtype=None):
-                out = output(shape, dtype)
-                pos = position_in(shape)
-                out[pos] = 0
-                return out
-
-            f_grad_in_externals = []
-            for f_out_n in range(num_f_outs):
-                if f_out_n in f_outs_unshared:
-                    external_placeholder = _GradientPlaceholder(f_out_types[f_out_n].shape, f_out_types[f_out_n].dtype)
-                    f_grad_inputs.append(external_placeholder)
-                    f_grad_in_externals.append(external_placeholder)
-                elif f_out_n in f_outs_duplicated:
-                    external_placeholder = _GradientPlaceholder(f_out_types[f_out_n].shape, f_out_types[f_out_n].dtype)
-                    shared = [external_placeholder]
-                    for g_in in f_outs_to_g_ins_duplicated[f_out_n]:
-                        shared.append(g_grad_outputs[g_in])
-                    f_grad_inputs.append(gradient_sum(*shared))
-                    f_grad_in_externals.append(external_placeholder)
-                elif f_out_n in f_outs_internalized:
-                    shared = []
-                    for g_in in f_outs_to_g_ins_internalized[f_out_n]:
-                        shared.append(g_grad_outputs[g_in])
-                    if len(shared) == 1:
-                        f_grad_inputs.append(shared[0])
+                # find out which shared connections are duplicated
+                # find mapping of f_out -> g_in for duplicated and internalized connections
+                f_outs_to_g_ins_duplicated = {}
+                f_outs_to_g_ins_internalized = {}
+                g_ins_to_f_outs = {}
+                f_outs_duplicated = set()
+                for g_in in g_ins_shared:
+                    f_out = indices_info.input_to_ouput_index[g_in]
+                    g_ins_to_f_outs[g_in] = f_out
+                    if f_out in f_outs_internalized:
+                        if f_out not in f_outs_to_g_ins_internalized.keys():
+                            f_outs_to_g_ins_internalized[f_out] = set()
+                        f_outs_to_g_ins_internalized[f_out].add(g_in)
                     else:
+                        if f_out not in f_outs_to_g_ins_duplicated.keys():
+                            f_outs_to_g_ins_duplicated[f_out] = set()
+                        f_outs_to_g_ins_duplicated[f_out].add(g_in)
+                        f_outs_duplicated.add(f_out)
+                f_outs_unshared = f_outs_remaining - f_outs_duplicated
+
+                # create an _Operator from the f expression dag
+                f_inputs = []
+                for tt in f_in_types:
+                    external_placeholder = _GradientPlaceholder(tt.shape, tt.dtype)
+                    f_inputs.append(external_placeholder)
+                f_output_types = []
+                for tt in f_out_types:
+                    f_output_types.append(TensorType.from_proto(tt))
+                f_op = _Operator(f, f_output_types, f_inputs, None, True, f.name)
+
+                # create a new set of _Operators that corresponds to g_grad_dag and wire up connections
+                # create inputs for g_grad_dag
+                g_grad_dag = grad_dags[g_n]
+                g_grad_dag_inputs = []
+                for g_grad_dag_in_n, tt in enumerate(g_grad_dag.dag_input_types):
+                    if g_grad_dag_in_n in g_ins_to_f_outs.keys():
+                        g_grad_dag_inputs.append(f_op[g_ins_to_f_outs[g_grad_dag_in_n]])
+                    else:
+                        external_placeholder = _GradientPlaceholder(tt.shape, tt.dtype)
+                        g_grad_dag_inputs.append(external_placeholder)
+
+                def reify_op_dag(op_dag, dag_inputs):
+                    operators = []
+                    for op_n, op in enumerate(op_dag.operators):
+                        op_inputs = []
+                        for ref in op_dag.references[op_n].input_refs:
+                            if ref.is_leaf:
+                                op_inputs.append(dag_inputs[ref.dag_input_index])
+                            else:
+                                op_inputs.append(operators[ref.op_index][ref.op_output_index])
+                        _, _, op_out_types_proto, _ = get_expr_dag_io_info(op)
+                        op_out_types = []
+                        for tt in op_out_types_proto:
+                            op_out_types.append(TensorType.from_proto(tt))
+                        operators.append(_Operator(op, op_out_types, op_inputs, None, True, op.name))
+
+                    outputs = []
+                    for dag_output in op_dag.dag_outputs:
+                        outputs.append(operators[dag_output.op_index][dag_output.op_output_index])
+
+                    return outputs
+
+                g_grad_outputs = reify_op_dag(g_grad_dag, g_grad_dag_inputs)
+                g_grad_external_outputs = []
+                for g_grad_n in sorted(g_ins_unshared):
+                    g_grad_external_outputs.append(g_grad_outputs[g_grad_n])
+
+                # create inputs for f_grad
+                f_grad_inputs = []
+                for f_in_n in range(num_f_ins):
+                    f_grad_inputs.append(f_inputs[f_in_n])
+
+                from .expression import output_like, position_in, output
+
+                @operator()
+                def gradient_sum(*args):
+                    assert len(args) > 1
+                    output_shape = args[0].shape
+                    output_type = args[0].dtype
+                    for arg in args:
+                        assert arg.shape == output_shape
+                        assert arg.dtype == output_type
+                    out = output_like(args[0])
+                    pos = position_in(output_shape)
+                    s = args[0][pos]
+                    for arg in args[1:]:
+                        s += arg[pos]
+                    out[pos] = s
+                    return out
+
+                @operator()
+                def zeros(shape=None, dtype=None):
+                    out = output(shape, dtype)
+                    pos = position_in(shape)
+                    out[pos] = 0
+                    return out
+
+                f_grad_in_externals = []
+                for f_out_n in range(num_f_outs):
+                    if f_out_n in f_outs_unshared:
+                        external_placeholder = _GradientPlaceholder(f_out_types[f_out_n].shape, f_out_types[f_out_n].dtype)
+                        f_grad_inputs.append(external_placeholder)
+                        f_grad_in_externals.append(external_placeholder)
+                    elif f_out_n in f_outs_duplicated:
+                        external_placeholder = _GradientPlaceholder(f_out_types[f_out_n].shape, f_out_types[f_out_n].dtype)
+                        shared = [external_placeholder]
+                        for g_in in f_outs_to_g_ins_duplicated[f_out_n]:
+                            shared.append(g_grad_outputs[g_in])
                         f_grad_inputs.append(gradient_sum(*shared))
-                elif f_out_n in f_outs_pruned:
-                    # external_placeholder = _PrunedInput(f_out_types[f_out_n].shape, f_out_types[f_out_n].dtype)
-                    f_grad_inputs.append(zeros(shape=f_out_types[f_out_n].shape, dtype=f_out_types[f_out_n].dtype))
-                    # output has been pruned, so merged op gets no external gradient for this output
-                else:
-                    raise ValueError('f outputs should be one of: unshared, duplicated, internalized, pruned')
-            f_grad_dag = grad_dags[f_n]
-            f_grad_outputs = reify_op_dag(f_grad_dag, f_grad_inputs)
+                        f_grad_in_externals.append(external_placeholder)
+                    elif f_out_n in f_outs_internalized:
+                        shared = []
+                        for g_in in f_outs_to_g_ins_internalized[f_out_n]:
+                            shared.append(g_grad_outputs[g_in])
+                        if len(shared) == 1:
+                            f_grad_inputs.append(shared[0])
+                        else:
+                            f_grad_inputs.append(gradient_sum(*shared))
+                    elif f_out_n in f_outs_pruned:
+                        # external_placeholder = _PrunedInput(f_out_types[f_out_n].shape, f_out_types[f_out_n].dtype)
+                        f_grad_inputs.append(zeros(shape=f_out_types[f_out_n].shape, dtype=f_out_types[f_out_n].dtype))
+                        # output has been pruned, so merged op gets no external gradient for this output
+                    else:
+                        raise ValueError('f outputs should be one of: unshared, duplicated, internalized, pruned')
+                f_grad_dag = grad_dags[f_n]
+                f_grad_outputs = reify_op_dag(f_grad_dag, f_grad_inputs)
 
-            # append g_grad_external_outputs and generate new op dag
-            f_grad_outputs.extend(g_grad_external_outputs)
-            new_dag = _build_op_dag(*f_grad_outputs)
+                # append g_grad_external_outputs and generate new op dag
+                f_grad_outputs.extend(g_grad_external_outputs)
+                new_dag = _build_op_dag(*f_grad_outputs)
 
-            ordered_final_inputs = []
-            ordered_final_inputs.extend(f_inputs)
-            for g_in in sorted(g_ins_unshared):
-                ordered_final_inputs.append(g_grad_dag_inputs[g_in])
-            ordered_final_inputs.extend(f_grad_in_externals)
-            ordered_final_inputs.extend(g_grad_dag_inputs[-num_g_outs:])
+                ordered_final_inputs = []
+                ordered_final_inputs.extend(f_inputs)
+                for g_in in sorted(g_ins_unshared):
+                    ordered_final_inputs.append(g_grad_dag_inputs[g_in])
+                ordered_final_inputs.extend(f_grad_in_externals)
+                ordered_final_inputs.extend(g_grad_dag_inputs[-num_g_outs:])
 
-            found_inputs = new_dag.inputs
-            input_remap = {}
-            for found_index, found_input in enumerate(found_inputs):
-                grad_index = ordered_final_inputs.index(found_input)
-                input_remap[found_index] = grad_index
+                found_inputs = new_dag.inputs
+                input_remap = {}
+                for found_index, found_input in enumerate(found_inputs):
+                    grad_index = ordered_final_inputs.index(found_input)
+                    input_remap[found_index] = grad_index
 
-            # copy the found proto dag
-            reordered_dag = lang.OperatorDAG()
-            reordered_dag.CopyFrom(new_dag.proto_dag)
+                # copy the found proto dag
+                reordered_dag = lang.OperatorDAG()
+                reordered_dag.CopyFrom(new_dag.proto_dag)
 
-            # clear the input types and put in the correct full signature of gradient inputs
-            del reordered_dag.dag_input_types[:]
-            for grad_input in ordered_final_inputs:
-                cur_type = grad_input.tensor_type.as_proto()
-                reordered_dag.dag_input_types.add().CopyFrom(cur_type)
+                # clear the input types and put in the correct full signature of gradient inputs
+                del reordered_dag.dag_input_types[:]
+                for grad_input in ordered_final_inputs:
+                    cur_type = grad_input.tensor_type.as_proto()
+                    reordered_dag.dag_input_types.add().CopyFrom(cur_type)
 
-            # update the input references to update dag_input_index values
-            for ref in reordered_dag.references:
-                for input_ref in ref.input_refs:
-                    if input_ref.is_leaf:
-                        input_ref.dag_input_index = input_remap[input_ref.dag_input_index]
+                # update the input references to update dag_input_index values
+                for ref in reordered_dag.references:
+                    for input_ref in ref.input_refs:
+                        if input_ref.is_leaf:
+                            input_ref.dag_input_index = input_remap[input_ref.dag_input_index]
 
-            merged_grad_dags[g_n] = reordered_dag
-            del merged_grad_dags[f_n]
+                merged_grad_dags[g_n] = reordered_dag
+                del merged_grad_dags[f_n]
 
-        merged_expr_dag = _merge_expr_dags(ops[to_op_index], ops[from_op_index], indices_info)
+            merged_expr_dag = _merge_expr_dags(ops[to_op_index], ops[from_op_index], indices_info)
 
-        new_out_indices = indices_info.new_out_indices
-        external_inputs_for_to_io = indices_info.external_inputs_for_to_io
-        outputs_removed_in_from = indices_info.outputs_removed_in_from
-        output_from_wout_to_num = len(_get_output_indices(ops[from_op_index])) - len(indices_info.used_only_in_to)
+            new_out_indices = indices_info.new_out_indices
+            external_inputs_for_to_io = indices_info.external_inputs_for_to_io
+            outputs_removed_in_from = indices_info.outputs_removed_in_from
+            output_from_wout_to_num = len(_get_output_indices(ops[from_op_index])) - len(indices_info.used_only_in_to)
 
-        # Build up the newly merged operator dag.
-        new_merged_op_dag = lang.OperatorDAG()
+            # Build up the newly merged operator dag.
+            new_merged_op_dag = lang.OperatorDAG()
 
-        # Update the operators.
-        for i, op in enumerate(ops):
-            # Replace the from operator by the merged operator.
-            if i == from_op_index:
-                new_merged_op_dag.operators.add().CopyFrom(merged_expr_dag)
-            # Copy any op that is neither the from-operator nor the to-operator.
-            elif i != to_op_index:
-                new_merged_op_dag.operators.add().CopyFrom(op)
+            # Update the operators.
+            for i, op in enumerate(ops):
+                # Replace the from operator by the merged operator.
+                if i == from_op_index:
+                    new_merged_op_dag.operators.add().CopyFrom(merged_expr_dag)
+                # Copy any op that is neither the from-operator nor the to-operator.
+                elif i != to_op_index:
+                    new_merged_op_dag.operators.add().CopyFrom(op)
 
-        # Update the input references to operators.
-        for i, ref in enumerate(refs):
-            # Exclude references for the to-operator.
-            if i == to_op_index:
-                continue
+            # Update the input references to operators.
+            for i, ref in enumerate(refs):
+                # Exclude references for the to-operator.
+                if i == to_op_index:
+                    continue
 
-            # Update all other references.
-            ref_list = lang.OperatorDAG.OperatorInputReferences()
+                # Update all other references.
+                ref_list = lang.OperatorDAG.OperatorInputReferences()
 
-            for in_ref in ref.input_refs:
+                for in_ref in ref.input_refs:
 
-                proto_ref = lang.OperatorDAG.OperatorInputReference()
-                proto_ref.is_leaf = in_ref.is_leaf
-                op_index = in_ref.op_index
-                # Input index is the same input from the op dag.
-                proto_ref.dag_input_index = in_ref.dag_input_index
+                    proto_ref = lang.OperatorDAG.OperatorInputReference()
+                    proto_ref.is_leaf = in_ref.is_leaf
+                    op_index = in_ref.op_index
+                    # Input index is the same input from the op dag.
+                    proto_ref.dag_input_index = in_ref.dag_input_index
 
+                    if op_index == from_op_index:
+                        proto_ref.op_output_index = new_out_indices[in_ref.op_output_index]
+                    elif op_index == to_op_index:
+                        proto_ref.op_output_index = output_from_wout_to_num + in_ref.op_output_index
+                    else:
+                        proto_ref.op_output_index = in_ref.op_output_index
+
+                    if op_index > to_op_index:
+                        op_index -= 1
+                    elif op_index == to_op_index:
+                        op_index = from_op_index
+
+                    proto_ref.op_index = op_index
+                    ref_list.input_refs.add().CopyFrom(proto_ref)
+
+                if i == from_op_index:
+                    # Uses the to_op_index in refs to ge the input_refs!
+                    for input_index, in_ref in enumerate(refs[to_op_index].input_refs):
+                        # Add the input reference only if this input of the 'to-op' has not yet been mapped to an output of
+                        # the 'from-op'.
+                        if input_index in external_inputs_for_to_io:
+                            proto_ref = lang.OperatorDAG.OperatorInputReference()
+                            proto_ref.is_leaf = in_ref.is_leaf
+                            op_index = in_ref.op_index
+                            if op_index > to_op_index:
+                                op_index -= 1
+                            elif op_index == to_op_index:
+                                op_index = from_op_index
+                            proto_ref.op_index = op_index
+                            proto_ref.op_output_index = in_ref.op_output_index
+                            proto_ref.dag_input_index = in_ref.dag_input_index
+                            ref_list.input_refs.add().CopyFrom(proto_ref)
+
+                new_merged_op_dag.references.add().CopyFrom(ref_list)
+
+            # Create the outputs of the merged op.
+            for i, dag_output in enumerate(merged_op_dag.dag_outputs):
+                proto_out = lang.OperatorDAG.DAGOutputReference()
+                op_index = dag_output.op_index
+                proto_out.op_output_index = dag_output.op_output_index
+                if op_index == to_op_index:
+                    proto_out.op_output_index += output_from_wout_to_num
                 if op_index == from_op_index:
-                    proto_ref.op_output_index = new_out_indices[in_ref.op_output_index]
-                elif op_index == to_op_index:
-                    proto_ref.op_output_index = output_from_wout_to_num + in_ref.op_output_index
-                else:
-                    proto_ref.op_output_index = in_ref.op_output_index
+                    # Subtract as many from the op-output-index as has been removed that are smaller or equal to this index.
+                    sub_value = 0
+                    for out_remove_io in outputs_removed_in_from:
+                        if out_remove_io <= proto_out.op_output_index:
+                            sub_value += 1
+                    proto_out.op_output_index -= sub_value
 
                 if op_index > to_op_index:
                     op_index -= 1
                 elif op_index == to_op_index:
                     op_index = from_op_index
+                proto_out.op_index = op_index
 
-                proto_ref.op_index = op_index
-                ref_list.input_refs.add().CopyFrom(proto_ref)
+                new_merged_op_dag.dag_outputs.add().CopyFrom(proto_out)
 
-            if i == from_op_index:
-                # Uses the to_op_index in refs to ge the input_refs!
-                for input_index, in_ref in enumerate(refs[to_op_index].input_refs):
-                    # Add the input reference only if this input of the 'to-op' has not yet been mapped to an output of
-                    # the 'from-op'.
-                    if input_index in external_inputs_for_to_io:
-                        proto_ref = lang.OperatorDAG.OperatorInputReference()
-                        proto_ref.is_leaf = in_ref.is_leaf
-                        op_index = in_ref.op_index
-                        if op_index > to_op_index:
-                            op_index -= 1
-                        elif op_index == to_op_index:
-                            op_index = from_op_index
-                        proto_ref.op_index = op_index
-                        proto_ref.op_output_index = in_ref.op_output_index
-                        proto_ref.dag_input_index = in_ref.dag_input_index
-                        ref_list.input_refs.add().CopyFrom(proto_ref)
+            merged_op_dag = new_merged_op_dag
+            group_merge_refs = _group_merge_refs(merged_op_dag, _get_merge_refs_for_op_dag(merged_op_dag))
 
-            new_merged_op_dag.references.add().CopyFrom(ref_list)
+        # Copy the input types only if the merged op dag differs from the initially provided op dag.
+        if merged_op_dag is not proto_op_dag:
+            for dag_input in proto_op_dag.dag_input_types:
+                proto_type = TensorType.like(dag_input).as_proto()
+                merged_op_dag.dag_input_types.add().CopyFrom(proto_type)
 
-        # Create the outputs of the merged op.
-        for i, dag_output in enumerate(merged_op_dag.dag_outputs):
-            proto_out = lang.OperatorDAG.DAGOutputReference()
-            op_index = dag_output.op_index
-            proto_out.op_output_index = dag_output.op_output_index
-            if op_index == to_op_index:
-                proto_out.op_output_index += output_from_wout_to_num
-            if op_index == from_op_index:
-                # Subtract as many from the op-output-index as has been removed that are smaller or equal to this index.
-                sub_value = 0
-                for out_remove_io in outputs_removed_in_from:
-                    if out_remove_io <= proto_out.op_output_index:
-                        sub_value += 1
-                proto_out.op_output_index -= sub_value
-
-            if op_index > to_op_index:
-                op_index -= 1
-            elif op_index == to_op_index:
-                op_index = from_op_index
-            proto_out.op_index = op_index
-
-            new_merged_op_dag.dag_outputs.add().CopyFrom(proto_out)
-
-        merged_op_dag = new_merged_op_dag
-        group_merge_refs = _group_merge_refs(merged_op_dag, _get_merge_refs_for_op_dag(merged_op_dag))
-
-    # Copy the input types only if the merged op dag differs from the initially provided op dag.
-    if merged_op_dag is not proto_op_dag:
-        for dag_input in proto_op_dag.dag_input_types:
-            proto_type = TensorType.like(dag_input).as_proto()
-            merged_op_dag.dag_input_types.add().CopyFrom(proto_type)
-
-    if merged_grad_dags is not None and None not in merged_grad_dags:
-        opt_grad_dags = []
-        for grad_dag in merged_grad_dags:
-            gd, _ = _merge_op_dag(grad_dag, None)
-            opt_grad_dags.append(gd)
-    else:
-        opt_grad_dags = merged_grad_dags
-
-    return merged_op_dag, opt_grad_dags
+        if merged_grad_dags is not None and None not in merged_grad_dags:
+            opt_grad_dags = []
+            for grad_dag in merged_grad_dags:
+                gd, _ = _merge_op_dag(grad_dag, None)
+                opt_grad_dags.append(gd)
+        else:
+            opt_grad_dags = merged_grad_dags
+        _merged_dag_registry[op_dag_hash] = (merged_op_dag, opt_grad_dags)
+        return merged_op_dag, opt_grad_dags
 
 
 def _make_generic_c(src, name):
