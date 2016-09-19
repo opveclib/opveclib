@@ -150,3 +150,48 @@ class TestIntegration(unittest.TestCase):
 
         assert np.allclose(reference, result)
         assert np.allclose(evaluate(op, target_language='cpp'), reference)
+
+    def test_types(self):
+        @operator()
+        def add_inputs(op_input0, op_input1):
+            output = output_like(op_input0)
+            pos = position_in(op_input0.shape)
+            output[pos] = op_input0[pos] + op_input1[pos]
+            return output
+
+        def add_types(dtype):
+            length = 10
+            rng = np.random.RandomState(1)
+
+            def cast(arg):
+                uints = [np.uint8, np.uint16]
+                if dtype in uints:
+                    return np.abs(arg).astype(dtype)
+                else:
+                    return arg.astype(dtype)
+
+            x = cast(rng.uniform(-10, 10, length))
+            y = cast(rng.uniform(-10, 10, length))
+            add_op = add_inputs(x, y)
+            reference = x + y
+            assert np.allclose(evaluate(add_op, target_language='cuda'), reference)
+
+            test_config = tf.ConfigProto(allow_soft_placement=False)
+            # Don't perform optimizations for tests so we don't inadvertently run
+            # gpu ops on cpu
+            test_config.graph_options.optimizer_options.opt_level = -1
+            with tf.Session(config=test_config) as sess:
+                add_tf = as_tensorflow(add_op)
+                result = sess.run([add_tf])
+            assert np.allclose(reference, result)
+
+        add_types(np.float32)
+        add_types(np.float64)
+        add_types(np.int8)
+        add_types(np.int16)
+        # add_types(np.int32)
+        # add_types(np.int64)
+        add_types(np.uint8)
+        add_types(np.uint16)
+
+

@@ -23,14 +23,14 @@
 
 // cuda kernels
 
-__global__ void Add2GPUKernel(const float *in0, const float *in1,  float* out, int size) {
+__global__ void Add2GPUKernel(const int16_t *in0, const int16_t *in1,  int16_t* out, int size) {
   const int thread_id = blockIdx.x * blockDim.x + threadIdx.x;
   const int total_thread_count = gridDim.x * blockDim.x;
 
   int offset = thread_id;
 
   while (offset < size) {
-    out[offset] = in0[offset] + in1[offset] + 1.0;
+    out[offset] = in0[offset] + in1[offset] + 1;
     offset += total_thread_count;
   }
 }
@@ -65,13 +65,13 @@ __global__ void SumSqGPUKernel(const float *in0, const double *in1,  float* out0
 ADDGPU_EXPORT
 void add2float(std::vector<std::shared_ptr<const InputParameter>> inputs,
 		      std::vector<std::shared_ptr<OutputParameter>> outputs, CUstream stream,
-		      uint16_t threads_per_block, uint16_t *err) {
+		      uint32_t threads_per_block, uint32_t *err) {
 	if (inputs.size() != 2) { *err = 1; return; }
 	if (outputs.size() != 1) { *err = 1; return; }
 
-	float *out = outputs[0]->get<float>();
-	const float *in0 = inputs[0]->get<float>();
-	const float *in1 = inputs[1]->get<float>();
+	int16_t *out = outputs[0]->get<int16_t>();
+	const int16_t *in0 = inputs[0]->get<int16_t>();
+	const int16_t *in1 = inputs[1]->get<int16_t>();
 	int64_t len = inputs[0]->length();
 	uint32_t num_blocks = len / threads_per_block;
 	if(len % threads_per_block > 0) num_blocks += 1;
@@ -82,7 +82,7 @@ void add2float(std::vector<std::shared_ptr<const InputParameter>> inputs,
 ADDGPU_EXPORT
 void addFloatDoubleFloat(std::vector<std::shared_ptr<const InputParameter>> inputs,
 		      std::vector<std::shared_ptr<OutputParameter>> outputs, CUstream stream,
-		      uint16_t threads_per_block, uint16_t *err) {
+		      uint32_t threads_per_block, uint32_t *err) {
 	if (inputs.size() != 3) { *err = 1; return; }
 	if (outputs.size() != 1) { *err = 1; return; }
 
@@ -101,7 +101,7 @@ void addFloatDoubleFloat(std::vector<std::shared_ptr<const InputParameter>> inpu
 ADDGPU_EXPORT
 void sumAndSq(std::vector<std::shared_ptr<const InputParameter>> inputs,
 		      std::vector<std::shared_ptr<OutputParameter>> outputs, CUstream stream,
-		      uint16_t threads_per_block, uint16_t *err) {
+		      uint32_t threads_per_block, uint32_t *err) {
 	if (inputs.size() != 2) { *err = 1; return; }
 	if (outputs.size() != 2) { *err = 1; return; }
 

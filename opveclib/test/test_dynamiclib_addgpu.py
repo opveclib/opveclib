@@ -55,24 +55,24 @@ class DynamicLibAddGPUTest(unittest.TestCase):
                 # clean up .o files
                 subprocess.call(['rm', cuda_o_path])
 
-            devices = ['/cpu:0', '/gpu:0']
+            devices = ['/gpu:0']
         else:
             devices = ['/cpu:0']
         for dev_string in devices:
             logger.debug('*** device: {dev}'.format(dev= dev_string))
-            test_config=tf.ConfigProto(allow_soft_placement=False)
+            test_config=tf.ConfigProto(allow_soft_placement=False, log_device_placement=True)
             # Don't perform optimizations for tests so we don't inadvertently run
             # gpu ops on cpu
             test_config.graph_options.optimizer_options.opt_level = -1
             with tf.Session(config=test_config):
                 logger.debug('*** add2float')
                 with tf.device(dev_string):
-                    in0 = np.random.rand(3,50).astype(np.float32)
-                    in1 = np.random.rand(3,50).astype(np.float32)
-                    ones = np.ones((3,50), dtype=np.float32)
+                    in0 = np.random.rand(3,50).astype(np.int16)
+                    in1 = np.random.rand(3,50).astype(np.int16)
+                    ones = np.ones((3,50), dtype=np.int16)
                     output = _DynamicLibOp.module().dynamic_lib(inputs=[in0, in1],
                                                                out_shapes=[[3,50]],
-                                                               out_types=['float'],
+                                                               out_types=['int16'],
                                                                cpu_lib_path=cpulib,
                                                                cpu_func_name="add2float",
                                                                gpu_lib_path=gpulib,
@@ -86,8 +86,11 @@ class DynamicLibAddGPUTest(unittest.TestCase):
                         ref = np.add(ref,ones)
                     assert np.allclose(output[0].eval(), ref)
 
-                    in2 = np.random.rand(3,50).astype(np.float64)
                     logger.debug('*** addFloatDoubleFloat')
+                    in0 = np.random.rand(3,50).astype(np.float32)
+                    in1 = np.random.rand(3,50).astype(np.float32)
+                    in2 = np.random.rand(3,50).astype(np.float64)
+                    ones = np.ones((3,50), dtype=np.float32)
                     output = _DynamicLibOp.module().dynamic_lib(inputs=[in0, in2, in1],
                                                                        out_shapes=[[3,50]],
                                                                        out_types=['float'],

@@ -20,7 +20,7 @@
 //#define EIGEN_USE_NONBLOCKING_THREAD_POOL
 
 // worker functions
-void Add2CPUWork(const float *in0, const float *in1, float* out, int64_t len,
+void Add2CPUWork(const int16_t *in0, const int16_t *in1, int16_t* out, int64_t len,
                  uint32_t block_size, uint32_t thread_index) {
     int64_t begin = thread_index * block_size;
     int64_t end = begin + block_size;
@@ -66,9 +66,9 @@ void add2float(std::vector<std::shared_ptr<const InputParameter>> inputs,
 	    return;
 	}
 
-	float *out = outputs[0]->get<float>();
-	const float *in0 = inputs[0]->get<float>();
-	const float *in1 = inputs[1]->get<float>();
+	int16_t *out = outputs[0]->get<int16_t>();
+	const int16_t *in0 = inputs[0]->get<int16_t>();
+	const int16_t *in1 = inputs[1]->get<int16_t>();
 	int64_t len = inputs[0]->length();
 
 	// Make ParallelFor use as many threads as possible.

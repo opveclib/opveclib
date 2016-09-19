@@ -43,8 +43,8 @@ REGISTER_OP("DynamicLib")
     .Attr("grad_dag_arg_index: list(int)")
     .Attr("cuda_threads_per_block: int")
     .Attr("out_shapes: list(shape)")
-    .Attr("in_types: list({float, double}) >= 0")
-    .Attr("out_types: list({float, double})")
+    .Attr("in_types: list({float, double, int8, int16, int32, int64, uint8, uint16}) >= 0")
+    .Attr("out_types: list({float, double, int8, int16, int32, int64, uint8, uint16})")
     .Input("inputs: in_types")
     .Output("outputs: out_types")
     .Doc(R"doc(call a dynamically generated library operation)doc");
@@ -229,10 +229,40 @@ class DynamicLibOp : public OpKernel {
                      new TypedInput<double>(cur_input.flat<double>().data(),
                                             cur_input.NumElements()));
               break;
+            case (DT_INT8):
+              inputs.emplace_back(
+                     new TypedInput<int8_t>(cur_input.flat<int8_t>().data(),
+                                           cur_input.NumElements()));
+              break;
+            case (DT_INT16):
+              inputs.emplace_back(
+                     new TypedInput<int16_t>(cur_input.flat<int16_t>().data(),
+                                           cur_input.NumElements()));
+              break;
+            case (DT_INT32):
+              inputs.emplace_back(
+                     new TypedInput<int32_t>(cur_input.flat<int32_t>().data(),
+                                           cur_input.NumElements()));
+              break;
+//            case (DT_INT64):
+//              inputs.emplace_back(
+//                     new TypedInput<int64_t>(cur_input.flat<int64_t>().data(),
+//                                           cur_input.NumElements()));
+//              break;
+            case (DT_UINT8):
+              inputs.emplace_back(
+                     new TypedInput<uint8_t>(cur_input.flat<uint8_t>().data(),
+                                           cur_input.NumElements()));
+              break;
+            case (DT_UINT16):
+              inputs.emplace_back(
+                     new TypedInput<uint16_t>(cur_input.flat<uint16_t>().data(),
+                                           cur_input.NumElements()));
+              break;
             default:
               OP_REQUIRES(context, false,
                           errors::InvalidArgument(
-                          "Only float and double inputs are supported."));
+                          "Only float, double int8, int16, int32, int64, uint8, uint16 inputs supported."));
               break;
             }
       }
@@ -267,10 +297,40 @@ class DynamicLibOp : public OpKernel {
                                output_tensor[i]->template flat<double>().data(),
                                output_tensor[i]->NumElements()));
                 break;
+            case (DT_INT8):
+                outputs.emplace_back(new TypedOutput<int8_t>(
+                               output_tensor[i]->template flat<int8_t>().data(),
+                               output_tensor[i]->NumElements()));
+                break;
+            case (DT_INT16):
+                outputs.emplace_back(new TypedOutput<int16_t>(
+                               output_tensor[i]->template flat<int16_t>().data(),
+                               output_tensor[i]->NumElements()));
+                break;
+            case (DT_INT32):
+                outputs.emplace_back(new TypedOutput<int32_t>(
+                               output_tensor[i]->template flat<int32_t>().data(),
+                               output_tensor[i]->NumElements()));
+                break;
+//            case (DT_INT64):
+//                outputs.emplace_back(new TypedOutput<int64_t>(
+//                               output_tensor[i]->template flat<int64_t>().data(),
+//                               output_tensor[i]->NumElements()));
+//                break;
+            case (DT_UINT8):
+                outputs.emplace_back(new TypedOutput<uint8_t>(
+                               output_tensor[i]->template flat<uint8_t>().data(),
+                               output_tensor[i]->NumElements()));
+                break;
+            case (DT_UINT16):
+                outputs.emplace_back(new TypedOutput<uint16_t>(
+                               output_tensor[i]->template flat<uint16_t>().data(),
+                               output_tensor[i]->NumElements()));
+                break;
             default:
                 OP_REQUIRES(context, false,
                     errors::InvalidArgument(
-                            "Only float and double outputs are supported."));
+                            "Only float, double int8, int16, int32, int64, uint8, uint16 outputs supported."));
                 break;
           }
       }
