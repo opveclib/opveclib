@@ -62,7 +62,7 @@ class TestTensorExpression(unittest.TestCase):
     def test_tensor_type(self):
         catch_error(lambda x: TensorType(x, float32), 'string', TypeError)
         catch_error(lambda x: TensorType(x, float32), (1, 2, 3.3), TypeError)
-        catch_error(lambda x: TensorType(x, float32), np.array([1, 2, 3]), TypeError)
+        catch_error(lambda x: TensorType(x, float32), np.array([1.0, 2.0, 3.0]), TypeError)
         catch_error(lambda x: TensorType(x, float32), [0, 5], ValueError)
 
         assert TensorType((1, 2, 3), float32) == TensorType([1, 2, 3], float32)

@@ -92,7 +92,7 @@ class TestMath(unittest.TestCase):
         """
         Ensure that all component-wise binary functions in the math op library yield an identical gradient to tensorflow
         """
-        test_config=tf.ConfigProto(allow_soft_placement=False)
+        test_config = tf.ConfigProto(allow_soft_placement=False)
         test_config.graph_options.optimizer_options.opt_level = -1
         with tf.Session(config=test_config) as s:
             lhs_np = np.random.random(100)
@@ -130,7 +130,7 @@ class TestMath(unittest.TestCase):
         """
         Ensure that all component-wise unary functions in the math op library yield an identical gradient to tensorflow
         """
-        test_config=tf.ConfigProto(allow_soft_placement=False)
+        test_config = tf.ConfigProto(allow_soft_placement=False)
         test_config.graph_options.optimizer_options.opt_level = -1
         with tf.Session(config=test_config) as s:
             arg_np = np.random.random(100)
@@ -157,7 +157,7 @@ class TestMath(unittest.TestCase):
             test_grad(lambda x: sigmoid(x), lambda x: tf.sigmoid(x))
 
     def test_concat(self):
-        test_config=tf.ConfigProto(allow_soft_placement=False)
+        test_config = tf.ConfigProto(allow_soft_placement=False)
         test_config.graph_options.optimizer_options.opt_level = -1
         with tf.Session(config=test_config) as s:
             num_concat = 5
@@ -215,7 +215,7 @@ class TestMath(unittest.TestCase):
             assert np.all(np.equal(*s.run([tf_irr, ovl_irr])))
 
     def test_split(self):
-        test_config=tf.ConfigProto(allow_soft_placement=False)
+        test_config = tf.ConfigProto(allow_soft_placement=False)
         test_config.graph_options.optimizer_options.opt_level = -1
         with tf.Session(config=test_config) as s:
             arg_1d = tf.constant(np.random.random(10))
@@ -273,7 +273,7 @@ class TestMath(unittest.TestCase):
         vec_len = 500
         forget = 0.0
 
-        test_config=tf.ConfigProto(allow_soft_placement=False)
+        test_config = tf.ConfigProto(allow_soft_placement=False)
         test_config.graph_options.optimizer_options.opt_level = -1
         with tf.Session(config=test_config) as s:
             concat_arg = tf.constant(np.random.normal(size=batches*4*vec_len).reshape((batches, 4*vec_len)))
@@ -290,17 +290,18 @@ class TestMath(unittest.TestCase):
             new_h = tanh(new_c) * sigmoid(o)
             new_c_ovl, new_h_ovl = as_tensorflow([new_c, new_h])
 
-            assert np.allclose(*s.run([new_c_tf, new_c_ovl]))
-            assert np.allclose(*s.run([new_h_tf, new_h_ovl]))
+            assert np.allclose(*s.run([new_c_tf, new_c_ovl]), rtol=1e-2)
+            assert np.allclose(*s.run([new_h_tf, new_h_ovl]), rtol=1e-2)
 
             c_grad = tf.constant(np.random.normal(size=batches*vec_len).reshape((batches, vec_len)))
             h_grad = tf.constant(np.random.normal(size=batches*vec_len).reshape((batches, vec_len)))
 
-            concat_grad_tf = tf.gradients([new_c_tf, new_h_tf], concat_arg, [c_grad, h_grad])[0]
-            concat_grad_ovl = tf.gradients([new_c_ovl, new_h_ovl], concat_arg, [c_grad, h_grad])[0]
+            # gradients must be manually summed for tf version - why?
+            dnc_dc, dnc_dcat = tf.gradients([new_c_tf], [c, concat_arg], [c_grad])
+            dnh_dc, dnh_dcat = tf.gradients([new_h_tf], [c, concat_arg], [h_grad])
+            c_grad_tf, concat_grad_tf = dnc_dc+dnh_dc, dnc_dcat+dnh_dcat
 
-            c_grad_tf = tf.gradients([new_c_tf, new_h_tf], c, [c_grad, h_grad])[0]
-            c_grad_ovl = tf.gradients([new_c_ovl, new_h_ovl], c, [c_grad, h_grad])[0]
+            c_grad_ovl, concat_grad_ovl = tf.gradients([new_h_ovl, new_c_ovl], [c, concat_arg], [h_grad, c_grad])
 
-            assert np.allclose(*s.run([concat_grad_tf, concat_grad_ovl]))
-            assert np.allclose(*s.run([c_grad_tf, c_grad_ovl]))
+            assert np.allclose(*s.run([concat_grad_tf, concat_grad_ovl]), rtol=1e-2)
+            assert np.allclose(*s.run([c_grad_tf, c_grad_ovl]), rtol=1e-2)

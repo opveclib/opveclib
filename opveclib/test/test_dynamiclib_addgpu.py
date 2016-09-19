@@ -78,7 +78,6 @@ class DynamicLibAddGPUTest(unittest.TestCase):
                                                                gpu_lib_path=gpulib,
                                                                gpu_func_name="add2float",
                                                                serialized_grad_dag='',
-                                                               grad_dag_arg_index=[],
                                                                cuda_threads_per_block=_default_cuda_threads_per_block)
 
                     ref = np.add(in0,in1)
@@ -99,7 +98,6 @@ class DynamicLibAddGPUTest(unittest.TestCase):
                                                                        gpu_lib_path= gpulib,
                                                                        gpu_func_name="addFloatDoubleFloat",
                                                                        serialized_grad_dag='',
-                                                                       grad_dag_arg_index=[],
                                                                        cuda_threads_per_block=_default_cuda_threads_per_block)
                     ref = (in0 + in2 + in1).astype(np.float32)
                     if (dev_string is '/gpu:0'):
@@ -115,7 +113,6 @@ class DynamicLibAddGPUTest(unittest.TestCase):
                                                                        gpu_lib_path= gpulib,
                                                                        gpu_func_name="sumAndSq",
                                                                        serialized_grad_dag='',
-                                                                       grad_dag_arg_index=[],
                                                                        cuda_threads_per_block=_default_cuda_threads_per_block)
 
                     out0 = (in0 + in2).astype(np.float32)
