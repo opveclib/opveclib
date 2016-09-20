@@ -174,7 +174,10 @@ class TestIntegration(unittest.TestCase):
             y = cast(rng.uniform(-10, 10, length))
             add_op = add_inputs(x, y)
             reference = x + y
-            assert np.allclose(evaluate(add_op, target_language='cuda'), reference)
+            if cuda_enabled:
+                assert np.allclose(evaluate(add_op, target_language='cuda'), reference)
+            else:
+                assert np.allclose(evaluate(add_op, target_language='cpp'), reference)
 
             test_config = tf.ConfigProto(allow_soft_placement=False)
             # Don't perform optimizations for tests so we don't inadvertently run
