@@ -21,10 +21,7 @@ This graph has three triangles (0, 1, 3), (0, 2, 3), and (2, 3, 4).
 
 Source Code
 -----------
-.. autofunction:: examples.test_graph.countTrianglesGPU
-
-.. autofunction:: examples.test_graph.countTrianglesCPU
-
+.. autofunction:: examples.test_graph.triangles
 
 Triangle Counting
 -----------------
