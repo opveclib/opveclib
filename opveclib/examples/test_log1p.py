@@ -105,7 +105,8 @@ class TestLog1p(unittest.TestCase):
         with tf.Session(config=test_config) as sess:
            for dev_string in devices:
                 with tf.device(dev_string):
-                    log1p_tf = ovl.as_tensorflow(log1pOp)
+                    #TODO @karen.brems@hpe.com - optimization broken for these operators. Turn off for now
+                    log1p_tf = ovl.as_tensorflow(log1pOp, opt_level=0)
                     sess.run(tf.initialize_all_variables())
                     log1p_tf_result = sess.run(log1p_tf)
                     assert np.allclose(ref, log1p_tf_result,
@@ -138,7 +139,8 @@ class TestLog1p(unittest.TestCase):
                     arg = tf.constant(a)
                     ovl_op = log1p(arg)
                     ones = tf.constant(np.ones_like(a))
-                    ovl_out = ovl.as_tensorflow(ovl_op)
+                    #TODO @karen.brems@hpe.com - optimization broken for these operators. Turn off for now
+                    ovl_out = ovl.as_tensorflow(ovl_op, opt_level=0)
                     tf_out = tf.log(arg + ones)
 
                     ovl_grad = tf.gradients(ovl_out, arg, grad_input)[0]

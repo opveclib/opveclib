@@ -65,7 +65,7 @@ __global__ void SumSqGPUKernel(const float *in0, const double *in1,  float* out0
 ADDGPU_EXPORT
 void add2float(std::vector<std::shared_ptr<const InputParameter>> inputs,
 		      std::vector<std::shared_ptr<OutputParameter>> outputs, CUstream stream,
-		      uint32_t threads_per_block, uint32_t *err) {
+		      uint32_t threads_per_block, uint16_t *err) {
 	if (inputs.size() != 2) { *err = 1; return; }
 	if (outputs.size() != 1) { *err = 1; return; }
 
@@ -82,7 +82,7 @@ void add2float(std::vector<std::shared_ptr<const InputParameter>> inputs,
 ADDGPU_EXPORT
 void addFloatDoubleFloat(std::vector<std::shared_ptr<const InputParameter>> inputs,
 		      std::vector<std::shared_ptr<OutputParameter>> outputs, CUstream stream,
-		      uint32_t threads_per_block, uint32_t *err) {
+		      uint32_t threads_per_block, uint16_t *err) {
 	if (inputs.size() != 3) { *err = 1; return; }
 	if (outputs.size() != 1) { *err = 1; return; }
 
@@ -101,7 +101,7 @@ void addFloatDoubleFloat(std::vector<std::shared_ptr<const InputParameter>> inpu
 ADDGPU_EXPORT
 void sumAndSq(std::vector<std::shared_ptr<const InputParameter>> inputs,
 		      std::vector<std::shared_ptr<OutputParameter>> outputs, CUstream stream,
-		      uint32_t threads_per_block, uint32_t *err) {
+		      uint32_t threads_per_block, uint16_t *err) {
 	if (inputs.size() != 2) { *err = 1; return; }
 	if (outputs.size() != 2) { *err = 1; return; }
 

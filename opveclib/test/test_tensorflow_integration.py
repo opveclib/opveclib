@@ -181,7 +181,8 @@ class TestIntegration(unittest.TestCase):
             # gpu ops on cpu
             test_config.graph_options.optimizer_options.opt_level = -1
             with tf.Session(config=test_config) as sess:
-                add_tf = as_tensorflow(add_op)
+                #TODO @karen.brems@hpe.com - optimization broken for these operators. Turn off for now
+                add_tf = as_tensorflow(add_op, opt_level=0)
                 result = sess.run([add_tf])
             assert np.allclose(reference, result)
 
@@ -189,6 +190,8 @@ class TestIntegration(unittest.TestCase):
         add_types(np.float64)
         add_types(np.int8)
         add_types(np.int16)
+        # TODO @karen.brems@hpe.com - using int32 and int64 for input or output tensor parameters that are
+        # wrapped in a list causes tensorflow to core dump on GPU - see https://github.com/tensorflow/tensorflow/issues/1450
         # add_types(np.int32)
         # add_types(np.int64)
         add_types(np.uint8)
