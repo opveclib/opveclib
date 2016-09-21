@@ -44,7 +44,7 @@ RUN curl -O https://bootstrap.pypa.io/get-pip.py && \
 RUN pip3 install nose2
 
 # Install TensorFlow CPU version for both python2.7 and python 3.4.
-ENV TENSORFLOW_VERSION 0.10.0rc0
+ENV TENSORFLOW_VERSION 0.10.0
 RUN pip2 --no-cache-dir install --upgrade \
     https://storage.googleapis.com/tensorflow/linux/gpu/tensorflow-${TENSORFLOW_VERSION}-cp27-none-linux_x86_64.whl
 RUN pip3 --no-cache-dir install --upgrade \
