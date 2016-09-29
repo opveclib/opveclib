@@ -2385,7 +2385,7 @@ def _dag_to_tf(dag, inputs, grad_dags):
             else:
                 cur_inputs.append(output_tensors[ref.op_index][ref.op_output_index])
 
-        if grad_dags[op_index] is None:
+        if grad_dags is None or grad_dags[op_index] is None:
             serialized_grad_dag = ''
         else:
             serialized_grad_dag = grad_dags[op_index].SerializeToString()

@@ -351,7 +351,7 @@ Outputs:
 
 .. testoutput::
 
-    [8.  26.  44.]
+    [  8.  26.  44.]
 
 
 Worker-local tensors
