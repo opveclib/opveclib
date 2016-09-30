@@ -106,8 +106,7 @@ class TestExpm1(unittest.TestCase):
         with tf.Session(config=test_config) as sess:
            for dev_string in devices:
                 with tf.device(dev_string):
-                    #TODO @karen.brems@hpe.com - optimization broken for these operators. Turn off for now
-                    expm1_tf = ovl.as_tensorflow(expm1_op, opt_level=0)
+                    expm1_tf = ovl.as_tensorflow(expm1_op)
                     sess.run(tf.initialize_all_variables())
                     expm1_tf_result = sess.run(expm1_tf)
                     assert np.allclose(ref, expm1_tf_result,
@@ -140,8 +139,7 @@ class TestExpm1(unittest.TestCase):
                     arg = tf.constant(a)
                     ovl_op = expm1(arg)
                     ones = tf.constant(np.ones_like(a))
-                    #TODO @karen.brems@hpe.com - optimization broken for these operators. Turn off for now
-                    ovl_out = ovl.as_tensorflow(ovl_op, opt_level=0)
+                    ovl_out = ovl.as_tensorflow(ovl_op)
                     tf_out = tf.exp(arg) - ones
 
                     ovl_grad = tf.gradients(ovl_out, arg, grad_input)[0]

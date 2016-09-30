@@ -184,8 +184,7 @@ class TestIntegration(unittest.TestCase):
             # gpu ops on cpu
             test_config.graph_options.optimizer_options.opt_level = -1
             with tf.Session(config=test_config) as sess:
-                #TODO @karen.brems@hpe.com - optimization broken for these operators. Turn off for now
-                add_tf = as_tensorflow(add_op, opt_level=0)
+                add_tf = as_tensorflow(add_op)
                 result = sess.run([add_tf])
             assert np.allclose(reference, result)
 
