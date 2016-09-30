@@ -345,6 +345,18 @@ enum ExpressionCode {
     //      operands must have a dtype of FLOAT32, FLOAT64
     //      operands must have same type
     ATAN2 = 303;
+
+    // Classification functions - return True or False.
+    // Mirror the numpy functions isinf, isfinite and isnan
+    //  data:
+    //      DType dtype: input type
+    //  operand:
+    //      [0] ANY: the operand
+    //  requirements:
+    //      operand must have a dtype of FLOAT32, FLOAT64
+    ISINF = 304;
+    ISFINITE = 305;
+    ISNAN = 306;
 }
 
 

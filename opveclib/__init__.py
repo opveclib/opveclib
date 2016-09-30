@@ -31,6 +31,7 @@ from .expression import arccos, arcsin, arctan, cos, cosh, sin, sinh, tan, tanh
 from .expression import exp, log, log10, sqrt
 from .expression import ceil, absolute, floor
 from .expression import logical_not
+from .expression import isinf, isfinite, isnan
 # @@ Binary math
 from .expression import minimum, maximum, power, arctan2, logical_and, logical_or
 

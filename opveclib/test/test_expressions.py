@@ -364,6 +364,9 @@ class TestTensorExpression(unittest.TestCase):
             assert_equivalent(absolute(x), _UnaryMath(x, lang.ABS))
             assert_equivalent(logical_not(x), _UnaryMath(x, lang.NOT))
             assert_equivalent(-x, _UnaryMath(x, lang.NEGATE))
+            assert_equivalent(isinf(x), _UnaryMath(x, lang.ISINF))
+            assert_equivalent(isfinite(x), _UnaryMath(x, lang.ISFINITE))
+            assert_equivalent(isnan(x), _UnaryMath(x, lang.ISNAN))
 
         assert_all(a)
         assert_all(b)

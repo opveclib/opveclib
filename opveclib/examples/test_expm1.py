@@ -51,7 +51,9 @@ def expm1(x):
     e = ovl.exp(x[pos])
 
     # note, this is an example of the use of the OVL conditional operators
-    with ovl.if_(e == 1.0):
+    with ovl.if_(ovl.logical_and(ovl.isinf(x[pos]), x[pos] > 0.0)):
+        output[pos] = x[pos]
+    with ovl.elif_(e == 1.0):
         output[pos] = x[pos]
     with ovl.elif_ ((e - 1.0) == -1.0):
         output[pos] = -1.0
@@ -83,7 +85,7 @@ class TestExpm1(unittest.TestCase):
         """
         Test the correctness of ovl operator vs numpy implementation
         """
-        a = np.array([1e-10, -1e-10, 0.0], dtype=np.float64)
+        a = np.array([1e-10, -1e-10, 0.0, np.Infinity], dtype=np.float64)
         expm1_op = expm1(a)
         ref = np.expm1(a)
         ovl_res = ovl.evaluate(expm1_op)

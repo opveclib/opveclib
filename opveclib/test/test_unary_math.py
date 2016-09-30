@@ -12,7 +12,7 @@ import unittest
 import numpy as np
 from ..operator import operator, evaluate
 from ..expression import output_like, position_in, absolute, logical_not, arctan, arccos, arcsin, \
-    cos, cosh, sin, sinh, tan, tanh, exp, log, log10, sqrt, ceil, floor
+    cos, cosh, sin, sinh, tan, tanh, exp, log, log10, sqrt, ceil, floor, isinf, isfinite, isnan
 from ..local import cuda_enabled, clear_op_cache, logger
 
 
@@ -99,6 +99,15 @@ class TestUnaryMath(unittest.TestCase):
         for t in types:
             gen(rand.astype(t), not_ops, not_np)
     test_not.regression = 1
+
+    def test_classify(self):
+        test_input = np.array([1.5, 0, np.nan, np.inf])
+        types = [np.float32, np.float64]
+        for t in types:
+            gen(test_input.astype(t), lambda x: isinf(x), lambda x: np.isinf(x))
+            gen(test_input.astype(t), lambda x: isfinite(x), lambda x: np.isfinite(x))
+            gen(test_input.astype(t), lambda x: isnan(x), lambda x: np.isnan(x))
+    test_classify.regression = 0
 
     def unary(self, input_type):
         length = 100

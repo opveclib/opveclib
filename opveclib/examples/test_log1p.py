@@ -52,7 +52,9 @@ def log1p(x):
     d = u - 1.0
 
     # note, this is an example of the use of the OVL conditional operators
-    with ovl.if_(d == 0):
+    with ovl.if_(ovl.logical_and(ovl.isinf(x[pos]), x[pos] > 0.0)):
+        output[pos] = x[pos]
+    with ovl.elif_(d == 0):
         output[pos] = x[pos]
     with ovl.else_():
         output[pos] = ovl.log(u) * x[pos] / d
@@ -82,7 +84,7 @@ class TestLog1p(unittest.TestCase):
         """
         Test the correctness of ovl operator vs numpy implementation
         """
-        a = np.array([1e-99, -1e-99, 0.0], dtype=np.float64)
+        a = np.array([1e-99, -1e-99, 0.0, np.Infinity], dtype=np.float64)
         log1pOp = log1p(a)
         ref = np.log1p(a)
         ovl_res = ovl.evaluate(log1pOp)

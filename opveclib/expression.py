@@ -499,7 +499,10 @@ class ExpressionDAG(object):
             lang.MIN: _BinaryMath,
             lang.MAX: _BinaryMath,
             lang.POW: _BinaryMath,
-            lang.ATAN2: _BinaryMath
+            lang.ATAN2: _BinaryMath,
+            lang.ISINF: _UnaryMath,
+            lang.ISFINITE: _UnaryMath,
+            lang.ISNAN: _UnaryMath
         }
 
         ExpressionDAG.clear()
@@ -1574,7 +1577,10 @@ class _UnaryMath(Scalar):
                       lang.INT8: '-', lang.INT16: '-', lang.INT32: '-', lang.INT64: '-'},
         lang.NOT: {lang.FLOAT32: '!', lang.FLOAT64: '!',
                       lang.INT8: '!', lang.INT16: '!', lang.INT32: '!', lang.INT64: '!',
-                      lang.UINT8: '!', lang.UINT16: '!', lang.UINT32: '!', lang.UINT64: '!'}
+                      lang.UINT8: '!', lang.UINT16: '!', lang.UINT32: '!', lang.UINT64: '!'},
+        lang.ISINF: {lang.FLOAT32: 'isinf', lang.FLOAT64: 'isinf'},
+        lang.ISFINITE: {lang.FLOAT32: 'isfinite', lang.FLOAT64: 'isfinite'},
+        lang.ISNAN: {lang.FLOAT32: 'isnan', lang.FLOAT64: 'isnan'}
     }
 
     def __init__(self, arg, expr_code):
@@ -1670,6 +1676,17 @@ def absolute(x):
 def logical_not(x):
     return _UnaryMath(x, lang.NOT)
 
+
+def isinf(x):
+    return _UnaryMath(x, lang.ISINF)
+
+
+def isfinite(x):
+    return _UnaryMath(x, lang.ISFINITE)
+
+
+def isnan(x):
+    return _UnaryMath(x, lang.ISNAN)
 
 class _BinaryMath(Scalar):
     """
