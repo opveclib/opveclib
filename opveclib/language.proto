@@ -357,6 +357,17 @@ enum ExpressionCode {
     ISINF = 304;
     ISFINITE = 305;
     ISNAN = 306;
+
+    // Numeric Limits - returns the value for each type
+    //  data:
+    //      none
+    //  operand:
+    //      [0] DType dtype: the operand
+    //  requirements:
+    //      operand must be a dtype of FLOAT32, FLOAT64
+    MIN_VALUE = 307;
+    MAX_VALUE = 308;
+    EPSILON = 309;
 }
 
 

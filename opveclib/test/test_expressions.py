@@ -11,7 +11,7 @@
 import unittest
 from ..expression import *
 from ..expression import _Expression, InputTensor, OutputTensor, _ConstScalar, _ConstTensor, Variable, LocalTensor
-from ..expression import _AssignVariable, _AssignTensor, _ReadTensor, _UnaryMath, _Cast
+from ..expression import _AssignVariable, _AssignTensor, _ReadTensor, _UnaryMath, _Cast, _Limits
 from ..expression import _BinaryMath, _to_scalar_index, PositionTensor, _Range, _If, _ElseIf, _Else, _EndIf
 
 
@@ -383,6 +383,27 @@ class TestTensorExpression(unittest.TestCase):
 
         c = absolute(a)
         assert c.proto_expr == _UnaryMath.from_proto(c.proto_expr, c.input_exprs).proto_expr
+
+    def test_limits(self):
+        ExpressionDAG.clear()
+        catch_error(lambda x: _Limits(float32, x), lang.POSITION, ValueError)
+        catch_error(lambda x: _Limits(x, lang.MIN_VALUE), float16, ValueError)
+        catch_error(lambda x: _Limits(x, lang.MAX_VALUE), 1.0, TypeError)
+
+
+        def assert_equivalent(x, y):
+            assert x.proto_expr == y.proto_expr
+            assert x.input_exprs[0] is y.input_exprs[0]
+            assert x.dtype == y.dtype
+
+        # make sure all exposed limits functions are producing correct expressions for floats and doubles
+        def assert_all(x):
+            assert_equivalent(min_value(x), _Limits(x, lang.MIN_VALUE))
+            assert_equivalent(max_value(x), _Limits(x, lang.MAX_VALUE))
+            assert_equivalent(epsilon(x), _Limits(x, lang.EPSILON))
+
+        assert_all(float32)
+        assert_all(float64)
 
     def test_binary_math(self):
         ExpressionDAG.clear()

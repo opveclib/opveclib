@@ -502,7 +502,10 @@ class ExpressionDAG(object):
             lang.ATAN2: _BinaryMath,
             lang.ISINF: _UnaryMath,
             lang.ISFINITE: _UnaryMath,
-            lang.ISNAN: _UnaryMath
+            lang.ISNAN: _UnaryMath,
+            lang.MIN_VALUE: _Limits,
+            lang.MAX_VALUE: _Limits,
+            lang.EPSILON: _Limits
         }
 
         ExpressionDAG.clear()
@@ -840,6 +843,8 @@ class ExpressionDAG(object):
         :param expr: the expression
         :return: its index
         """
+        print('expr_index - expr is ' + str(expr))
+        print('expr_index - id is ' + str(id(expr)))
         return ExpressionDAG.expr_ids.index(id(expr))
 
 
@@ -1687,6 +1692,58 @@ def isfinite(x):
 
 def isnan(x):
     return _UnaryMath(x, lang.ISNAN)
+
+class _Limits(_Expression):
+    """
+    Limit expressions for each type
+    """
+    code_map = {
+        lang.MIN_VALUE: {lang.FLOAT32: 'FLT_MIN', lang.FLOAT64: 'DBL_MIN'},
+        lang.MAX_VALUE: {lang.FLOAT32: 'FLT_MAX', lang.FLOAT64: 'DBL_MAX'},
+        lang.EPSILON: {lang.FLOAT32: 'FLT_EPSILON', lang.FLOAT64: 'DBL_EPSILON'},
+    }
+
+    def __init__(self, arg, expr_code):
+        print('_Limits init: ' + str(arg) + ' ' + str(expr_code))
+        if expr_code not in list(_Limits.code_map.keys()):
+            raise ValueError(lang.ExpressionCode.Name(expr_code) + 'is an invalid limits code.')
+
+        if not issubclass(arg.__class__, DType):
+            raise TypeError('Must apply limits functions to dtypes. Received: ' + str(arg))
+
+
+        if arg.as_proto() not in list(_Limits.code_map[expr_code].keys()):
+            raise ValueError(str(arg) +
+                             ' arguments not supported for limits function ' +
+                             lang.ExpressionCode.Name(expr_code))
+
+        super(self.__class__, self).__init__(expr_code)
+        self.dtype = arg
+        self.proto_expr.dtype = arg.as_proto()
+
+        self.input_exprs = [arg]
+        print('proto_expr: ' + str(self.proto_expr))
+        print('input_exprs: ' + str(self.input_exprs))
+        super(self.__class__, self)._register()
+
+    @staticmethod
+    def from_proto(proto, input_exprs):
+        print('_Limits from_proto ' + str(proto.code))
+        return _Limits(input_exprs[0], proto.code)
+
+    def gen_c(self):
+        func_string = _Limits.code_map[self.proto_expr.code][self.proto_expr.dtype]
+        return self.dtype.as_cstr() + ' ' + self.name + ' = ' + func_string + ';\n'
+
+def min_value(t):
+    return _Limits(t, lang.MIN_VALUE)
+
+def max_value(t):
+    return _Limits(t, lang.MAX_VALUE)
+
+def epsilon(t):
+    return _Limits(t, lang.EPSILON)
+
 
 class _BinaryMath(Scalar):
     """
