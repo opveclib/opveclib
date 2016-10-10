@@ -96,7 +96,7 @@ Designing the simplest OVL operator requires understanding a few key concepts an
 implementations in the OVL API. This example takes the absolute value of an input tensor and shows all of
 the basic functionality necessary to create and use an operator. New concepts introduced here include:
 
-* An OVL operator is defined by creating a python function and decorating it with he ``operator()`` decorator.
+* An OVL operator is defined by creating a python function and decorating it with the ``operator()`` decorator.
 * Arguments to the operator are the tensors that it will operate on at evaluation time.
 * Output tensors are the only thing that can be returned from operators. They are defined with the ``output`` and
   ``output_like`` functions.
@@ -354,18 +354,96 @@ Outputs:
     [  8.  26.  44.]
 
 
+Gradients
+~~~~~~~~~
+
+An OVL gradient operator a special tye of operator. It is defined by creating a python gradient function and
+decorating it with the ``operator()`` decorator as well as the ``gradient()`` decorator. The arguement to the
+gradient decorator function is the name of the operator it is the gradient for. The gradient function
+must compute the gradients with respect to each of the operators' inputs, given gradients with respect to the operators'
+outputs. Its arguments are the operator input tensors as well as the output gradient tensors from the next higher
+layer in the case of back propagation through a neural network.
+
+Below is a simple operator that computes the function
+
+.. math::
+
+      z_{i} = x_{i}^2  + 3.0 * y_{i}
+
+and its gradient, and tests the gradient against tensorflow
+
+.. testcode::
+
+    import numpy as np
+    import opveclib as ovl
+    import tensorflow as tf
+
+    @ovl.operator()
+    def func(x, y):
+        assert(x.shape == y.shape)
+
+        pos = ovl.position_in(x.shape)
+        z = ovl.output_like(x)
+
+        # compute the function
+        z[pos] = x[pos] * x[pos] + 3.0 * y[pos]
+        return z
+
+
+    @ovl.gradient(func)
+    @ovl.operator()
+    def func_grad(x, y, dz):
+        assert(x.shape == y.shape)
+        assert(x.shape == dz.shape)
+
+        pos = ovl.position_in(x.shape)
+        dx = ovl.output_like(x)
+        dy = ovl.output_like(y)
+
+        # compute the gradients w.r.t each input
+        dx[pos] = 2.0 * x[pos] * dz[pos]
+        dy[pos] = 3.0 * dz[pos]
+        return dx, dy
+
+    # define some input values
+    a = tf.constant(np.arange(5.0))
+    b = tf.constant(np.arange(5.0))
+    grad_above = tf.constant(np.random.random(5))
+
+    # run the operator in tensorflow
+    with tf.Session() as s:
+        func_ovl = ovl.as_tensorflow(func(a, b))
+
+        # define a tensorflow reference operation
+        func_tf = a * a + 3.0 * b
+
+        # register the gradients of the ovl operator and the refenence in tensorflow
+        func_grad_ovl = tf.gradients(func_ovl, [a, b], grad_ys=grad_above)
+        func_grad_tf = tf.gradients(func_tf, [a, b], grad_ys=grad_above)
+
+        # evaluate the outputs
+        func_grad_ovl, func_grad_tf = s.run([func_grad_ovl, func_grad_tf])
+        assert np.all(np.equal(func_grad_ovl, func_grad_tf))
+
+
 Worker-local tensors
 ~~~~~~~~~~~~~~~~~~~~
 
 TODO
 
 
-Operator Fusion
+Operator Merging
 ~~~~~~~~~~~~~~~
 
-TODO
+Typical modern GPUs are able to perform arithmetic operations faster than transfers of a data value in or out of host memory,
+and are thus memory bandwidth limited. If 2 operators that are performed in sequence can be merged into a single operator that
+shares data values in device memory, performance can be improved. In an application using multiple OVL operators in sequence,
+the OVL optimizer will automatically merge any operators that it can. 2 OVL operators in sequence, from and to, will be merged if:
 
-Gradients
-~~~~~~~~~
+    1) the workgroup shape of both operators is the same
+    2) the write indexing pattern of the from operator matches the read indexing pattern of the to operator
+    3) the tensor shape of the output of the from operator matches the tensor shape of the input to the to operator
 
-TODO
+Optimization by automatically merging OVL operators is determined by the opt_level flag that is passed to the ``evaluate``
+and the ``as_tensorflow`` functions. Merging is performed when opt_level >= 3. This is the default optimization level.
+When operators are merged, their gradient operators will also be merged when possible.

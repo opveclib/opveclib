@@ -13,7 +13,6 @@ import numpy as np
 import tensorflow as tf
 from ..operator import operator, gradient, as_tensorflow
 from ..expression import position_in, output_like, if_, elif_, else_, exp, logical_and, variable
-from ..expression import tanh as tanh_expr
 from ..local import clear_op_cache
 
 
@@ -55,9 +54,54 @@ def clip_grad_op(arg, d_arg, threshold1=None, threshold2=None):
 
     return g
 
+@operator()
+def func(x, y):
+    assert(x.shape == y.shape)
+    pos = position_in(x.shape)
+    z = output_like(x)
+
+    z[pos] = x[pos] * x[pos] + 3 * y[pos]
+    return z
+
+
+@gradient(func)
+@operator()
+def func_grad(x, y, dz):
+    assert(x.shape == y.shape)
+    assert(x.shape == dz.shape)
+
+    pos = position_in(x.shape)
+    dx = output_like(x)
+    dy = output_like(y)
+
+    dx[pos] = 2.0 * x[pos] * dz[pos]
+    dy[pos] = 3.0 * dz[pos]
+    return dx, dy
 
 class TestGradients(unittest.TestCase):
     clear_op_cache()
+
+    def test_func_grad(self):
+        """
+        Define a simple function and its gradient and test against a tensorflow reference
+        Z = X^^2 + 3Y
+        """
+        test_config = tf.ConfigProto(allow_soft_placement=False)
+        # Don't perform optimizations for tests so we don't inadvertently run
+        # gpu ops on cpu
+        test_config.graph_options.optimizer_options.opt_level = -1
+        with tf.Session(config=test_config) as s:
+            a = tf.constant(np.random.random(10))
+            b = tf.constant(np.random.random(10))
+            func_ovl = as_tensorflow(func(a, b))
+            func_tf = a * a + 3 * b
+            grad_above = tf.constant(np.random.random(10))
+
+            func_grad_ovl = tf.gradients(func_ovl, [a, b], grad_ys=grad_above)
+            func_grad_tf = tf.gradients(func_tf, [a, b], grad_ys=grad_above)
+
+            func_grad_ovl, func_grad_tf = s.run([func_grad_ovl, func_grad_tf])
+            assert np.all(np.equal(func_grad_ovl, func_grad_tf))
 
     def test_clip_grad(self):
         """
@@ -77,3 +121,4 @@ class TestGradients(unittest.TestCase):
 
             clip_grad_ovl, clip_grad_tf = s.run([clip_grad_ovl, clip_grad_tf])
             assert np.all(np.equal(clip_grad_ovl, clip_grad_tf))
+
