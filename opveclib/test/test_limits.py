@@ -21,7 +21,6 @@ def set_min(arg):
 
     limits = output_like(arg)
     limits[pos] = min_value(float32)
-    # limits[pos] = cast(arg[pos], float32)
 
     return limits
 
