@@ -296,6 +296,8 @@ Outputs:
     [-3. -2. -1.  0.  1.  1.  1.]
     [-1. -1. -1.  0.  1.  1.  1.]
 
+
+
 Loops and non-local IO
 ~~~~~~~~~~~~~~~~~~~~~~
 
@@ -352,6 +354,22 @@ Outputs:
 .. testoutput::
 
     [  8.  26.  44.]
+
+
+Worker-local tensors
+~~~~~~~~~~~~~~~~~~~~
+
+Similar to the OVL Variable, OVL also supports dynamically declared worker-local tensors of any dimension that use
+thread-local memory. An OVL worker local tensor is defined by its shape and type and can be initialized to either
+all zeros or all ones using the `zeros()` or `ones()` functions.
+
+.. code-block:: python
+
+    import opveclib as ovl
+    # declare a 1x3 worker local tensor of type float32, initialized to all zeros
+    a = ovl.zeros((1, 3), ovl.float32)
+    for col in ovl.arange(3):
+        a[col] = 0.9
 
 
 Gradients
@@ -425,11 +443,6 @@ and its gradient, and tests the gradient against tensorflow
         func_grad_ovl, func_grad_tf = s.run([func_grad_ovl, func_grad_tf])
         assert np.all(np.equal(func_grad_ovl, func_grad_tf))
 
-
-Worker-local tensors
-~~~~~~~~~~~~~~~~~~~~
-
-TODO
 
 
 Operator Merging
