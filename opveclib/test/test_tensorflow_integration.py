@@ -192,10 +192,8 @@ class TestIntegration(unittest.TestCase):
         add_types(np.float64)
         add_types(np.int8)
         add_types(np.int16)
-        # TODO @karen.brems@hpe.com - using int32 and int64 for input or output tensor parameters that are
-        # wrapped in a list causes tensorflow to core dump on GPU - see https://github.com/tensorflow/tensorflow/issues/1450
-        # add_types(np.int32)
-        # add_types(np.int64)
+        add_types(np.int32)
+        add_types(np.int64)
         add_types(np.uint8)
         add_types(np.uint16)
 

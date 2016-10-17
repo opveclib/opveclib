@@ -20,7 +20,17 @@
 //#define EIGEN_USE_NONBLOCKING_THREAD_POOL
 
 // worker functions
-void Add2CPUWork(const int16_t *in0, const int16_t *in1, int16_t* out, int64_t len,
+void Add2Int64CPUWork(const int64_tf *in0, const int64_tf *in1, int64_tf* out, int64_t len,
+                 uint32_t block_size, uint32_t thread_index) {
+    int64_t begin = thread_index * block_size;
+    int64_t end = begin + block_size;
+    if (end > len) end = len;
+    for (int64_t i = begin; i < end; i++ ) {
+		out[i] = in0[i] + in1[i];
+	}
+}
+
+void Add2Int32CPUWork(const int32_t *in0, const int32_t *in1, int32_t* out, int64_t len,
                  uint32_t block_size, uint32_t thread_index) {
     int64_t begin = thread_index * block_size;
     int64_t end = begin + block_size;
@@ -54,7 +64,7 @@ void SumSqCPUWork(const float *in0, const double *in1, float* out0, float* out1,
 // CPU functions to be called by the TF dynamic_lib_addgpu_test.py
 
 ADDCPU_EXPORT
-void add2float(std::vector<std::shared_ptr<const InputParameter>> inputs,
+void add2Int64(std::vector<std::shared_ptr<const InputParameter>> inputs,
 		      std::vector<std::shared_ptr<OutputParameter>> outputs,
 		      int num_threads, int thread_index, uint16_t *err) {
 	if (inputs.size() != 2) {
@@ -66,9 +76,9 @@ void add2float(std::vector<std::shared_ptr<const InputParameter>> inputs,
 	    return;
 	}
 
-	int16_t *out = outputs[0]->get<int16_t>();
-	const int16_t *in0 = inputs[0]->get<int16_t>();
-	const int16_t *in1 = inputs[1]->get<int16_t>();
+	int64_tf *out = outputs[0]->get<int64_tf>();
+	const int64_tf *in0 = inputs[0]->get<int64_tf>();
+	const int64_tf *in1 = inputs[1]->get<int64_tf>();
 	int64_t len = inputs[0]->length();
 
 	// Make ParallelFor use as many threads as possible.
@@ -87,7 +97,29 @@ void add2float(std::vector<std::shared_ptr<const InputParameter>> inputs,
 
     uint32_t block_size = len / num_threads;
     if(len % num_threads > 0) block_size += 1;
-    return Add2CPUWork(in0, in1, out, len, block_size, thread_index);
+    return Add2Int64CPUWork(in0, in1, out, len, block_size, thread_index);
+}
+
+ADDCPU_EXPORT
+void add2Int32(std::vector<std::shared_ptr<const InputParameter>> inputs,
+		      std::vector<std::shared_ptr<OutputParameter>> outputs,
+		      int num_threads, int thread_index, uint16_t *err) {
+	if (inputs.size() != 2) {
+	    *err = 1;
+	    return;
+	}
+	if (outputs.size() != 1) {
+	    *err = 1;
+	    return;
+	}
+
+	int32_t *out = outputs[0]->get<int32_t>();
+	const int32_t *in0 = inputs[0]->get<int32_t>();
+	const int32_t *in1 = inputs[1]->get<int32_t>();
+	int64_t len = inputs[0]->length();
+	uint32_t block_size = len / num_threads;
+    if(len % num_threads > 0) block_size += 1;
+    return Add2Int32CPUWork(in0, in1, out, len, block_size, thread_index);
 }
 
 ADDCPU_EXPORT

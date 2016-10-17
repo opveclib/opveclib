@@ -72,7 +72,7 @@ int32_t testCOperator(const char *opLibPath, const char *opFuncName,
             }
             case (opveclib::DType::INT64): {
                 inputs.emplace_back(
-                    new TypedInput<int64_t>(static_cast<const int64_t*>(testInputs[i].data), N));
+                    new TypedInput<int64_tf>(static_cast<const int64_tf*>(testInputs[i].data), N));
                 break;
             }
             case (opveclib::DType::UINT8): {
@@ -140,9 +140,9 @@ int32_t testCOperator(const char *opLibPath, const char *opFuncName,
                 break;
             }
             case (opveclib::DType::INT64): {
-                memset(testOutputs[i].data, 0xFE, N*sizeof(int64_t));
+                memset(testOutputs[i].data, 0xFE, N*sizeof(int64_tf));
                 outputs.emplace_back(
-                     new TypedOutput<int64_t>(static_cast<int64_t*>(testOutputs[i].data), N));
+                     new TypedOutput<int64_tf>(static_cast<int64_tf*>(testOutputs[i].data), N));
                 break;
             }
             case (opveclib::DType::UINT8): {
