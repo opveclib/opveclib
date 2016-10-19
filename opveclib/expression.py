@@ -502,7 +502,10 @@ class ExpressionDAG(object):
             lang.ATAN2: _BinaryMath,
             lang.ISINF: _UnaryMath,
             lang.ISFINITE: _UnaryMath,
-            lang.ISNAN: _UnaryMath
+            lang.ISNAN: _UnaryMath,
+            lang.MIN_VALUE: _Limits,
+            lang.MAX_VALUE: _Limits,
+            lang.EPSILON: _Limits
         }
 
         ExpressionDAG.clear()
@@ -590,19 +593,6 @@ class ExpressionDAG(object):
         c_src = string.Template(c_src).substitute(locals())
         c_src = _strip_margin(c_src)
 
-        # Generate cuda function
-        # TODO: make sure that these typedefs are consistent at runtime?
-        cuda_defs = _strip_margin(string.Template("""
-        |typedef char int8_t;
-        |typedef short int16_t;
-        |typedef int int32_t;
-        |typedef long int64_t;
-        |typedef unsigned char uint8_t;
-        |typedef unsigned short uint16_t;
-        |typedef unsigned int uint32_t;
-        |typedef unsigned long uint64_t;
-        """).substitute(locals()))
-
         cuda_function = _strip_margin(string.Template("""
         |//Generated Code
         |
@@ -618,125 +608,6 @@ class ExpressionDAG(object):
         |    }
         |}
         """).substitute(locals()))
-
-        cuda_src = cuda_defs+cuda_function
-
-        # Generate cuda launcher interface for executing cuda kernels as c function call
-        # note that this is slow since it initiates a new CUDA context and is generally only useful for testing
-        # allocate_and_copy = ''
-        # copy_and_free = ''
-        # device_ptrs = []
-        # for inp in inputs:
-        #     host_ptr = 'in'+str(inp.proto_expr.io_index)
-        #     device_ptr = 'd_'+host_ptr
-        #     device_ptrs.append(device_ptr)
-        #     tipe = inp.dtype.as_cstr()
-        #     elements = inp.size
-        #     cur_alloc = """
-        #     |    size_t ${host_ptr}_size = ${elements}*sizeof(${tipe});
-        #     |    CUDA_SAFE_CALL(cuMemAlloc(&${device_ptr}, ${host_ptr}_size));
-        #     |    CUDA_SAFE_CALL(cuMemcpyHtoD(${device_ptr}, ${host_ptr}, ${host_ptr}_size));
-        #     |"""
-        #     allocate_and_copy += string.Template(cur_alloc).substitute(locals())
-        #
-        #     cur_free = """
-        #     |    CUDA_SAFE_CALL(cuMemFree(${device_ptr}));
-        #     """
-        #     copy_and_free += string.Template(cur_free).substitute(locals())
-        #
-        # for outp in outputs:
-        #     host_ptr = 'out'+str(outp.proto_expr.io_index)
-        #     device_ptr = 'd_'+host_ptr
-        #     device_ptrs.append(device_ptr)
-        #
-        #     tipe = outp.dtype.as_cstr()
-        #     elements = outp.size
-        #     cur_alloc = """
-        #     |    size_t ${host_ptr}_size = ${elements}*sizeof(${tipe});
-        #     |    CUDA_SAFE_CALL(cuMemAlloc(&${device_ptr}, ${host_ptr}_size));
-        #     """
-        #     allocate_and_copy += string.Template(cur_alloc).substitute(locals())
-        #
-        #     cur_free = """
-        #     |    CUDA_SAFE_CALL(cuMemcpyDtoH(${host_ptr}, ${device_ptr}, ${host_ptr}_size));
-        #     |    CUDA_SAFE_CALL(cuMemFree(${device_ptr}));
-        #     """
-        #     copy_and_free += string.Template(cur_free).substitute(locals())
-        #
-        # device_ptrs_string = _list_to_str(device_ptrs)
-        #
-        # device_args = []
-        # for ptr in device_ptrs:
-        #     device_args.append('&'+ptr)
-        # device_args_string = _list_to_str(device_args)
-        #
-        # ptx_placeholder = '${ptx_string}'
-        # cuda_launch_template = """
-        # |//Generated Code
-        # |//modified version of NVIDIA's 'SAXPY' example for running ptx compiled by nvrtc:
-        # |// http://docs.nvidia.com/cuda/nvrtc/index.html#example-saxpy
-        # |
-        # |#include <cuda.h>
-        # |#include <iostream>
-        # |#include <stdint.h>
-        # |
-        # |#define CUDA_SAFE_CALL(x)                                         \\
-        # |    do {                                                          \\
-        # |        CUresult result = x;                                      \\
-        # |        if (result != CUDA_SUCCESS) {                             \\
-        # |            const char *msg;                                      \\
-        # |            cuGetErrorName(result, &msg);                         \\
-        # |            std::cerr << "\\nerror: " #x " failed with error "     \\
-        # |                      << msg << '\\n';                             \\
-        # |            exit(1);                                              \\
-        # |        }                                                         \\
-        # |    } while(0)
-        # |
-        # |extern "C" uint16_t ${function_name}(${args_str}, uint16_t threads_per_block)
-        # |{
-        # |    //begin previously compiled ptx string
-        # |    const char * ptx = R"(${ptx_placeholder})";
-        # |    //end previously compiled ptx string
-        # |
-        # |    //obtain function handle
-        # |    CUdevice cuDevice;
-        # |    CUcontext context;
-        # |    CUmodule module;
-        # |    CUfunction kernel;
-        # |    CUDA_SAFE_CALL(cuInit(0));
-        # |    CUDA_SAFE_CALL(cuDeviceGet(&cuDevice, 0));
-        # |    CUDA_SAFE_CALL(cuCtxCreate(&context, 0, cuDevice));
-        # |    CUDA_SAFE_CALL(cuModuleLoadDataEx(&module, ptx, 0, 0, 0));
-        # |    CUDA_SAFE_CALL(cuModuleGetFunction(&kernel, module, "${function_name}"));
-        # |
-        # |    //allocate memory on and copy inputs to the device
-        # |    CUdeviceptr ${device_ptrs_string};
-        # |
-        # ${allocate_and_copy}
-        # |
-        # |    uint32_t num_blocks = ${num_workers} / threads_per_block;
-        # |    if(${num_workers} % threads_per_block > 0){ num_blocks += 1;}
-        # |
-        # |    void *args[] = {${device_args_string}};
-        # |    CUDA_SAFE_CALL(
-        # |    cuLaunchKernel(kernel,
-        # |                   num_blocks, 1, 1,   // grid dim
-        # |                   threads_per_block, 1, 1,    // block dim
-        # |                   0, NULL,             // shared mem and stream
-        # |                   args, 0));           // arguments
-        # |    CUDA_SAFE_CALL(cuCtxSynchronize());
-        # |
-        # |    // copy outputs to host and free device memory
-        # ${copy_and_free}
-        # |
-        # |    CUDA_SAFE_CALL(cuModuleUnload(module));
-        # |    CUDA_SAFE_CALL(cuCtxDestroy(context));
-        # |
-        # |    return 0;
-        # |}
-        # |"""
-        # cuda_launch_template = string.Template(cuda_launch_template).substitute(locals())
-        # cuda_launch_template = _strip_margin(cuda_launch_template)
 
         # Generate the c generic parameter interface for unpacking polymorphic io parameters
         generic_args = []
@@ -780,6 +651,7 @@ class ExpressionDAG(object):
         |#include "dynamiclibop.h"
         |#include <vector>
         |#include <memory>
+        |#include <cfloat>
         |
         |${c_src}
         |
@@ -806,6 +678,7 @@ class ExpressionDAG(object):
         |#include <vector>
         |#include <string>
         |#include <memory>
+        |#include <cfloat>
         |#include <cuda.h>
         |
         |${cuda_function}
@@ -831,7 +704,7 @@ class ExpressionDAG(object):
 
         # Generate the cuda generic parameter interface for unpacking polymorphic io parameters
 
-        return c_src, cuda_src, c_generic, cuda_generic
+        return c_generic, cuda_generic
 
     @staticmethod
     def expr_index(expr):
@@ -1687,6 +1560,71 @@ def isfinite(x):
 
 def isnan(x):
     return _UnaryMath(x, lang.ISNAN)
+
+
+class _Limits(Scalar):
+    """
+    A limit expression for floating point types
+    """
+    code_map = {
+        lang.MIN_VALUE: {lang.FLOAT32: 'FLT_MIN', lang.FLOAT64: 'DBL_MIN'},
+        lang.MAX_VALUE: {lang.FLOAT32: 'FLT_MAX', lang.FLOAT64: 'DBL_MAX'},
+        lang.EPSILON: {lang.FLOAT32: 'FLT_EPSILON', lang.FLOAT64: 'DBL_EPSILON'},
+    }
+
+    def __init__(self, expr_code, t):
+        if expr_code not in list(_Limits.code_map.keys()):
+            raise ValueError(lang.ExpressionCode.Name(expr_code) + 'is an invalid limits code.')
+
+        if not issubclass(t.__class__, DType):
+            raise TypeError('Must apply limits functions to dtypes. Received: ' + str(t))
+
+        if t.as_proto() not in list(_Limits.code_map[expr_code].keys()):
+            raise ValueError(str(t) +
+                             ' arguments not supported for limits function ' +
+                             lang.ExpressionCode.Name(expr_code))
+        super(self.__class__, self).__init__(expr_code, t)
+
+        self.name = _Limits.code_map[expr_code][t.as_proto()]
+        super(self.__class__, self)._register()
+
+
+    @staticmethod
+    def from_proto(proto, input_exprs):
+        return _Limits(proto.code, DType(proto.dtype))
+
+    def gen_c(self):
+        return ''
+
+def min_value(dtype):
+    """
+    Function for getting the minimum normalized positive value of
+    floating point types
+
+    :param dtype: The DType of the variable
+    :return: minimum value for dtype
+    """
+    return _Limits(lang.MIN_VALUE, dtype)
+
+def max_value(dtype):
+    """
+    Function for getting the maximum value of floating point types
+
+    :param dtype: The DType of the variable
+    :return: maximum value for dtype
+    """
+    return _Limits(lang.MAX_VALUE, dtype)
+
+def epsilon(dtype):
+    """
+    Function for getting difference between 1.0 and the next representable
+    value for floating point types
+
+    :param dtype: The DType of the variable
+    :return: epsilon value for dtype
+    """
+    return _Limits(lang.EPSILON, dtype)
+
 
 class _BinaryMath(Scalar):
     """
