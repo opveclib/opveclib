@@ -360,7 +360,10 @@ Worker-local tensors
 ~~~~~~~~~~~~~~~~~~~~
 
 Similar to the OVL Variable, OVL also supports dynamically declared worker-local tensors of any dimension that use
-thread-local memory. An OVL worker local tensor is defined by its shape and type and can be initialized to either
+thread-local memory. Worker local tensors are generally small (on the order of hundreds of bytes) and should fit in
+register space on device or L1 cache. 
+
+An OVL worker local tensor is defined by its shape and type and can be initialized to either
 all zeros or all ones using the `zeros()` or `ones()` functions.
 
 .. code-block:: python
