@@ -386,21 +386,21 @@ class TestTensorExpression(unittest.TestCase):
 
     def test_limits(self):
         ExpressionDAG.clear()
-        catch_error(lambda x: _Limits(float32, x), lang.POSITION, ValueError)
-        catch_error(lambda x: _Limits(x, lang.MIN_VALUE), float16, ValueError)
-        catch_error(lambda x: _Limits(x, lang.MAX_VALUE), 1.0, TypeError)
+        catch_error(lambda x: _Limits(x, float32), lang.POSITION, ValueError)
+        catch_error(lambda x: _Limits(lang.MIN_VALUE, x), float16, ValueError)
+        catch_error(lambda x: _Limits(lang.MAX_VALUE, x), 1.0, TypeError)
 
 
         def assert_equivalent(x, y):
             assert x.proto_expr == y.proto_expr
-            assert x.input_exprs[0] is y.input_exprs[0]
+            assert x.name is y.name
             assert x.dtype == y.dtype
 
         # make sure all exposed limits functions are producing correct expressions for floats and doubles
         def assert_all(x):
-            assert_equivalent(min_value(x), _Limits(x, lang.MIN_VALUE))
-            assert_equivalent(max_value(x), _Limits(x, lang.MAX_VALUE))
-            assert_equivalent(epsilon(x), _Limits(x, lang.EPSILON))
+            assert_equivalent(min_value(x), _Limits(lang.MIN_VALUE, x))
+            assert_equivalent(max_value(x), _Limits(lang.MAX_VALUE, x))
+            assert_equivalent(epsilon(x), _Limits(lang.EPSILON, x))
 
         assert_all(float32)
         assert_all(float64)

@@ -26,6 +26,8 @@ from .expression import zeros, ones
 # @ Scalar functions
 # @@ Utility
 from .expression import variable, cast
+# @@ Numeric limits
+from .expression import min_value, max_value, epsilon
 # @@ Unary math
 from .expression import arccos, arcsin, arctan, cos, cosh, sin, sinh, tan, tanh
 from .expression import exp, log, log10, sqrt

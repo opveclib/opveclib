@@ -11,16 +11,18 @@
 import unittest
 import numpy as np
 from ..operator import operator, evaluate
-from ..expression import position_in, output_like, min_value, max_value, epsilon, float32, float64, cast
+from ..expression import position_in, output, min_value, max_value, epsilon
 from ..local import cuda_enabled, clear_op_cache
 
 
 @operator()
-def set_min(arg):
+def set_limits(arg):
     pos = position_in(arg.shape)
-
-    limits = output_like(arg)
-    limits[pos] = min_value(float32)
+    limits = output([arg.shape[0], 3], arg.dtype)
+    t = arg.dtype
+    limits[pos,0] = min_value(t)
+    limits[pos,1] = max_value(t)
+    limits[pos,2] = epsilon(t)
 
     return limits
 
@@ -32,9 +34,9 @@ class TestLimits(unittest.TestCase):
         a = np.array([0])
         types = [np.float32, np.float64]
         for t in types:
-            op = set_min(a.astype(t))
+            op = set_limits(a.astype(t))
             op_c = evaluate(op, target_language='cpp')
-            op_np = np.array([np.finfo(t).min])
+            op_np = np.array([[np.finfo(t).tiny, np.finfo(t).max, np.finfo(t).eps]])
             assert np.all(np.equal(op_c, op_np))
 
             if cuda_enabled:
