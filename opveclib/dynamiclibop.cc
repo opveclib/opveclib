@@ -184,7 +184,6 @@ class DynamicLibLaunch<GPUDevice>  {
 // Parameters are a list of input tensors, list of output shapes, list of
 // output types, the location of the DynamicLib shared libraries and the name
 // of the DynamicLib operator.
-// See tensorflow/python/kernel_tests/dynamic_lib_op_test.py for example usage
 template <typename Device>
 class DynamicLibOp : public OpKernel {
  public:

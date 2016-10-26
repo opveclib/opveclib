@@ -361,7 +361,7 @@ Worker-local tensors
 
 Similar to the OVL Variable, OVL also supports dynamically declared worker-local tensors of any dimension that use
 thread-local memory. Worker local tensors are generally small (on the order of hundreds of bytes) and should fit in
-register space on device or L1 cache. 
+register space on device or L1 cache.
 
 An OVL worker local tensor is defined by its shape and type and can be initialized to either
 all zeros or all ones using the `zeros()` or `ones()` functions.
@@ -378,7 +378,7 @@ all zeros or all ones using the `zeros()` or `ones()` functions.
 Gradients
 ~~~~~~~~~
 
-An OVL gradient operator a special tye of operator. It is defined by creating a python gradient function and
+An OVL gradient operator is a special type of operator. It is defined by creating a python gradient function and
 decorating it with the ``operator()`` decorator as well as the ``gradient()`` decorator. The arguement to the
 gradient decorator function is the name of the operator it is the gradient for. The gradient function
 must compute the gradients with respect to each of the operators' inputs, given gradients with respect to the operators'
