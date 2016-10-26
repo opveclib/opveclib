@@ -92,8 +92,8 @@ g++. OVL has been tested with the following nvidia GPUs:
 
 Install TensorFlow
 ~~~~~~~~~~~~~~~~~~
-OVL requires TensorFlow 0.10.0 and works with both the CPU and GPU versions. Installation instructions
-are available `here <https://www.tensorflow.org/versions/r0.10/get_started/os_setup.html#download-and-setup>`__.
+OVL requires TensorFlow 0.11.0 and works with both the CPU and GPU versions. Installation instructions
+are available `here <https://www.tensorflow.org/versions/r0.11/get_started/os_setup.html#download-and-setup>`__.
 Users are recommended follow the TensorFlow installation guide and its testing/troubleshooting recommendations
 before using OVL.
 
@@ -124,7 +124,7 @@ Install the latest release of OVL:
     sudo pip install --upgrade opveclib
 
 If you see an error message during the install like
-``libcudart.so.7.5: cannot open shared object file: No such file or directory``, this likely means that the CUDA
+``libcudart.so.8.0: cannot open shared object file: No such file or directory``, this likely means that the CUDA
 library path is not exposed to the sudo environment. To solve this issue you
 may explicitly pass an ``LD_LIBRARY_PATH`` to sudo to install the package:
 
@@ -154,7 +154,7 @@ you may need to explicitly set the CUDA_HOME environment variable, typically:
     export CUDA_HOME=/usr/local/cuda
 
 
-If you see an error like: ``ImportError: libcudart.so.7.5: cannot open shared object file: No such file or directory``
+If you see an error like: ``ImportError: libcudart.so.8.0: cannot open shared object file: No such file or directory``
 You may also need to make sure the CUDA libraries are on your library path, typically:
 
 .. code-block:: console
