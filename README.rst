@@ -83,9 +83,8 @@ Installation
 ------------
 OVL is currently tested and supported under Ubuntu 14.04, python 2.7 and 3.4, and is compatible with both the CPU and
 GPU versions of TensorFlow. OVL requires a c++ compiler to be available on the system and is currently only tested with
-g++. OVL has been tested with the following nvidia GPUs:
+g++. OVL has been tested with the following nvidia GPUs::
 
-::
     GeForce GTX TITAN
     GeForce GTX TITAN Black
 
