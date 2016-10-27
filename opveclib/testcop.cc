@@ -18,7 +18,7 @@
 #include "language_dtype.h"
 
 #include "tensorflow/core/platform/env.h"
-#include "threadpool.h"
+#include "tensorflow/core/lib/core/threadpool.h"
 
 typedef uint16_t
         (*C_FUNPTR)(std::vector<std::shared_ptr<const InputParameter>> inputs,

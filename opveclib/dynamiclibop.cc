@@ -19,7 +19,7 @@
 #include "tensorflow/core/framework/op.h"
 #include "tensorflow/core/framework/op_kernel.h"
 #include "tensorflow/core/framework/device_base.h"
-#include "threadpool.h"
+#include "tensorflow/core/lib/core/threadpool.h"
 
 #if GOOGLE_CUDA
 

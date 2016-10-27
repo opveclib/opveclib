@@ -525,8 +525,7 @@ class ExpressionDAG(object):
         protocol buffer.
         :param expression_dag: The protobuf
         :param function_name: The name of the function to use
-        :return: a tuple containing the source for: the individual c function, individual cuda function, the
-          standalone cuda function launcher, the generic c++ interface, and the generic cuda interface
+        :return: a tuple containing the source for: the generic c++ interface, and the generic cuda interface
         """
         def _strip_margin(s):
             return re.sub('\n[ \t]*\|', '\n', s)
