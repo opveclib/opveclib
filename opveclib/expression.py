@@ -53,7 +53,7 @@ class DType(object):
         lang.INT8: 'int8_t',
         lang.INT16: 'int16_t',
         lang.INT32: 'int32_t',
-        lang.INT64: 'int64_t',
+        lang.INT64: 'int64_tf',
         lang.UINT8: 'uint8_t',
         lang.UINT16: 'uint16_t',
         lang.UINT32: 'uint32_t',

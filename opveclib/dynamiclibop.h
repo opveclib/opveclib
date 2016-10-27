@@ -13,6 +13,10 @@
 
 #include <stdint.h>
 
+// tensorflow defined int64 to be a long long int, but int64_t is
+// defined as a long int in stdint.h, so we have to use the tf type
+typedef long long int int64_tf;
+
 // Classes to allow variable length lists of input and output tensors of varying
 // types. Code must be compilable by nvcc if used for gpu operators
 // Note: inputs and outputs must be separate types to preserve the const-ness

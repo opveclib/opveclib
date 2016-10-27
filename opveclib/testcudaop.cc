@@ -131,12 +131,12 @@ int32_t testCUDAOperator(const char *opLibPath, const char *opFuncName,
                 break;
             }
             case (opveclib::DType::INT64): {
-                CUDA_RUNTIME_SAFE_CALL(cudaMalloc(&d_inputs[i], N*sizeof(int64_t)));
+                CUDA_RUNTIME_SAFE_CALL(cudaMalloc(&d_inputs[i], N*sizeof(int64_tf)));
                 CUDA_RUNTIME_SAFE_CALL(cudaMemcpyAsync(d_inputs[i], testInputs[i].data,
-                             N*sizeof(int64_t),
+                             N*sizeof(int64_tf),
                              cudaMemcpyHostToDevice, stream1));
                 inputs.emplace_back(
-                     new TypedInput<int64_t>(static_cast<const int64_t*>(d_inputs[i]), N));
+                     new TypedInput<int64_tf>(static_cast<const int64_tf*>(d_inputs[i]), N));
                 break;
             }
             case (opveclib::DType::UINT8): {
@@ -227,10 +227,10 @@ int32_t testCUDAOperator(const char *opLibPath, const char *opFuncName,
                 break;
             }
             case (opveclib::DType::INT64): {
-                CUDA_RUNTIME_SAFE_CALL(cudaMalloc(&d_outputs[i], N*sizeof(int64_t)));
-                CUDA_RUNTIME_SAFE_CALL(cudaMemset(d_outputs[i], 0xFE, N*sizeof(int64_t)));
+                CUDA_RUNTIME_SAFE_CALL(cudaMalloc(&d_outputs[i], N*sizeof(int64_tf)));
+                CUDA_RUNTIME_SAFE_CALL(cudaMemset(d_outputs[i], 0xFE, N*sizeof(int64_tf)));
                 outputs.emplace_back(
-                     new TypedOutput<int64_t>(static_cast<int64_t*>(d_outputs[i]), N));
+                     new TypedOutput<int64_tf>(static_cast<int64_tf*>(d_outputs[i]), N));
                 break;
             }
             case (opveclib::DType::UINT8): {
@@ -343,7 +343,7 @@ int32_t testCUDAOperator(const char *opLibPath, const char *opFuncName,
                 }
                 case (opveclib::DType::INT64): {
                     CUDA_RUNTIME_SAFE_CALL(cudaMemcpyAsync(testOutputs[i].data, d_outputs[i],
-                                   N*sizeof(int64_t),
+                                   N*sizeof(int64_tf),
                                    cudaMemcpyDeviceToHost, stream1));
                     break;
                 }

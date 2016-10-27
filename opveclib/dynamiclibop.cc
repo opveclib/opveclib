@@ -8,8 +8,8 @@
  on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for
  the specific language governing permissions and limitations under the License.*/
 
-// #include <cxxabi.h>
 #include "dynamiclibop.h"
+//#include <cxxabi.h>
 #include <dlfcn.h>
 #include <string>
 #include <memory>
@@ -42,13 +42,11 @@ REGISTER_OP("DynamicLib")
     .Attr("serialized_grad_dag: string")
     .Attr("cuda_threads_per_block: int")
     .Attr("out_shapes: list(shape)")
-    .Attr("in_types: list({float, double, int8, int16, uint8, uint16}) >= 0")
-    .Attr("out_types: list({float, double, int8, int16, uint8, uint16})")
+    .Attr("in_types: list({float, double, int8, int16, uint8, int32, int64, uint16}) >= 0")
+    .Attr("out_types: list({float, double, int8, int16, int32, int64, uint8, uint16})")
     .Input("inputs: in_types")
     .Output("outputs: out_types")
     .Doc(R"doc(call a dynamically generated library operation)doc");
-// TODO @karen.brems@hpe.com - using int32 and int64 for input or output tensor parameters that are
-// wrapped in a list causes tensorflow to core dump on GPU - see https://github.com/tensorflow/tensorflow/issues/1450
 
 typedef Eigen::ThreadPoolDevice CPUDevice;
 typedef Eigen::GpuDevice GPUDevice;
@@ -241,13 +239,14 @@ class DynamicLibOp : public OpKernel {
                      new TypedInput<int32_t>(cur_input.flat<int32_t>().data(),
                                            cur_input.NumElements()));
               break;
-              // TODO @ karen.brems@hpe.com - tensorflow won't build with int64 type
+              // TODO @ karen.brems@hpe.com - tensorflow won't build with int64_t type
+              // have to use their int64 instead.
               // see https://github.com/tensorflow/tensorflow/issues/1450
-//            case (DT_INT64):
-//              inputs.emplace_back(
-//                     new TypedInput<int64_t>(cur_input.flat<int64_t>().data(),
-//                                           cur_input.NumElements()));
-//              break;
+            case (DT_INT64):
+              inputs.emplace_back(
+                     new TypedInput<tensorflow::int64>(cur_input.flat<tensorflow::int64>().data(),
+                                           cur_input.NumElements()));
+              break;
             case (DT_UINT8):
               inputs.emplace_back(
                      new TypedInput<uint8_t>(cur_input.flat<uint8_t>().data(),
@@ -311,13 +310,14 @@ class DynamicLibOp : public OpKernel {
                                output_tensor[i]->template flat<int32_t>().data(),
                                output_tensor[i]->NumElements()));
                 break;
-            // TODO @ karen.brems@hpe.com - tensorflow won't build with int64 type
+            // TODO @ karen.brems@hpe.com - tensorflow won't build with int64_t type
+            // have to use their int64 type instead
             // see https://github.com/tensorflow/tensorflow/issues/1450
-//            case (DT_INT64):
-//                outputs.emplace_back(new TypedOutput<int64_t>(
-//                               output_tensor[i]->template flat<int64_t>().data(),
-//                               output_tensor[i]->NumElements()));
-//                break;
+            case (DT_INT64):
+                outputs.emplace_back(new TypedOutput<tensorflow::int64>(
+                               output_tensor[i]->template flat<tensorflow::int64>().data(),
+                               output_tensor[i]->NumElements()));
+                break;
             case (DT_UINT8):
                 outputs.emplace_back(new TypedOutput<uint8_t>(
                                output_tensor[i]->template flat<uint8_t>().data(),
@@ -338,6 +338,7 @@ class DynamicLibOp : public OpKernel {
 
       // call the DynamicLib library function
       const Device& d = context->eigen_device<Device>();
+//      LOG(INFO) << getDebugString(inputs);
       launcher_->Run(context, d, inputs, outputs);
   }
 

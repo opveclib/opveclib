@@ -65,18 +65,18 @@ class DynamicLibAddGPUTest(unittest.TestCase):
             # gpu ops on cpu
             test_config.graph_options.optimizer_options.opt_level = -1
             with tf.Session(config=test_config):
-                logger.debug('*** add2float')
                 with tf.device(dev_string):
-                    in0 = np.random.rand(3,50).astype(np.int16)
-                    in1 = np.random.rand(3,50).astype(np.int16)
-                    ones = np.ones((3,50), dtype=np.int16)
+                    logger.debug('*** add2Int64')
+                    in0 = np.random.rand(3,50).astype(np.int64)
+                    in1 = np.random.rand(3,50).astype(np.int64)
+                    ones = np.ones((3,50), dtype=np.int64)
                     output = _DynamicLibOp.module().dynamic_lib(inputs=[in0, in1],
                                                                out_shapes=[[3,50]],
-                                                               out_types=['int16'],
+                                                               out_types=['int64'],
                                                                cpu_lib_path=cpulib,
-                                                               cpu_func_name="add2float",
+                                                               cpu_func_name="add2Int64",
                                                                gpu_lib_path=gpulib,
-                                                               gpu_func_name="add2float",
+                                                               gpu_func_name="add2Int64",
                                                                serialized_grad_dag='',
                                                                cuda_threads_per_block=_default_cuda_threads_per_block)
 
@@ -84,6 +84,26 @@ class DynamicLibAddGPUTest(unittest.TestCase):
                     if (dev_string is '/gpu:0'):
                         ref = np.add(ref,ones)
                     assert np.allclose(output[0].eval(), ref)
+
+                    logger.debug('*** add2Int32')
+                    in0 = np.random.rand(3,50).astype(np.int32)
+                    in1 = np.random.rand(3,50).astype(np.int32)
+                    ones = np.ones((3,50), dtype=np.int32)
+                    output = _DynamicLibOp.module().dynamic_lib(inputs=[in0, in1],
+                                                               out_shapes=[[3,50]],
+                                                               out_types=['int32'],
+                                                               cpu_lib_path=cpulib,
+                                                               cpu_func_name="add2Int32",
+                                                               gpu_lib_path=gpulib,
+                                                               gpu_func_name="add2Int32",
+                                                               serialized_grad_dag='',
+                                                               cuda_threads_per_block=_default_cuda_threads_per_block)
+
+                    ref = np.add(in0,in1)
+                    if (dev_string is '/gpu:0'):
+                        ref = np.add(ref,ones)
+                    assert np.allclose(output[0].eval(), ref)
+
 
                     logger.debug('*** addFloatDoubleFloat')
                     in0 = np.random.rand(3,50).astype(np.float32)
