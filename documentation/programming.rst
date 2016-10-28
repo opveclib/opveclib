@@ -449,7 +449,7 @@ and its gradient, and tests the gradient against tensorflow
 
 
 Operator Merging
-~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~
 
 Typical modern GPUs are able to perform arithmetic operations faster than transfers of a data value in or out of host memory,
 and are thus memory bandwidth limited. If 2 operators that are performed in sequence can be merged into a single operator that
