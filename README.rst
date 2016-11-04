@@ -78,6 +78,8 @@ Documentation
 -------------
 Full documentation is available `here <http://opveclib.readthedocs.io/>`__.
 
+White paper is available `here <http://www.labs.hpe.com/techreports/2016/HPE-2016-94.html>`__.
+
 
 Installation
 ------------

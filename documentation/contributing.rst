@@ -3,6 +3,16 @@
 Contributor's Guide
 ===================
 
+Contributor License Agreement
+-----------------------------
+
+We would love to take your contributions. To contribute to opveclib, you need to fill out a Contributor License Agreement (CLA).
+
+You can download the CLA :download:`here <../HPE_CCLA.pdf>`.
+
+Fill it out and email the completed agreement to the address in the agreement.
+
+
 Contribution Policy
 -------------------
 
@@ -20,11 +30,6 @@ Versioning
 
 Code is versioned according to the `semantic versioning 2.0.0 <http://semver.org/spec/v2.0.0.html>`_ spec.
 The complete public API is specified :ref:`here <api>`.
-
-Contributor License Agreement
------------------------------
-
-TODO: link to CLA here
 
 Developers Notes
 ----------------
