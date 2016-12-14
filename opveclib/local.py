@@ -15,7 +15,7 @@ import logging
 import tensorflow as tf
 
 #: Version string for current version
-version = '1.0.2-dev0'
+version = '1.0.3-dev0'
 
 #: The log
 logger = logging.getLogger('opveclib')
